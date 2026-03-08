@@ -138,6 +138,7 @@ export class AdminService {
       doctor.id,
       doctor.doctorStatus,
       dto.notes,
+      session,
     );
 
     return {
