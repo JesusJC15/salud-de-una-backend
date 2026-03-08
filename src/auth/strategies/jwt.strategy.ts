@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Admin, AdminDocument } from '../../admins/schemas/admin.schema';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
@@ -40,6 +40,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         'Token invalido o tipo de token no permitido',
       );
     }
+
+    if (!Types.ObjectId.isValid(payload.sub)) {
+      throw new UnauthorizedException('Token invalido');
+    }
+
     const baseProjection = 'email role isActive';
     let user: { email: string; role: UserRole; isActive: boolean } | null =
       null;

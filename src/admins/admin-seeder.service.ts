@@ -21,7 +21,8 @@ export class AdminSeederService implements OnApplicationBootstrap {
       return;
     }
 
-    const email = this.configService.get<string>('BOOTSTRAP_ADMIN_EMAIL');
+    const rawEmail = this.configService.get<string>('BOOTSTRAP_ADMIN_EMAIL');
+    const email = rawEmail ? rawEmail.toLowerCase().trim() : undefined;
     const password = this.configService.get<string>('BOOTSTRAP_ADMIN_PASSWORD');
     const firstName =
       this.configService.get<string>('BOOTSTRAP_ADMIN_FIRST_NAME') ?? 'Admin';
