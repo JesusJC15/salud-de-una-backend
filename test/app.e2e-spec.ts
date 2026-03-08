@@ -75,15 +75,14 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   }
 
   function buildRethusVerifyPayload(
-    status: 'VERIFIED' | 'REJECTED' = 'VERIFIED',
+    doctorStatus: 'VERIFIED' | 'REJECTED' = 'VERIFIED',
   ) {
     return {
-      status,
       programType: 'UNIVERSITY',
       titleObtainingOrigin: 'LOCAL',
       professionOccupation: 'MEDICO GENERAL',
       startDate: '2024-01-15',
-      rethusState: 'VALID',
+      rethusState: doctorStatus === 'REJECTED' ? 'EXPIRED' : 'VALID',
       administrativeAct: 'ACT-2026-001',
       reportingEntity: 'MINISTERIO DE SALUD',
       notes: 'Validado por pruebas e2e',
