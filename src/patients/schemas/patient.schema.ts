@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { UserGender } from '../../common/enums/user-gender.enum';
 
 export type PatientDocument = HydratedDocument<Patient>;
 
@@ -24,8 +25,8 @@ export class Patient {
   @Prop()
   birthDate?: Date;
 
-  @Prop({ enum: ['M', 'F', 'OTHER'] })
-  gender?: 'M' | 'F' | 'OTHER';
+  @Prop({ type: String, enum: UserGender })
+  gender?: UserGender;
 
   @Prop({ default: true })
   isActive!: boolean;

@@ -9,6 +9,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Patient } from '../patients/schemas/patient.schema';
 import { AuthService } from './auth.service';
+import { UserGender } from '../common/enums/user-gender.enum';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -116,7 +117,7 @@ describe('AuthService', () => {
       email: 'ana@example.com',
       password: 'StrongP@ss1',
       birthDate: '1998-03-10',
-      gender: 'F',
+      gender: 'FEMALE' as UserGender,
     });
 
     expect(patientModel.create).toHaveBeenCalled();
@@ -142,7 +143,7 @@ describe('AuthService', () => {
         email: 'ana@example.com',
         password: 'StrongP@ss1',
         birthDate: '1998-03-10',
-        gender: 'F',
+        gender: 'FEMALE' as UserGender,
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });

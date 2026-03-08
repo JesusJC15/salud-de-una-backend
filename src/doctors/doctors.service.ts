@@ -33,7 +33,7 @@ export class DoctorsService {
       .findOne({ doctorId: new Types.ObjectId(user.userId) })
       .sort({ checkedAt: -1 })
       .select(
-        'status programType titleObtainingOrigin professionOccupation startDate rethusState administrativeAct reportingEntity checkedAt checkedBy evidenceUrl notes',
+        'programType titleObtainingOrigin professionOccupation startDate rethusState administrativeAct reportingEntity checkedAt checkedBy evidenceUrl notes',
       )
       .lean()
       .exec();

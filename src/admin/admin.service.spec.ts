@@ -38,12 +38,11 @@ describe('AdminService', () => {
   };
 
   const dto: RethusVerifyDto = {
-    status: 'VERIFIED',
-    programType: 'UNIVERSITY',
-    titleObtainingOrigin: 'LOCAL',
+    programType: 'UNIVERSITY' as RethusVerifyDto['programType'],
+    titleObtainingOrigin: 'LOCAL' as RethusVerifyDto['titleObtainingOrigin'],
     professionOccupation: 'MEDICO GENERAL',
     startDate: '2024-01-15',
-    rethusState: 'VALID',
+    rethusState: 'VALID' as RethusVerifyDto['rethusState'],
     administrativeAct: 'ACT-2026-001',
     reportingEntity: 'MINISTERIO DE SALUD',
     notes: 'ok',
@@ -133,6 +132,12 @@ describe('AdminService', () => {
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 
+  it('should throw NotFoundException when doctorId is invalid', async () => {
+    await expect(
+      service.verifyDoctor('invalid-id', dto, actor),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('should throw NotFoundException when doctor does not exist', async () => {
     doctorModelMock.findById.mockReturnValue({
       session: jest.fn().mockReturnThis(),
@@ -140,8 +145,9 @@ describe('AdminService', () => {
     });
 
     await expect(
-      service.verifyDoctor('missing-id', dto, actor),
+      service.verifyDoctor(validDoctorId, dto, actor),
     ).rejects.toBeInstanceOf(NotFoundException);
+
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 

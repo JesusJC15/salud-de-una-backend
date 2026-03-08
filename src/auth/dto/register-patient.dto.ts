@@ -7,6 +7,7 @@ import {
   Matches,
   MinLength,
 } from 'class-validator';
+import { UserGender } from '../../common/enums/user-gender.enum';
 
 export class RegisterPatientDto {
   @IsString()
@@ -28,6 +29,6 @@ export class RegisterPatientDto {
   birthDate?: string;
 
   @IsOptional()
-  @IsEnum(['M', 'F', 'OTHER'])
-  gender?: 'M' | 'F' | 'OTHER';
+  @IsEnum(UserGender)
+  gender?: UserGender;
 }

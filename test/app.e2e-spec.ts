@@ -308,7 +308,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     const notificationCount = await notificationModel
       .countDocuments({
         userId: new Types.ObjectId(doctorId),
-        type: 'RETHUS_STATUS_CHANGE',
+        type: 'DOCTOR_STATUS_CHANGE',
       })
       .exec();
     expect(notificationCount).toBe(1);

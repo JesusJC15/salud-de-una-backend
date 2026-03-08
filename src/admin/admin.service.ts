@@ -1,4 +1,5 @@
 import {
+  HttpException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -32,6 +33,10 @@ export class AdminService {
     dto: RethusVerifyDto,
     actor: RequestUser,
   ) {
+    if (!Types.ObjectId.isValid(doctorId)) {
+      throw new NotFoundException('doctorId inválido');
+    }
+
     const session = await this.connection.startSession();
     try {
       let response: {
@@ -67,7 +72,7 @@ export class AdminService {
       }
       return response;
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException(
@@ -96,7 +101,7 @@ export class AdminService {
     const verification = await this.rethusVerificationModel.create(
       [
         {
-          doctorId: new Types.ObjectId(doctorId),
+          doctorId: doctor._id,
           programType: dto.programType,
           titleObtainingOrigin: dto.titleObtainingOrigin,
           professionOccupation: dto.professionOccupation,

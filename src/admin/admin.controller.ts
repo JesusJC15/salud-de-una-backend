@@ -9,7 +9,7 @@ import { RethusVerifyDto } from './dto/rethus-verify.dto';
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  @Post('doctors/:doctorId/rethus-verify')
+  @Post('doctors/:doctorId/doctor-verify')
   @Roles(UserRole.ADMIN)
   verifyDoctor(
     @Param('doctorId') doctorId: string,
