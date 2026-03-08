@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -34,7 +35,7 @@ export class AdminService {
     actor: RequestUser,
   ) {
     if (!Types.ObjectId.isValid(doctorId)) {
-      throw new NotFoundException('doctorId inválido');
+      throw new BadRequestException('doctorId inválido');
     }
 
     const session = await this.connection.startSession();

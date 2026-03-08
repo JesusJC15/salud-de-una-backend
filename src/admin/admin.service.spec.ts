@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -132,10 +133,10 @@ describe('AdminService', () => {
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 
-  it('should throw NotFoundException when doctorId is invalid', async () => {
+  it('should throw BadRequestException when doctorId is invalid', async () => {
     await expect(
       service.verifyDoctor('invalid-id', dto, actor),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('should throw NotFoundException when doctor does not exist', async () => {
