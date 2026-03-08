@@ -21,6 +21,8 @@ import {
   Patient,
   PatientDocument,
 } from '../src/patients/schemas/patient.schema';
+import { DoctorStatus } from '../src/common/enums/doctor-status.enum';
+import { RethusState } from '../src/common/enums/rethus-state.enum';
 
 describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   let app: INestApplication<App>;
@@ -172,7 +174,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
         email: 'ana@example.com',
         password: 'StrongP@ss1',
         birthDate: '1998-03-10',
-        gender: 'F',
+        gender: 'FEMALE',
       })
       .expect(201);
 
@@ -194,7 +196,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       email: 'dup@example.com',
       password: 'StrongP@ss1',
       birthDate: '1998-03-10',
-      gender: 'F',
+      gender: 'FEMALE',
     });
 
     return request(app.getHttpServer())
@@ -355,7 +357,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     await request(app.getHttpServer())
       .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send(buildRethusVerifyPayload('REJECTED'))
+      .send(buildRethusVerifyPayload(DoctorStatus.REJECTED))
       .expect(201);
 
     const doctorToken = await login(doctorEmail, 'StrongP@ss1');
