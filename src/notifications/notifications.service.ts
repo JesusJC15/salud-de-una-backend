@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import {
   Notification,
   NotificationDocument,
@@ -19,16 +19,22 @@ export class NotificationsService {
     userId: string,
     doctorStatus: string,
     notes?: string,
+    session?: ClientSession,
   ): Promise<void> {
-    await this.notificationModel.create({
-      userId: new Types.ObjectId(userId),
-      type: 'DOCTOR_STATUS_CHANGE',
-      status: doctorStatus,
-      message: notes
-        ? `Tu verificacion como doctor fue ${doctorStatus}. Notas: ${notes}`
-        : `Tu verificacion como doctor fue ${doctorStatus}.`,
-      read: false,
-    });
+    await this.notificationModel.create(
+      [
+        {
+          userId: new Types.ObjectId(userId),
+          type: 'DOCTOR_STATUS_CHANGE',
+          status: doctorStatus,
+          message: notes
+            ? `Tu verificacion como doctor fue ${doctorStatus}. Notas: ${notes}`
+            : `Tu verificacion como doctor fue ${doctorStatus}.`,
+          read: false,
+        },
+      ],
+      { session },
+    );
     this.logger.log(`Notificacion creada para ${userId}`);
   }
 }

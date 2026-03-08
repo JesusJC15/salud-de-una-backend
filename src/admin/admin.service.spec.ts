@@ -128,7 +128,7 @@ describe('AdminService', () => {
     expect(doctorDocument.save).toHaveBeenCalled();
     expect(
       notificationsServiceMock.createDoctorStatusChange,
-    ).toHaveBeenCalledWith(validDoctorId, 'VERIFIED', 'ok');
+    ).toHaveBeenCalledWith(validDoctorId, 'VERIFIED', 'ok', sessionMock);
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 
