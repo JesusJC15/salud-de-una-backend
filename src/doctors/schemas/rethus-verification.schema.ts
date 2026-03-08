@@ -2,7 +2,6 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { ProgramType } from '../../common/enums/program-type.enum';
 import { RethusState } from '../../common/enums/rethus-state.enum';
-import { DoctorStatus } from '../../common/enums/doctor-status.enum';
 import { TitleObtainingOrigin } from '../../common/enums/title-obtaining-origin.enum';
 
 export type RethusVerificationDocument = HydratedDocument<RethusVerification>;
@@ -11,9 +10,6 @@ export type RethusVerificationDocument = HydratedDocument<RethusVerification>;
 export class RethusVerification {
   @Prop({ type: Types.ObjectId, ref: 'Doctor', required: true })
   doctorId!: Types.ObjectId;
-
-  @Prop({ type: String, enum: DoctorStatus, required: true })
-  status!: DoctorStatus;
 
   @Prop({ type: String, enum: ProgramType, required: true })
   programType!: ProgramType;

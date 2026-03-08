@@ -1,6 +1,8 @@
 import {
   CallHandler,
   ExecutionContext,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NestInterceptor,
@@ -53,6 +55,34 @@ export class RequestLoggingInterceptor implements NestInterceptor {
               role,
               latency_ms: latencyMs,
               status_code: statusCode,
+            }),
+          );
+        },
+        error: (error: unknown) => {
+          const latencyMs = Date.now() - startedAt;
+          const role = request.user?.role ?? 'ANON';
+          const userId = request.user?.userId ?? 'anonymous';
+          const statusCode =
+            error instanceof HttpException
+              ? error.getStatus()
+              : HttpStatus.INTERNAL_SERVER_ERROR;
+
+          this.dashboardService.record({ latencyMs, statusCode });
+          this.logger.error(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'error',
+              service: 'api',
+              endpoint_or_event: `${method} ${endpoint}`,
+              correlation_id: correlationId,
+              user_id: userId,
+              role,
+              latency_ms: latencyMs,
+              status_code: statusCode,
+              error_code:
+                error instanceof Error ? error.name : 'UnhandledException',
+              error_message:
+                error instanceof Error ? error.message : String(error),
             }),
           );
         },

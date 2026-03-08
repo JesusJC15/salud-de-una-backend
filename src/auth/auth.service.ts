@@ -65,7 +65,6 @@ export class AuthService {
       specialty: dto.specialty,
       personalId: dto.personalId,
       phoneNumber: dto.phoneNumber,
-      rethusNumber: dto.rethusNumber,
       professionalLicense: dto.professionalLicense,
     });
 

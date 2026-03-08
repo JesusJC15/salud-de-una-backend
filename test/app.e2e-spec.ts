@@ -6,7 +6,6 @@ import { App } from 'supertest/types';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import * as bcrypt from 'bcrypt';
 import { Model, Types } from 'mongoose';
-import { AppModule } from '../src/app.module';
 import { Admin, AdminDocument } from '../src/admins/schemas/admin.schema';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { Doctor, DoctorDocument } from '../src/doctors/schemas/doctor.schema';
@@ -68,7 +67,6 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
         specialty: 'GENERAL_MEDICINE',
         personalId: `CC-${Date.now()}`,
         phoneNumber: '3001234567',
-        rethusNumber: `RET-${Date.now()}`,
       })
       .expect(201);
 
@@ -104,6 +102,10 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     process.env.JWT_REFRESH_EXPIRES_IN = '7d';
     process.env.ENABLE_BOOTSTRAP_ADMIN = 'false';
 
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { AppModule } = require('../src/app.module') as {
+      AppModule: typeof import('../src/app.module').AppModule;
+    };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -256,36 +258,36 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(400);
   });
 
-  it('POST /v1/admin/doctors/:doctorId/rethus-verify should return 403 for non-admin', async () => {
+  it('POST /v1/admin/doctors/:doctorId/doctor-verify should return 403 for non-admin', async () => {
     const doctorEmail = 'doctor-rbac@example.com';
     const doctorId = await registerDoctor(doctorEmail);
     const doctorToken = await login(doctorEmail, 'StrongP@ss1');
 
     await request(app.getHttpServer())
-      .post(`/v1/admin/doctors/${doctorId}/rethus-verify`)
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
       .set('Authorization', `Bearer ${doctorToken}`)
       .send(buildRethusVerifyPayload())
       .expect(403);
   });
 
-  it('POST /v1/admin/doctors/:doctorId/rethus-verify should return 404 when doctor does not exist', async () => {
+  it('POST /v1/admin/doctors/:doctorId/doctor-verify should return 404 when doctor does not exist', async () => {
     const adminToken = await login(adminEmail, adminPassword);
     const missingDoctorId = new Types.ObjectId().toString();
 
     await request(app.getHttpServer())
-      .post(`/v1/admin/doctors/${missingDoctorId}/rethus-verify`)
+      .post(`/v1/admin/doctors/${missingDoctorId}/doctor-verify`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send(buildRethusVerifyPayload())
       .expect(404);
   });
 
-  it('POST /v1/admin/doctors/:doctorId/rethus-verify should verify doctor and create records', async () => {
+  it('POST /v1/admin/doctors/:doctorId/doctor-verify should verify doctor and create records', async () => {
     const doctorEmail = 'doctor-verify@example.com';
     const doctorId = await registerDoctor(doctorEmail);
     const adminToken = await login(adminEmail, adminPassword);
 
     const response = await request(app.getHttpServer())
-      .post(`/v1/admin/doctors/${doctorId}/rethus-verify`)
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send(buildRethusVerifyPayload())
       .expect(201);
@@ -329,7 +331,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     const adminToken = await login(adminEmail, adminPassword);
 
     await request(app.getHttpServer())
-      .post(`/v1/admin/doctors/${doctorId}/rethus-verify`)
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send(buildRethusVerifyPayload())
       .expect(201);
@@ -341,5 +343,23 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(200);
 
     expect(response.body).toEqual({ items: [] });
+  });
+
+  it('GET /v1/consultations/queue should block rejected doctor', async () => {
+    const doctorEmail = 'doctor-rejected@example.com';
+    const doctorId = await registerDoctor(doctorEmail);
+    const adminToken = await login(adminEmail, adminPassword);
+
+    await request(app.getHttpServer())
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(buildRethusVerifyPayload('REJECTED'))
+      .expect(201);
+
+    const doctorToken = await login(doctorEmail, 'StrongP@ss1');
+    await request(app.getHttpServer())
+      .get('/v1/consultations/queue')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .expect(403);
   });
 });

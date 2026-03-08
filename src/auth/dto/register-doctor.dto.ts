@@ -32,9 +32,6 @@ export class RegisterDoctorDto {
   @IsString()
   phoneNumber!: string;
 
-  @IsString()
-  rethusNumber!: string;
-
   @IsOptional()
   @IsString()
   professionalLicense?: string;

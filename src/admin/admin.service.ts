@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
+import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../doctors/schemas/rethus-verification.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
+import { RethusState } from '../common/enums/rethus-state.enum';
 
 @Injectable()
 export class AdminService {
@@ -44,6 +46,9 @@ export class AdminService {
           rethusState: string;
           administrativeAct: string;
           reportingEntity: string;
+          checkedBy: string;
+          evidenceUrl?: string;
+          notes?: string;
         };
       } | null = null;
       await session.withTransaction(async () => {
@@ -108,6 +113,19 @@ export class AdminService {
       { session },
     );
 
+    switch (dto.rethusState) {
+      case RethusState.VALID:
+        doctor.doctorStatus = DoctorStatus.VERIFIED;
+        break;
+
+      case RethusState.EXPIRED:
+        doctor.doctorStatus = DoctorStatus.REJECTED;
+        break;
+
+      case RethusState.PENDING:
+        doctor.doctorStatus = DoctorStatus.PENDING;
+        break;
+    }
     doctor.rethusVerification = verification[0]._id;
     await doctor.save({ session });
 
@@ -129,6 +147,9 @@ export class AdminService {
         rethusState: verification[0].rethusState,
         administrativeAct: verification[0].administrativeAct,
         reportingEntity: verification[0].reportingEntity,
+        checkedBy: verification[0].checkedBy,
+        evidenceUrl: verification[0].evidenceUrl,
+        notes: verification[0].notes,
       },
     };
   }

@@ -32,9 +32,6 @@ export class Doctor {
   @Prop({ required: true, trim: true })
   phoneNumber!: string;
 
-  @Prop({ required: true, trim: true })
-  rethusNumber!: string;
-
   @Prop()
   professionalLicense?: string;
 
