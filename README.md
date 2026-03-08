@@ -103,8 +103,8 @@ Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
 | `ENABLE_BOOTSTRAP_ADMIN` | No | `false` | Habilita creacion automatica de admin. |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | - | Email del admin inicial. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | - | Password del admin inicial. |
-| `BOOTSTRAP_ADMIN_FIRST_NAME` | No | `System` | Nombre del admin inicial. |
-| `BOOTSTRAP_ADMIN_LAST_NAME` | No | `Admin` | Apellido del admin inicial. |
+| `BOOTSTRAP_ADMIN_FIRST_NAME` | No | `Admin` | Nombre del admin inicial. |
+| `BOOTSTRAP_ADMIN_LAST_NAME` | No | `System` | Apellido del admin inicial. |
 
 ## Scripts Disponibles
 
