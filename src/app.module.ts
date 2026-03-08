@@ -33,7 +33,7 @@ import { PatientsModule } from './patients/patients.module';
     }),
     ThrottlerModule.forRoot([
       {
-        ttl: 60000,
+        ttl: 60,
         limit: 20,
       },
     ]),
