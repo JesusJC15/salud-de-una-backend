@@ -182,7 +182,7 @@ Tokens emitidos en login:
 | `POST /v1/auth/patient/register` | Si | No | - |
 | `POST /v1/auth/doctor/register` | Si | No | - |
 | `POST /v1/auth/login` | Si | No | - |
-| `POST /v1/admin/doctors/:doctorId/rethus-verify` | No | Si | `ADMIN` |
+| `POST /v1/admin/doctors/:doctorId/doctor-verify` | No | Si | `ADMIN` |
 | `GET /v1/consultations/queue` | No | Si | `DOCTOR` + verificado |
 | `GET /v1/doctors/me` | No | Si | `DOCTOR` |
 | `GET /v1/dashboard/technical` | No | Si | `ADMIN` |
