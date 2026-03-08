@@ -204,7 +204,7 @@ Request:
   "email": "ana@example.com",
   "password": "StrongP@ss1",
   "birthDate": "1998-03-10",
-  "gender": "F"
+  "gender": "FEMALE"
 }
 ```
 
