@@ -284,7 +284,7 @@ Response (200):
 
 ### 4) Verificacion REThUS por admin
 
-`POST /v1/admin/doctors/:doctorId/rethus-verify`
+`POST /v1/admin/doctors/:doctorId/doctor-verify`
 
 Requiere:
 
