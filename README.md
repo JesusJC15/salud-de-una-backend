@@ -520,6 +520,4 @@ test/
 
 ## Trazabilidad y Documentacion del Producto
 
-- Wiki de contexto: `SaludDeUnaContextWiki/`
-- Epicas e historias: `SaludDeUnaContextWiki/docs/epics/`
-- Wiki funcional: `SaludDeUnaContextWiki/docs/wiki/`
+- [SaludDeUna - Wiki](https://dev.azure.com/salud-de-una/SaludDeUna/_wiki/wikis/SaludDeUna.wiki/1/SaludDeUna-Wiki)
