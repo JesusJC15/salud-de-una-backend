@@ -1,0 +1,4 @@
+export enum Specialty {
+  GENERAL_MEDICINE = 'GENERAL_MEDICINE',
+  ODONTOLOGY = 'ODONTOLOGY',
+}
