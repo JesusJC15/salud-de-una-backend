@@ -48,7 +48,8 @@ export class AdminService {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedSearch, 'i');
       doctorFilter.$or = [
         { firstName: searchRegex },
         { lastName: searchRegex },
