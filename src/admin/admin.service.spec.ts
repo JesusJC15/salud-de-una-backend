@@ -192,6 +192,8 @@ describe('AdminService', () => {
       const doctors: unknown[] = [];
       doctorModelMock.find.mockReturnValue({
         sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue(doctors),
@@ -217,6 +219,8 @@ describe('AdminService', () => {
       const doctors: unknown[] = [];
       doctorModelMock.find.mockReturnValue({
         sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue(doctors),
