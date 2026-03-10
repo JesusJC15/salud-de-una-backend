@@ -287,14 +287,18 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       })
       .expect(200);
 
-    expect(response.body).toMatchObject({
-      accessToken: expect.any(String),
-      refreshToken: expect.any(String),
+    const body = response.body as AuthSessionResponseBody;
+
+    expect(body).toMatchObject({
       user: {
         email: 'loginok@example.com',
         role: 'PATIENT',
       },
     });
+    expect(typeof body.accessToken).toBe('string');
+    expect(body.accessToken.length).toBeGreaterThan(0);
+    expect(typeof body.refreshToken).toBe('string');
+    expect(body.refreshToken.length).toBeGreaterThan(0);
   });
 
   it('POST /v1/auth/patient/login should return 401 for invalid credentials', () => {
@@ -501,14 +505,18 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send({ refreshToken: loginBody.refreshToken })
       .expect(200);
 
-    expect(refreshResponse.body).toMatchObject({
-      accessToken: expect.any(String),
-      refreshToken: expect.any(String),
+    const refreshBody = refreshResponse.body as AuthSessionResponseBody;
+
+    expect(refreshBody).toMatchObject({
       user: {
         email: 'refresh@example.com',
         role: 'PATIENT',
       },
     });
+    expect(typeof refreshBody.accessToken).toBe('string');
+    expect(refreshBody.accessToken.length).toBeGreaterThan(0);
+    expect(typeof refreshBody.refreshToken).toBe('string');
+    expect(refreshBody.refreshToken.length).toBeGreaterThan(0);
   });
 
   it('GET /v1/auth/me should return authenticated user from access token', async () => {
