@@ -133,12 +133,14 @@ export class AuthService {
       'auth.jwtRefreshSecret',
     );
 
-    const payload = await this.jwtService.verifyAsync<JwtPayload>(
-      refreshToken,
-      {
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
         secret: jwtRefreshSecret,
-      },
-    );
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Refresh token invalido o expirado');
+    }
 
     if (payload.tokenType !== 'refresh') {
       throw new UnauthorizedException('Tipo de token invalido');
