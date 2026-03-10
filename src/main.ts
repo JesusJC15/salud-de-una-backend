@@ -1,6 +1,7 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NextFunction, Request, Response } from 'express';
 import { connection } from 'mongoose';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -11,6 +12,13 @@ function sanitizeMongoUri(uri?: string): string {
   }
 
   return uri.replace(/:\/\/([^:@]+):([^@]+)@/u, '://$1:***@');
+}
+
+function parseCorsOrigins(
+  patientOrigins: string[] = [],
+  staffOrigins: string[] = [],
+): string[] {
+  return [...new Set([...patientOrigins, ...staffOrigins])];
 }
 
 async function bootstrap() {
@@ -40,6 +48,37 @@ async function bootstrap() {
   }
 
   app.setGlobalPrefix(globalPrefix);
+  const corsOrigins = parseCorsOrigins(
+    configService.get<string[]>('web.corsOriginsPatient') ?? [],
+    configService.get<string[]>('web.corsOriginsStaff') ?? [],
+  );
+
+  app.enableCors({
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin || corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+    exposedHeaders: ['x-correlation-id'],
+  });
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    void req;
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    next();
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

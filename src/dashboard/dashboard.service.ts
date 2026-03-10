@@ -1,4 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
+import {
+  Notification,
+  NotificationDocument,
+} from '../notifications/schemas/notification.schema';
+import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 
 interface RequestMetric {
   latencyMs: number;
@@ -8,6 +17,15 @@ interface RequestMetric {
 @Injectable()
 export class DashboardService {
   private readonly metrics: RequestMetric[] = [];
+
+  constructor(
+    @InjectModel(Patient.name)
+    private readonly patientModel: Model<PatientDocument>,
+    @InjectModel(Doctor.name)
+    private readonly doctorModel: Model<DoctorDocument>,
+    @InjectModel(Notification.name)
+    private readonly notificationModel: Model<NotificationDocument>,
+  ) {}
 
   record(metric: RequestMetric): void {
     this.metrics.push(metric);
@@ -31,6 +49,57 @@ export class DashboardService {
       p95LatencyMs,
       errorRate,
       timestamp: new Date().toISOString(),
+    };
+  }
+
+  async getBusinessMetrics() {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [
+      totalPatients,
+      totalDoctors,
+      verifiedDoctors,
+      pendingDoctors,
+      rejectedDoctors,
+      unreadNotifications,
+      newPatientsLast7Days,
+      newDoctorsLast7Days,
+    ] = await Promise.all([
+      this.patientModel.countDocuments(),
+      this.doctorModel.countDocuments(),
+      this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.VERIFIED }),
+      this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.PENDING }),
+      this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.REJECTED }),
+      this.notificationModel.countDocuments({ read: false }),
+      this.patientModel.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      this.doctorModel.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+    ]);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      kpis: {
+        totalPatients,
+        totalDoctors,
+        verifiedDoctors,
+        pendingDoctors,
+      },
+      doctorStatusBreakdown: {
+        verified: verifiedDoctors,
+        pending: pendingDoctors,
+        rejected: rejectedDoctors,
+      },
+      growthLast7Days: {
+        patients: newPatientsLast7Days,
+        doctors: newDoctorsLast7Days,
+      },
+      operationalSignals: {
+        unreadNotifications,
+        verificationCoverage:
+          totalDoctors > 0
+            ? Number(((verifiedDoctors / totalDoctors) * 100).toFixed(2))
+            : 0,
+      },
     };
   }
 }

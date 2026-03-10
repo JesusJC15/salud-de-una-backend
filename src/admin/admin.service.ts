@@ -8,6 +8,7 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import {
@@ -15,6 +16,7 @@ import {
   RethusVerificationDocument,
 } from '../doctors/schemas/rethus-verification.schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
 import { RethusState } from '../common/enums/rethus-state.enum';
 
@@ -28,6 +30,130 @@ export class AdminService {
     private readonly rethusVerificationModel: Model<RethusVerificationDocument>,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  async listDoctorsForReview(query: ListDoctorsForReviewDto) {
+    const search = query.search?.trim();
+    const doctorFilter: {
+      doctorStatus?: DoctorStatus;
+      specialty?: Specialty;
+      $or?: Array<Record<string, unknown>>;
+    } = {};
+
+    if (query.status) {
+      doctorFilter.doctorStatus = query.status;
+    }
+
+    if (query.specialty) {
+      doctorFilter.specialty = query.specialty;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      doctorFilter.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        { personalId: searchRegex },
+      ];
+    }
+
+    const doctors = await this.doctorModel
+      .find(doctorFilter)
+      .sort({ createdAt: -1 })
+      .select(
+        'firstName lastName email specialty doctorStatus professionalLicense personalId phoneNumber createdAt updatedAt',
+      )
+      .lean()
+      .exec();
+
+    const doctorIds = doctors.map((doctor) => doctor._id);
+    const latestVerifications =
+      doctorIds.length === 0
+        ? []
+        : await this.rethusVerificationModel
+            .aggregate<{
+              doctorId: Types.ObjectId;
+              checkedAt: Date;
+              checkedBy: string;
+              rethusState: string;
+              reportingEntity: string;
+              notes?: string;
+            }>([
+              {
+                $match: {
+                  doctorId: { $in: doctorIds },
+                },
+              },
+              {
+                $sort: { checkedAt: -1 },
+              },
+              {
+                $group: {
+                  _id: '$doctorId',
+                  doctorId: { $first: '$doctorId' },
+                  checkedAt: { $first: '$checkedAt' },
+                  checkedBy: { $first: '$checkedBy' },
+                  rethusState: { $first: '$rethusState' },
+                  reportingEntity: { $first: '$reportingEntity' },
+                  notes: { $first: '$notes' },
+                },
+              },
+            ])
+            .exec();
+
+    const verificationMap = new Map(
+      latestVerifications.map((verification) => [
+        verification.doctorId.toString(),
+        verification,
+      ]),
+    );
+
+    const [pendingCount, verifiedCount, rejectedCount, totalCount] =
+      await Promise.all([
+        this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.PENDING }),
+        this.doctorModel.countDocuments({
+          doctorStatus: DoctorStatus.VERIFIED,
+        }),
+        this.doctorModel.countDocuments({
+          doctorStatus: DoctorStatus.REJECTED,
+        }),
+        this.doctorModel.countDocuments(),
+      ]);
+
+    return {
+      summary: {
+        total: totalCount,
+        pending: pendingCount,
+        verified: verifiedCount,
+        rejected: rejectedCount,
+      },
+      items: doctors.map((doctor) => {
+        const latestVerification = verificationMap.get(doctor._id.toString());
+        return {
+          id: doctor._id.toString(),
+          firstName: doctor.firstName,
+          lastName: doctor.lastName,
+          email: doctor.email,
+          specialty: doctor.specialty,
+          doctorStatus: doctor.doctorStatus,
+          professionalLicense: doctor.professionalLicense,
+          personalId: doctor.personalId,
+          phoneNumber: doctor.phoneNumber,
+          createdAt: doctor.createdAt ?? null,
+          updatedAt: doctor.updatedAt ?? null,
+          latestVerification: latestVerification
+            ? {
+                checkedAt: latestVerification.checkedAt,
+                checkedBy: latestVerification.checkedBy,
+                rethusState: latestVerification.rethusState,
+                reportingEntity: latestVerification.reportingEntity,
+                notes: latestVerification.notes,
+              }
+            : null,
+        };
+      }),
+    };
+  }
 
   async verifyDoctor(
     doctorId: string,
