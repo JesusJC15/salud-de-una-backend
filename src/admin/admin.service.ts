@@ -58,14 +58,23 @@ export class AdminService {
       ];
     }
 
-    const doctors = await this.doctorModel
-      .find(doctorFilter)
-      .sort({ createdAt: -1 })
-      .select(
-        'firstName lastName email specialty doctorStatus professionalLicense personalId phoneNumber createdAt updatedAt',
-      )
-      .lean()
-      .exec();
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [doctors, filteredCount] = await Promise.all([
+      this.doctorModel
+        .find(doctorFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select(
+          'firstName lastName email specialty doctorStatus professionalLicense personalId phoneNumber createdAt updatedAt',
+        )
+        .lean()
+        .exec(),
+      this.doctorModel.countDocuments(doctorFilter),
+    ]);
 
     const doctorIds = doctors.map((doctor) => doctor._id);
     const latestVerifications =
@@ -127,6 +136,12 @@ export class AdminService {
         pending: pendingCount,
         verified: verifiedCount,
         rejected: rejectedCount,
+      },
+      pagination: {
+        page,
+        limit,
+        total: filteredCount,
+        totalPages: Math.ceil(filteredCount / limit),
       },
       items: doctors.map((doctor) => {
         const latestVerification = verificationMap.get(doctor._id.toString());
