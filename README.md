@@ -15,7 +15,7 @@ Backend del MVP de SaludDeUna construido con NestJS + MongoDB. Este documento re
 - KPIs de negocio calculados desde MongoDB para staff.
 - Endpoints de salud y readiness.
 - Seguridad base con JWT, RBAC, throttling y trazabilidad por `x-correlation-id`.
-- Sesion web con cookies `HttpOnly` + proteccion CSRF (double-submit cookie).
+- Sesiones basadas en access token y refresh token JWT.
 
 ## Stack Tecnico
 
@@ -109,14 +109,6 @@ Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
 | `REFRESH_MAX_ACTIVE_SESSIONS` | No | `3` | Maximo de sesiones refresh activas por usuario. |
 | `CORS_ORIGINS_PATIENT` | No | - | Origenes permitidos del frontend paciente (CSV). |
 | `CORS_ORIGINS_STAFF` | No | - | Origenes permitidos del frontend staff (CSV). |
-| `ACCESS_TOKEN_COOKIE_NAME` | No | `sdu_access_token` | Nombre de cookie access token. |
-| `REFRESH_TOKEN_COOKIE_NAME` | No | `sdu_refresh_token` | Nombre de cookie refresh token. |
-| `CSRF_COOKIE_NAME` | No | `csrf_token` | Nombre de cookie CSRF. |
-| `CSRF_HEADER_NAME` | No | `x-csrf-token` | Header CSRF esperado. |
-| `COOKIE_DOMAIN` | No | - | Dominio de cookies. |
-| `COOKIE_PATH` | No | `/` | Path de cookies. |
-| `COOKIE_SAME_SITE` | No | `lax` | Politica SameSite (`lax`,`strict`,`none`). |
-| `COOKIE_SECURE` | No | `false` | Enviar cookies solo por HTTPS. |
 | `ENABLE_BOOTSTRAP_ADMIN` | No | `false` | Habilita creacion automatica de admin. |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | - | Email del admin inicial. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | - | Password del admin inicial. |
@@ -187,11 +179,11 @@ Politica de password para registro:
 - Al menos 1 numero.
 - Al menos 1 caracter especial.
 
-Sesiones web:
+Sesiones autenticadas:
 
-- `sdu_access_token` (cookie `HttpOnly`).
-- `sdu_refresh_token` (cookie `HttpOnly`).
-- `csrf_token` (cookie legible por frontend para enviar en header).
+- `accessToken` devuelto por login y refresh.
+- `refreshToken` devuelto por login y refresh.
+- Los endpoints protegidos exigen `Authorization: Bearer <accessToken>`.
 
 ## Matriz de Acceso
 
@@ -201,9 +193,8 @@ Sesiones web:
 | `POST /v1/auth/doctor/register` | Si | No | - |
 | `POST /v1/auth/patient/login` | Si | No | - |
 | `POST /v1/auth/staff/login` | Si | No | - |
-| `POST /v1/auth/csrf` | Si | No | - |
-| `POST /v1/auth/refresh` | Si | No | Cookie `refresh` + CSRF |
-| `POST /v1/auth/logout` | Si | No | Cookie `refresh` + CSRF |
+| `POST /v1/auth/refresh` | Si | No | Requiere `refreshToken` en body |
+| `POST /v1/auth/logout` | Si | No | Requiere `refreshToken` en body |
 | `GET /v1/auth/me` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
 | `GET /v1/admin/doctors` | No | Si | `ADMIN` |
 | `POST /v1/admin/doctors/:doctorId/doctor-verify` | No | Si | `ADMIN` |
@@ -302,6 +293,8 @@ Response (200):
 
 ```json
 {
+  "accessToken": "...",
+  "refreshToken": "...",
   "user": {
     "id": "...",
     "email": "laura@example.com",
@@ -312,8 +305,8 @@ Response (200):
 
 Notas:
 
-- Los tokens se envian via cookies `HttpOnly`.
-- Para `POST`/`PUT`/`PATCH`/`DELETE` con cookie de sesion se exige header CSRF.
+- `accessToken` se usa en `Authorization: Bearer <token>`.
+- `refreshToken` se envia explicitamente en el body para renovar o cerrar sesion.
 - `POST /auth/logout` revoca la sesion de refresh actual en base de datos.
 - `GET /auth/me` permite hidratar sesion desde token vigente.
 - Si se supera `REFRESH_MAX_ACTIVE_SESSIONS`, el backend revoca primero las sesiones activas mas antiguas.

@@ -2,14 +2,12 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
-import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Model, Types } from 'mongoose';
 import { Admin, AdminDocument } from '../../admins/schemas/admin.schema';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
-import { parseCookies } from '../../common/utils/cookie.utils';
 import { Doctor, DoctorDocument } from '../../doctors/schemas/doctor.schema';
 import {
   Patient,
@@ -27,25 +25,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectModel(Admin.name)
     private readonly adminModel: Model<AdminDocument>,
   ) {
-    const extractFromCookie = (request: Request | undefined): string | null => {
-      const cookieHeader = request?.headers?.cookie;
-      if (!cookieHeader) {
-        return null;
-      }
-
-      const cookies = parseCookies(cookieHeader);
-      const accessCookieName =
-        configService.get<string>('web.accessTokenCookieName') ??
-        'sdu_access_token';
-
-      return cookies[accessCookieName] ?? null;
-    };
-
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-        extractFromCookie,
-      ]),
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('auth.jwtSecret'),
     });

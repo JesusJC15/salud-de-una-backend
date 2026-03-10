@@ -196,10 +196,6 @@ export class AuthService {
     };
   }
 
-  generateCsrfToken(): string {
-    return randomBytes(32).toString('hex');
-  }
-
   private async buildSession(
     authUser: TokenUser,
     previousSessionId?: string,

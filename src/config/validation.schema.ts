@@ -13,16 +13,6 @@ export const validationSchema = Joi.object({
   REFRESH_MAX_ACTIVE_SESSIONS: Joi.number().integer().min(1).default(3),
   CORS_ORIGINS_PATIENT: Joi.string().default(''),
   CORS_ORIGINS_STAFF: Joi.string().default(''),
-  ACCESS_TOKEN_COOKIE_NAME: Joi.string().default('sdu_access_token'),
-  REFRESH_TOKEN_COOKIE_NAME: Joi.string().default('sdu_refresh_token'),
-  CSRF_COOKIE_NAME: Joi.string().default('csrf_token'),
-  CSRF_HEADER_NAME: Joi.string().default('x-csrf-token'),
-  COOKIE_DOMAIN: Joi.string().allow('').optional(),
-  COOKIE_PATH: Joi.string().default('/'),
-  COOKIE_SAME_SITE: Joi.string()
-    .valid('lax', 'strict', 'none', 'Lax', 'Strict', 'None')
-    .default('lax'),
-  COOKIE_SECURE: Joi.boolean().default(false),
   ENABLE_BOOTSTRAP_ADMIN: Joi.boolean().default(false),
   BOOTSTRAP_ADMIN_EMAIL: Joi.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: Joi.string().optional(),

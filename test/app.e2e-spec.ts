@@ -44,8 +44,14 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     message?: string | string[];
   };
 
-  type CsrfBody = {
-    csrfToken: string;
+  type AuthSessionResponseBody = {
+    accessToken: string;
+    refreshToken: string;
+    user: {
+      id: string;
+      email: string;
+      role: string;
+    };
   };
 
   type AdminDoctorsListResponseBody = {
@@ -95,29 +101,6 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     };
   };
 
-  function toCookieArray(value: string | string[] | undefined): string[] {
-    if (!value) {
-      return [];
-    }
-
-    return Array.isArray(value) ? value : [value];
-  }
-
-  function extractCookieValue(
-    setCookieHeader: string | string[] | undefined,
-    cookieName: string,
-  ): string {
-    const cookie = toCookieArray(setCookieHeader).find((item) =>
-      item.startsWith(`${cookieName}=`),
-    );
-
-    if (!cookie) {
-      throw new Error(`Cookie ${cookieName} no encontrada en respuesta`);
-    }
-
-    return cookie.split(';')[0].split('=')[1];
-  }
-
   async function login(
     email: string,
     password: string,
@@ -132,10 +115,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send({ email, password })
       .expect(200);
 
-    return extractCookieValue(
-      response.headers['set-cookie'],
-      'sdu_access_token',
-    );
+    const body = response.body as AuthSessionResponseBody;
+    return body.accessToken;
   }
 
   async function registerDoctor(email: string): Promise<string> {
@@ -290,7 +271,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(409);
   });
 
-  it('POST /v1/auth/patient/login should set session cookies for valid credentials', async () => {
+  it('POST /v1/auth/patient/login should return session tokens for valid credentials', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Ana',
       lastName: 'Lopez',
@@ -307,17 +288,13 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(200);
 
     expect(response.body).toMatchObject({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String),
       user: {
         email: 'loginok@example.com',
         role: 'PATIENT',
       },
     });
-    expect(response.headers['set-cookie']).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('sdu_access_token='),
-        expect.stringContaining('sdu_refresh_token='),
-      ]),
-    );
   });
 
   it('POST /v1/auth/patient/login should return 401 for invalid credentials', () => {
@@ -504,7 +481,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     });
   });
 
-  it('POST /v1/auth/refresh should rotate session when refresh cookie is present', async () => {
+  it('POST /v1/auth/refresh should rotate session when refresh token is provided', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Ana',
       lastName: 'Lopez',
@@ -517,38 +494,21 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send({ email: 'refresh@example.com', password: 'StrongP@ss1' })
       .expect(200);
 
-    const refreshCookie = (
-      loginResponse.headers['set-cookie'] as unknown as string[]
-    ).find((cookie) => cookie.startsWith('sdu_refresh_token='));
-    expect(refreshCookie).toBeDefined();
-
-    const csrf = await request(app.getHttpServer())
-      .post('/v1/auth/csrf')
-      .expect(200);
-    const csrfCookie = (csrf.headers['set-cookie'] as unknown as string[]).find(
-      (cookie) => cookie.startsWith('csrf_token='),
-    );
-    const csrfBody = csrf.body as CsrfBody;
-    const csrfToken = csrfBody.csrfToken;
+    const loginBody = loginResponse.body as AuthSessionResponseBody;
 
     const refreshResponse = await request(app.getHttpServer())
       .post('/v1/auth/refresh')
-      .set('Cookie', [refreshCookie!, csrfCookie!])
-      .set('x-csrf-token', csrfToken)
+      .send({ refreshToken: loginBody.refreshToken })
       .expect(200);
 
     expect(refreshResponse.body).toMatchObject({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String),
       user: {
         email: 'refresh@example.com',
         role: 'PATIENT',
       },
     });
-    expect(refreshResponse.headers['set-cookie']).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('sdu_access_token='),
-        expect.stringContaining('sdu_refresh_token='),
-      ]),
-    );
   });
 
   it('GET /v1/auth/me should return authenticated user from access token', async () => {
@@ -592,29 +552,16 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send({ email: 'logout@example.com', password: 'StrongP@ss1' })
       .expect(200);
 
-    const refreshCookie = toCookieArray(
-      loginResponse.headers['set-cookie'],
-    ).find((cookie) => cookie.startsWith('sdu_refresh_token='));
-    expect(refreshCookie).toBeDefined();
-
-    const csrf = await request(app.getHttpServer())
-      .post('/v1/auth/csrf')
-      .expect(200);
-    const csrfCookie = toCookieArray(csrf.headers['set-cookie']).find(
-      (cookie) => cookie.startsWith('csrf_token='),
-    );
-    const csrfBody = csrf.body as CsrfBody;
+    const loginBody = loginResponse.body as AuthSessionResponseBody;
 
     await request(app.getHttpServer())
       .post('/v1/auth/logout')
-      .set('Cookie', [refreshCookie!, csrfCookie!])
-      .set('x-csrf-token', csrfBody.csrfToken)
+      .send({ refreshToken: loginBody.refreshToken })
       .expect(200);
 
     await request(app.getHttpServer())
       .post('/v1/auth/refresh')
-      .set('Cookie', [refreshCookie!, csrfCookie!])
-      .set('x-csrf-token', csrfBody.csrfToken)
+      .send({ refreshToken: loginBody.refreshToken })
       .expect(401);
   });
 

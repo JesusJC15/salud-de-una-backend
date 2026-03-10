@@ -10,7 +10,6 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
-import { CsrfGuard } from './common/guards/csrf.guard';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
@@ -60,10 +59,6 @@ import { PatientsModule } from './patients/patients.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: CsrfGuard,
     },
     {
       provide: APP_GUARD,
