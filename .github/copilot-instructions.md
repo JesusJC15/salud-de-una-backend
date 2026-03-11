@@ -34,7 +34,7 @@ src/
   consultations/  # Consultation queue (DOCTOR + verified only)
   dashboard/      # Technical metrics (ADMIN only)
   doctors/        # Doctor profile + schema
-  notifications/  # In-memory notifications
+  notifications/  # Persistent notifications (Mongoose/MongoDB)
   patients/       # Patient schema
   app.module.ts   # Root module
   main.ts         # Bootstrap (global prefix, pipes, filters)
