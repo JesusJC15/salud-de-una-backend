@@ -106,7 +106,7 @@ getQueue() { … }
 
 ### JWT Payload
 
-The `JwtPayload` interface (`src/common/interfaces/jwt-payload.interface.ts`) contains `sub` (user ID), `email`, `role`, `tokenType` (`access` | `refresh`), and `jti` (session ID for refresh tokens).
+The `JwtPayload` interface (`src/common/interfaces/jwt-payload.interface.ts`) contains `sub` (user ID), `email`, `role`, optional `tokenType` (e.g. `'access' | 'refresh'`), and may include standard JWT timestamps `iat` and `exp`.
 
 ---
 
