@@ -138,7 +138,7 @@ export class AuthService {
       payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
         secret: jwtRefreshSecret,
       });
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Refresh token invalido o expirado');
     }
 
