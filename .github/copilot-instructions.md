@@ -201,6 +201,8 @@ Required variables (validated by Joi in `src/config/validation.schema.ts`):
 | `ENABLE_BOOTSTRAP_ADMIN` | No | `false` | Auto-create initial admin on startup |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | — | Bootstrap admin email |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | — | Bootstrap admin password |
+| `BOOTSTRAP_ADMIN_FIRST_NAME` | No | — | Bootstrap admin first name |
+| `BOOTSTRAP_ADMIN_LAST_NAME` | No | — | Bootstrap admin last name |
 
 Copy `.env.example` to `.env` and fill in the required values before running the application.
 
