@@ -56,26 +56,101 @@ export class DashboardService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [
-      totalPatients,
-      totalDoctors,
-      verifiedDoctors,
-      pendingDoctors,
-      rejectedDoctors,
-      unreadNotifications,
-      newPatientsLast7Days,
-      newDoctorsLast7Days,
-    ] = await Promise.all([
-      this.patientModel.countDocuments(),
-      this.doctorModel.countDocuments(),
-      this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.VERIFIED }),
-      this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.PENDING }),
-      this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.REJECTED }),
-      this.notificationModel.countDocuments({ read: false }),
-      this.patientModel.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      this.doctorModel.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+    const [doctorAgg, patientAgg, notificationAgg] = await Promise.all([
+      this.doctorModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalDoctors: { $sum: 1 },
+            verifiedDoctors: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$doctorStatus', DoctorStatus.VERIFIED] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            pendingDoctors: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$doctorStatus', DoctorStatus.PENDING] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            rejectedDoctors: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$doctorStatus', DoctorStatus.REJECTED] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            newDoctorsLast7Days: {
+              $sum: {
+                $cond: [
+                  { $gte: ['$createdAt', sevenDaysAgo] },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      this.patientModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalPatients: { $sum: 1 },
+            newPatientsLast7Days: {
+              $sum: {
+                $cond: [
+                  { $gte: ['$createdAt', sevenDaysAgo] },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      this.notificationModel.aggregate([
+        { $match: { read: false } },
+        { $count: 'unreadNotifications' },
+      ]),
     ]);
 
+    const doctorStats = (doctorAgg[0] ?? {}) as {
+      totalDoctors?: number;
+      verifiedDoctors?: number;
+      pendingDoctors?: number;
+      rejectedDoctors?: number;
+      newDoctorsLast7Days?: number;
+    };
+
+    const patientStats = (patientAgg[0] ?? {}) as {
+      totalPatients?: number;
+      newPatientsLast7Days?: number;
+    };
+
+    const notificationStats = (notificationAgg[0] ?? {}) as {
+      unreadNotifications?: number;
+    };
+
+    const totalDoctors = doctorStats.totalDoctors ?? 0;
+    const verifiedDoctors = doctorStats.verifiedDoctors ?? 0;
+    const pendingDoctors = doctorStats.pendingDoctors ?? 0;
+    const rejectedDoctors = doctorStats.rejectedDoctors ?? 0;
+    const newDoctorsLast7Days = doctorStats.newDoctorsLast7Days ?? 0;
+
+    const totalPatients = patientStats.totalPatients ?? 0;
+    const newPatientsLast7Days = patientStats.newPatientsLast7Days ?? 0;
+
+    const unreadNotifications = notificationStats.unreadNotifications ?? 0;
     return {
       generatedAt: new Date().toISOString(),
       kpis: {
