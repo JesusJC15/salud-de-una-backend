@@ -1,5 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { DoctorStatus } from '../../common/enums/doctor-status.enum';
 import { Specialty } from '../../common/enums/specialty.enum';
 
