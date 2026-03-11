@@ -183,6 +183,8 @@ describe('AdminService', () => {
       rethusVerificationModelMock.aggregate = jest
         .fn()
         .mockReturnValue(rethusAggMock);
+      const doctorAggMock = { exec: jest.fn().mockResolvedValue([]) };
+      doctorModelMock.aggregate = jest.fn().mockReturnValue(doctorAggMock);
       doctorModelMock.countDocuments.mockResolvedValue(0);
     };
 

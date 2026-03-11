@@ -157,7 +157,7 @@ export class AuthService {
       throw new UnauthorizedException('Usuario no autorizado');
     }
 
-    return this.buildSession(authUser, payload.jti);
+    return this.buildSession(authUser);
   }
 
   async revokeRefreshSession(refreshToken?: string): Promise<void> {
@@ -306,11 +306,12 @@ export class AuthService {
         sessionId: payload.jti,
         userId: payload.sub,
         role: payload.role,
+        revokedAt: { $exists: false },
       })
       .lean()
       .exec();
 
-    if (!refreshSession || refreshSession.revokedAt) {
+    if (!refreshSession) {
       throw new UnauthorizedException(
         'Sesion de refresh revocada o inexistente',
       );
@@ -327,6 +328,32 @@ export class AuthService {
     );
     if (!tokenMatches) {
       throw new UnauthorizedException('Refresh token no valido para la sesion');
+    }
+
+    // Atomically consume (revoke) the session to prevent replay attacks from
+    // concurrent requests that may have passed the validation checks above.
+    const consumed = await this.refreshSessionModel
+      .findOneAndUpdate(
+        {
+          sessionId: payload.jti,
+          userId: payload.sub,
+          role: payload.role,
+          revokedAt: { $exists: false },
+        },
+        {
+          $set: {
+            revokedAt: new Date(),
+            revokedReason: 'rotated',
+          },
+        },
+      )
+      .lean()
+      .exec();
+
+    if (!consumed) {
+      throw new UnauthorizedException(
+        'Sesion de refresh revocada o inexistente',
+      );
     }
   }
 
