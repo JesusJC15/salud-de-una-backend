@@ -12,6 +12,7 @@ import type { RequestContext } from '../common/interfaces/request-context.interf
 import { AuthMeResponseDto } from './dto/auth-me.response.dto';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
@@ -62,7 +63,7 @@ export class AuthController {
   @Post('logout')
   @Public()
   @HttpCode(HttpStatus.OK)
-  async logout(@Body() dto: RefreshTokenDto) {
+  async logout(@Body() dto: LogoutDto) {
     await this.authService.revokeRefreshSession(dto.refreshToken);
     return { message: 'Sesion cerrada' };
   }

@@ -73,11 +73,7 @@ export class DashboardService {
             },
             pendingDoctors: {
               $sum: {
-                $cond: [
-                  { $eq: ['$doctorStatus', DoctorStatus.PENDING] },
-                  1,
-                  0,
-                ],
+                $cond: [{ $eq: ['$doctorStatus', DoctorStatus.PENDING] }, 1, 0],
               },
             },
             rejectedDoctors: {
@@ -91,11 +87,7 @@ export class DashboardService {
             },
             newDoctorsLast7Days: {
               $sum: {
-                $cond: [
-                  { $gte: ['$createdAt', sevenDaysAgo] },
-                  1,
-                  0,
-                ],
+                $cond: [{ $gte: ['$createdAt', sevenDaysAgo] }, 1, 0],
               },
             },
           },
@@ -108,11 +100,7 @@ export class DashboardService {
             totalPatients: { $sum: 1 },
             newPatientsLast7Days: {
               $sum: {
-                $cond: [
-                  { $gte: ['$createdAt', sevenDaysAgo] },
-                  1,
-                  0,
-                ],
+                $cond: [{ $gte: ['$createdAt', sevenDaysAgo] }, 1, 0],
               },
             },
           },

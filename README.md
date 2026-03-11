@@ -438,37 +438,6 @@ Regla de negocio aplicada:
 
 `GET /v1/doctors/me`
 
-### 10) Dashboard de negocio
-
-`GET /v1/dashboard/business`
-
-Response:
-
-```json
-{
-  "generatedAt": "2026-03-09T00:00:00.000Z",
-  "kpis": {
-    "totalPatients": 10,
-    "totalDoctors": 6,
-    "verifiedDoctors": 4,
-    "pendingDoctors": 2
-  },
-  "doctorStatusBreakdown": {
-    "verified": 4,
-    "pending": 2,
-    "rejected": 0
-  },
-  "growthLast7Days": {
-    "patients": 3,
-    "doctors": 2
-  },
-  "operationalSignals": {
-    "unreadNotifications": 5,
-    "verificationCoverage": 66.67
-  }
-}
-```
-
 Requiere JWT con rol `DOCTOR`.
 
 Response (200):
@@ -494,6 +463,39 @@ Response (200):
     "checkedBy": "admin@example.com",
     "evidenceUrl": "https://example.com/evidence.pdf",
     "notes": "Validacion administrativa"
+  }
+}
+```
+
+### 10) Dashboard de negocio
+
+`GET /v1/dashboard/business`
+
+Requiere JWT con rol `ADMIN`.
+
+Response (200):
+
+```json
+{
+  "generatedAt": "2026-03-09T00:00:00.000Z",
+  "kpis": {
+    "totalPatients": 10,
+    "totalDoctors": 6,
+    "verifiedDoctors": 4,
+    "pendingDoctors": 2
+  },
+  "doctorStatusBreakdown": {
+    "verified": 4,
+    "pending": 2,
+    "rejected": 0
+  },
+  "growthLast7Days": {
+    "patients": 3,
+    "doctors": 2
+  },
+  "operationalSignals": {
+    "unreadNotifications": 5,
+    "verificationCoverage": 66.67
   }
 }
 ```
