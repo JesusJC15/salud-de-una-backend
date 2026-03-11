@@ -118,18 +118,32 @@ export class AdminService {
       ]),
     );
 
-    const [pendingCount, verifiedCount, rejectedCount, totalCount] =
-      await Promise.all([
-        this.doctorModel.countDocuments({ doctorStatus: DoctorStatus.PENDING }),
-        this.doctorModel.countDocuments({
-          doctorStatus: DoctorStatus.VERIFIED,
-        }),
-        this.doctorModel.countDocuments({
-          doctorStatus: DoctorStatus.REJECTED,
-        }),
-        this.doctorModel.countDocuments(),
-      ]);
+    const statusSummary = await this.doctorModel
+      .aggregate<{ _id: DoctorStatus | null; count: number }>([
+        {
+          $group: {
+            _id: '$doctorStatus',
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .exec();
 
+    let pendingCount = 0;
+    let verifiedCount = 0;
+    let rejectedCount = 0;
+    let totalCount = 0;
+
+    for (const { _id, count } of statusSummary) {
+      totalCount += count;
+      if (_id === DoctorStatus.PENDING) {
+        pendingCount = count;
+      } else if (_id === DoctorStatus.VERIFIED) {
+        verifiedCount = count;
+      } else if (_id === DoctorStatus.REJECTED) {
+        rejectedCount = count;
+      }
+    }
     return {
       summary: {
         total: totalCount,
