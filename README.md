@@ -194,7 +194,7 @@ Sesiones autenticadas:
 | `POST /v1/auth/patient/login` | Si | No | - |
 | `POST /v1/auth/staff/login` | Si | No | - |
 | `POST /v1/auth/refresh` | Si | No | Requiere `refreshToken` en body |
-| `POST /v1/auth/logout` | Si | No | Requiere `refreshToken` en body |
+| `POST /v1/auth/logout` | Si | No | `refreshToken` opcional en body; si falta, la operación sigue siendo exitosa (idempotente) |
 | `GET /v1/auth/me` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
 | `GET /v1/admin/doctors` | No | Si | `ADMIN` |
 | `POST /v1/admin/doctors/:doctorId/doctor-verify` | No | Si | `ADMIN` |
