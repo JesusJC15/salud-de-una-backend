@@ -14,6 +14,7 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
 import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
 import { validationSchema } from './config/validation.schema';
+import webConfig from './config/web.config';
 import { ConsultationsModule } from './consultations/consultations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DoctorsModule } from './doctors/doctors.module';
@@ -24,7 +25,7 @@ import { PatientsModule } from './patients/patients.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [authConfig, databaseConfig],
+      load: [authConfig, databaseConfig, webConfig],
       validationSchema,
       validationOptions: {
         abortEarly: true,

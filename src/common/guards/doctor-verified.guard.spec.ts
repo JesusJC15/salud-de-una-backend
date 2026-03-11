@@ -37,15 +37,15 @@ describe('DoctorVerifiedGuard', () => {
     guard = module.get<DoctorVerifiedGuard>(DoctorVerifiedGuard);
   });
 
-  it('should allow non-doctor users without DB lookup', async () => {
+  it('should reject non-doctor users without DB lookup', async () => {
     const context = createExecutionContext({
       userId: 'u1',
       role: UserRole.ADMIN,
     });
 
-    const result = await guard.canActivate(context);
-
-    expect(result).toBe(true);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(doctorModelMock.findById).not.toHaveBeenCalled();
   });
 

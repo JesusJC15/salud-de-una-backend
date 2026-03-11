@@ -1,7 +1,19 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
+import type { RequestContext } from '../common/interfaces/request-context.interface';
+import { AuthMeResponseDto } from './dto/auth-me.response.dto';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
 
@@ -21,10 +33,59 @@ export class AuthController {
     return this.authService.registerDoctor(dto);
   }
 
-  @Post('login')
+  @Post('patient/login')
   @Public()
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  async loginPatient(@Body() dto: LoginDto) {
+    const session = await this.authService.loginPatient(
+      dto.email,
+      dto.password,
+    );
+    return this.buildAuthResponse(session);
+  }
+
+  @Post('staff/login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async loginStaff(@Body() dto: LoginDto) {
+    const session = await this.authService.loginStaff(dto.email, dto.password);
+    return this.buildAuthResponse(session);
+  }
+
+  @Post('refresh')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() dto: RefreshTokenDto) {
+    const session = await this.authService.refreshTokens(dto.refreshToken);
+    return this.buildAuthResponse(session);
+  }
+
+  @Post('logout')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async logout(@Body() dto: LogoutDto) {
+    await this.authService.revokeRefreshSession(dto.refreshToken);
+    return { message: 'Sesion cerrada' };
+  }
+
+  @Get('me')
+  me(@Req() request: RequestContext): AuthMeResponseDto {
+    return this.authService.me(request.user!);
+  }
+
+  private buildAuthResponse(session: {
+    accessToken: string;
+    refreshToken: string;
+    user: {
+      id: string;
+      email: string;
+      role: string;
+    };
+  }) {
+    return {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: session.user,
+    };
   }
 }

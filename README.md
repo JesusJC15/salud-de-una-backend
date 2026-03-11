@@ -6,12 +6,16 @@ Backend del MVP de SaludDeUna construido con NestJS + MongoDB. Este documento re
 
 - Registro de pacientes.
 - Registro de medicos.
-- Login unificado para `PATIENT`, `DOCTOR` y `ADMIN`.
+- Login separado para frontend de pacientes y frontend staff (`DOCTOR`/`ADMIN`).
 - Verificacion REThUS de medicos por administradores.
 - Restriccion de acceso a cola medica para doctores no verificados.
+- Bandeja admin para revisar doctores y su ultimo estado REThUS.
+- Notificaciones internas consumibles por frontend autenticado.
 - Metricas tecnicas en memoria para dashboard.
+- KPIs de negocio calculados desde MongoDB para staff.
 - Endpoints de salud y readiness.
 - Seguridad base con JWT, RBAC, throttling y trazabilidad por `x-correlation-id`.
+- Sesiones basadas en access token y refresh token JWT.
 
 ## Stack Tecnico
 
@@ -53,6 +57,7 @@ Configuracion global:
 - Limite de peticiones: `20` requests por `60` segundos por cliente.
 - Header `x-correlation-id` generado/propagado en todas las respuestas.
 - Errores HTTP normalizados por `HttpExceptionFilter`.
+- CORS configurable por frontend via `.env`.
 
 ## Requisitos
 
@@ -98,8 +103,12 @@ Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
 | `PORT` | No | `3000` | Puerto HTTP. |
 | `MONGODB_URI` | Si | - | Cadena de conexion MongoDB. |
 | `JWT_SECRET` | Si | - | Secreto JWT (minimo 32 chars recomendado). |
+| `JWT_REFRESH_SECRET` | No | `JWT_SECRET` | Secreto del refresh token. |
 | `JWT_ACCESS_EXPIRES_IN` | No | `1h` | Duracion access token. |
 | `JWT_REFRESH_EXPIRES_IN` | No | `7d` | Duracion refresh token. |
+| `REFRESH_MAX_ACTIVE_SESSIONS` | No | `3` | Maximo de sesiones refresh activas por usuario. |
+| `CORS_ORIGINS_PATIENT` | No | - | Origenes permitidos del frontend paciente (CSV). |
+| `CORS_ORIGINS_STAFF` | No | - | Origenes permitidos del frontend staff (CSV). |
 | `ENABLE_BOOTSTRAP_ADMIN` | No | `false` | Habilita creacion automatica de admin. |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | - | Email del admin inicial. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | - | Password del admin inicial. |
@@ -170,10 +179,11 @@ Politica de password para registro:
 - Al menos 1 numero.
 - Al menos 1 caracter especial.
 
-Tokens emitidos en login:
+Sesiones autenticadas:
 
-- `access_token`
-- `refresh_token`
+- `accessToken` devuelto por login y refresh.
+- `refreshToken` devuelto por login y refresh.
+- Los endpoints protegidos exigen `Authorization: Bearer <accessToken>`.
 
 ## Matriz de Acceso
 
@@ -181,11 +191,22 @@ Tokens emitidos en login:
 | --- | --- | --- | --- |
 | `POST /v1/auth/patient/register` | Si | No | - |
 | `POST /v1/auth/doctor/register` | Si | No | - |
-| `POST /v1/auth/login` | Si | No | - |
+| `POST /v1/auth/patient/login` | Si | No | - |
+| `POST /v1/auth/staff/login` | Si | No | - |
+| `POST /v1/auth/refresh` | Si | No | Requiere `refreshToken` en body |
+| `POST /v1/auth/logout` | Si | No | `refreshToken` opcional en body; si falta, la operación sigue siendo exitosa (idempotente) |
+| `GET /v1/auth/me` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
+| `GET /v1/admin/doctors` | No | Si | `ADMIN` |
 | `POST /v1/admin/doctors/:doctorId/doctor-verify` | No | Si | `ADMIN` |
 | `GET /v1/consultations/queue` | No | Si | `DOCTOR` + verificado |
+| `GET /v1/notifications/me` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
+| `PATCH /v1/notifications/:notificationId/read` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
+| `PATCH /v1/notifications/me/read-all` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
+| `GET /v1/patients/me` | No | Si | `PATIENT` |
+| `PUT /v1/patients/me` | No | Si | `PATIENT` |
 | `GET /v1/doctors/me` | No | Si | `DOCTOR` |
 | `GET /v1/dashboard/technical` | No | Si | `ADMIN` |
+| `GET /v1/dashboard/business` | No | Si | `ADMIN` |
 | `GET /v1/health` | Si | No | - |
 | `GET /v1/ready` | Si | No | - |
 
@@ -255,9 +276,9 @@ Response (201):
 }
 ```
 
-### 3) Login
+### 3) Login paciente
 
-`POST /v1/auth/login`
+`POST /v1/auth/patient/login`
 
 Request:
 
@@ -272,17 +293,87 @@ Response (200):
 
 ```json
 {
-  "access_token": "...",
-  "refresh_token": "...",
+  "accessToken": "...",
+  "refreshToken": "...",
   "user": {
     "id": "...",
     "email": "laura@example.com",
-    "role": "DOCTOR"
+    "role": "PATIENT"
   }
 }
 ```
 
-### 4) Verificacion REThUS por admin
+Notas:
+
+- `accessToken` se usa en `Authorization: Bearer <token>`.
+- `refreshToken` se envia explicitamente en el body para renovar o cerrar sesion.
+- `POST /auth/logout` revoca la sesion de refresh actual en base de datos.
+- `GET /auth/me` permite hidratar sesion desde token vigente.
+- Si se supera `REFRESH_MAX_ACTIVE_SESSIONS`, el backend revoca primero las sesiones activas mas antiguas.
+
+Plantillas recomendadas:
+
+- `.env.development.example` para entorno local.
+- `.env.production.example` para despliegue productivo.
+
+### 4) Login staff (doctor/admin)
+
+`POST /v1/auth/staff/login`
+
+Mismo payload que login paciente. Solo acepta usuarios `DOCTOR` o `ADMIN`.
+
+### 5) Perfil de paciente autenticado
+
+`GET /v1/patients/me`
+
+`PUT /v1/patients/me`
+
+Body de update (opcional):
+
+```json
+{
+  "firstName": "Laura",
+  "lastName": "Suarez",
+  "birthDate": "1998-03-10",
+  "gender": "FEMALE"
+}
+```
+
+### 6) Bandeja admin de doctores
+
+`GET /v1/admin/doctors`
+
+Query params opcionales:
+
+- `status=PENDING|VERIFIED|REJECTED`
+- `specialty=GENERAL_MEDICINE|ODONTOLOGY`
+- `search=<texto>`
+
+Response:
+
+```json
+{
+  "summary": {
+    "total": 12,
+    "pending": 4,
+    "verified": 7,
+    "rejected": 1
+  },
+  "items": [
+    {
+      "id": "...",
+      "firstName": "Laura",
+      "lastName": "Medina",
+      "email": "laura@example.com",
+      "specialty": "GENERAL_MEDICINE",
+      "doctorStatus": "PENDING",
+      "latestVerification": null
+    }
+  ]
+}
+```
+
+### 7) Verificacion REThUS por admin
 
 `POST /v1/admin/doctors/:doctorId/doctor-verify`
 
@@ -335,7 +426,15 @@ Regla de negocio aplicada:
 - `rethusState=EXPIRED` -> `doctorStatus=REJECTED`
 - `rethusState=PENDING` -> `doctorStatus=PENDING`
 
-### 5) Perfil de medico autenticado
+### 8) Notificaciones autenticadas
+
+`GET /v1/notifications/me`
+
+`PATCH /v1/notifications/:notificationId/read`
+
+`PATCH /v1/notifications/me/read-all`
+
+### 9) Perfil de medico autenticado
 
 `GET /v1/doctors/me`
 
@@ -364,6 +463,39 @@ Response (200):
     "checkedBy": "admin@example.com",
     "evidenceUrl": "https://example.com/evidence.pdf",
     "notes": "Validacion administrativa"
+  }
+}
+```
+
+### 10) Dashboard de negocio
+
+`GET /v1/dashboard/business`
+
+Requiere JWT con rol `ADMIN`.
+
+Response (200):
+
+```json
+{
+  "generatedAt": "2026-03-09T00:00:00.000Z",
+  "kpis": {
+    "totalPatients": 10,
+    "totalDoctors": 6,
+    "verifiedDoctors": 4,
+    "pendingDoctors": 2
+  },
+  "doctorStatusBreakdown": {
+    "verified": 4,
+    "pending": 2,
+    "rejected": 0
+  },
+  "growthLast7Days": {
+    "patients": 3,
+    "doctors": 2
+  },
+  "operationalSignals": {
+    "unreadNotifications": 5,
+    "verificationCoverage": 66.67
   }
 }
 ```

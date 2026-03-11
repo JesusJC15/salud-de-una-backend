@@ -12,4 +12,10 @@ export class DashboardController {
   getTechnical() {
     return this.dashboardService.getTechnicalMetrics();
   }
+
+  @Get('business')
+  @Roles(UserRole.ADMIN)
+  getBusiness() {
+    return this.dashboardService.getBusinessMetrics();
+  }
 }

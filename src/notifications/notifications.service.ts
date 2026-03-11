@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import {
   Notification,
   NotificationDocument,
@@ -36,5 +37,95 @@ export class NotificationsService {
       { session },
     );
     this.logger.log(`Notificacion creada para ${userId}`);
+  }
+
+  async getMine(user: RequestUser, unreadOnly = false, limit = 20) {
+    const sanitizedLimit = Math.min(Math.max(limit, 1), 100);
+    const query = {
+      userId: new Types.ObjectId(user.userId),
+      ...(unreadOnly ? { read: false } : {}),
+    };
+
+    const [items, unreadCount] = await Promise.all([
+      this.notificationModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .limit(sanitizedLimit)
+        .lean()
+        .exec(),
+      this.notificationModel.countDocuments({
+        userId: new Types.ObjectId(user.userId),
+        read: false,
+      }).exec(),
+    ]);
+
+    return {
+      items: items.map((notification) => ({
+        id: notification._id.toString(),
+        type: notification.type,
+        status: notification.status,
+        message: notification.message,
+        read: notification.read,
+        readAt: notification.readAt ?? null,
+        createdAt: notification.createdAt ?? null,
+      })),
+      unreadCount,
+    };
+  }
+
+  async markAsRead(notificationId: string, user: RequestUser) {
+    if (!Types.ObjectId.isValid(notificationId)) {
+      throw new NotFoundException('Notificacion no encontrada');
+    }
+
+    const notification = await this.notificationModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(notificationId),
+          userId: new Types.ObjectId(user.userId),
+        },
+        {
+          $set: {
+            read: true,
+            readAt: new Date(),
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .lean()
+      .exec();
+
+    if (!notification) {
+      throw new NotFoundException('Notificacion no encontrada');
+    }
+
+    return {
+      id: notification._id.toString(),
+      read: notification.read,
+      readAt: notification.readAt ?? null,
+    };
+  }
+
+  async markAllAsRead(user: RequestUser) {
+    const now = new Date();
+    const result = await this.notificationModel
+      .updateMany(
+        {
+          userId: new Types.ObjectId(user.userId),
+          read: false,
+        },
+        {
+          $set: {
+            read: true,
+            readAt: now,
+          },
+        },
+      )
+      .exec();
+
+    return {
+      updatedCount: result.modifiedCount,
+      readAt: now,
+    };
   }
 }

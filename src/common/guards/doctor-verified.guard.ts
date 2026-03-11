@@ -21,7 +21,7 @@ export class DoctorVerifiedGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestContext>();
     if (request.user?.role !== UserRole.DOCTOR) {
-      return true;
+      throw new ForbiddenException('Recurso exclusivo para medicos');
     }
 
     const doctor = await this.doctorModel

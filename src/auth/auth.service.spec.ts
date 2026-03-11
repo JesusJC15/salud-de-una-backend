@@ -10,15 +10,21 @@ import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Patient } from '../patients/schemas/patient.schema';
 import { AuthService } from './auth.service';
 import { UserGender } from '../common/enums/user-gender.enum';
+import { RefreshSession } from './schemas/refresh-session.schema';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
   compare: jest.fn(),
 }));
 
-type MockModel = {
+type BaseMockModel = {
   create: jest.Mock;
   findOne: jest.Mock;
+};
+
+type RefreshSessionMockModel = BaseMockModel & {
+  find: jest.Mock;
+  updateMany: jest.Mock;
 };
 
 function createFindOneChain(result: unknown) {
@@ -31,10 +37,12 @@ function createFindOneChain(result: unknown) {
 
 describe('AuthService', () => {
   let service: AuthService;
-  let patientModel: MockModel;
-  let doctorModel: MockModel;
-  let adminModel: MockModel;
-  let jwtService: { signAsync: jest.Mock };
+  let patientModel: BaseMockModel;
+  let doctorModel: BaseMockModel;
+  let adminModel: BaseMockModel;
+  let refreshSessionModel: RefreshSessionMockModel;
+  let jwtService: { signAsync: jest.Mock; decode: jest.Mock };
+  let configService: { getOrThrow: jest.Mock; get: jest.Mock };
 
   beforeEach(async () => {
     patientModel = {
@@ -52,11 +60,39 @@ describe('AuthService', () => {
       findOne: jest.fn(),
     };
 
+    refreshSessionModel = {
+      create: jest.fn(),
+      findOne: jest.fn(),
+      find: jest.fn(),
+      updateMany: jest.fn(),
+    };
+
     jwtService = {
       signAsync: jest
         .fn()
         .mockResolvedValueOnce('access-token')
         .mockResolvedValueOnce('refresh-token'),
+      decode: jest
+        .fn()
+        .mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+    };
+
+    configService = {
+      getOrThrow: jest.fn((key: string) => {
+        if (key === 'auth.jwtSecret')
+          return 'test-secret-12345678901234567890123456789012';
+        if (key === 'auth.jwtRefreshSecret')
+          return 'refresh-secret-12345678901234567890123456789';
+        if (key === 'auth.accessTokenExpiresIn') return '1h';
+        if (key === 'auth.refreshTokenExpiresIn') return '7d';
+        return undefined;
+      }),
+      get: jest.fn((key: string) => {
+        if (key === 'web.refreshMaxActiveSessions') {
+          return 3;
+        }
+        return undefined;
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -75,20 +111,16 @@ describe('AuthService', () => {
           useValue: adminModel,
         },
         {
+          provide: getModelToken(RefreshSession.name),
+          useValue: refreshSessionModel,
+        },
+        {
           provide: JwtService,
           useValue: jwtService,
         },
         {
           provide: ConfigService,
-          useValue: {
-            getOrThrow: jest.fn((key: string) => {
-              if (key === 'auth.jwtSecret')
-                return 'test-secret-12345678901234567890123456789012';
-              if (key === 'auth.accessTokenExpiresIn') return '1h';
-              if (key === 'auth.refreshTokenExpiresIn') return '7d';
-              return undefined;
-            }),
-          },
+          useValue: configService,
         },
       ],
     }).compile();
@@ -148,7 +180,7 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('login should return access/refresh tokens and user info', async () => {
+  it('loginPatient should return access/refresh tokens and user info', async () => {
     patientModel.findOne.mockReturnValueOnce(
       createFindOneChain({
         id: 'p1',
@@ -158,31 +190,61 @@ describe('AuthService', () => {
     );
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh-token');
+    refreshSessionModel.create.mockResolvedValue({});
+    refreshSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest
+        .fn()
+        .mockResolvedValue([
+          { sessionId: 'new-session' },
+          { sessionId: 'old-1' },
+          { sessionId: 'old-2' },
+        ]),
+    });
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+    });
 
-    const result = await service.login('ana@example.com', 'StrongP@ss1');
+    const session = await service.loginPatient(
+      'ana@example.com',
+      'StrongP@ss1',
+    );
 
-    expect(result).toEqual({
-      access_token: 'access-token',
-      refresh_token: 'refresh-token',
+    expect(session).toMatchObject({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
       user: {
         id: 'p1',
         email: 'ana@example.com',
         role: UserRole.PATIENT,
       },
     });
+    expect(typeof session.refreshSessionId).toBe('string');
+    expect(session.refreshSessionId.length).toBeGreaterThan(0);
+    expect(refreshSessionModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'p1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        tokenHash: 'hashed-refresh-token',
+      }),
+    );
+    expect(refreshSessionModel.find).toHaveBeenCalled();
   });
 
-  it('login should fail with invalid credentials when user is not found', async () => {
+  it('loginPatient should fail with invalid credentials when user is not found', async () => {
     patientModel.findOne.mockReturnValue(createFindOneChain(null));
     doctorModel.findOne.mockReturnValue(createFindOneChain(null));
     adminModel.findOne.mockReturnValue(createFindOneChain(null));
 
     await expect(
-      service.login('missing@example.com', 'whatever'),
+      service.loginPatient('missing@example.com', 'whatever'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('login should fail with invalid credentials when password does not match', async () => {
+  it('loginPatient should fail with invalid credentials when password does not match', async () => {
     patientModel.findOne.mockReturnValueOnce(
       createFindOneChain({
         id: 'p1',
@@ -193,7 +255,16 @@ describe('AuthService', () => {
     (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
     await expect(
-      service.login('ana@example.com', 'wrong-pass'),
+      service.loginPatient('ana@example.com', 'wrong-pass'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('loginStaff should fail when patient credentials are used', async () => {
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.loginStaff('ana@example.com', 'StrongP@ss1'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

@@ -11,6 +11,7 @@ import { Doctor } from '../doctors/schemas/doctor.schema';
 import { RethusVerification } from '../doctors/schemas/rethus-verification.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminService } from './admin.service';
+import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
 
 describe('AdminService', () => {
@@ -28,6 +29,8 @@ describe('AdminService', () => {
 
   const doctorModelMock = {
     findById: jest.fn(),
+    find: jest.fn(),
+    countDocuments: jest.fn(),
   };
 
   const rethusVerificationModelMock = {
@@ -172,5 +175,66 @@ describe('AdminService', () => {
       service.verifyDoctor(validDoctorId, dto, actor),
     ).rejects.toBeInstanceOf(InternalServerErrorException);
     expect(sessionMock.endSession).toHaveBeenCalled();
+  });
+
+  describe('listDoctorsForReview', () => {
+    const setupFindMock = () => {
+      const rethusAggMock = { exec: jest.fn().mockResolvedValue([]) };
+      rethusVerificationModelMock.aggregate = jest
+        .fn()
+        .mockReturnValue(rethusAggMock);
+      const doctorAggMock = { exec: jest.fn().mockResolvedValue([]) };
+      doctorModelMock.aggregate = jest.fn().mockReturnValue(doctorAggMock);
+      doctorModelMock.countDocuments.mockResolvedValue(0);
+    };
+
+    it('should escape special regex characters in search to prevent ReDoS', async () => {
+      setupFindMock();
+
+      const doctors: unknown[] = [];
+      doctorModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doctors),
+      });
+
+      const query: ListDoctorsForReviewDto = { search: '.*+?^${}()|[]\\' };
+      await service.listDoctorsForReview(query);
+
+      const findCall = doctorModelMock.find.mock.calls[0][0] as {
+        $or?: Array<{ firstName: RegExp }>;
+      };
+      expect(findCall.$or).toBeDefined();
+      const usedRegex = findCall.$or![0].firstName;
+      // All special characters must be escaped – the source should not contain unescaped metacharacters
+      expect(usedRegex.source).toBe(
+        '\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\',
+      );
+    });
+
+    it('should apply no $or filter when search is absent', async () => {
+      setupFindMock();
+
+      const doctors: unknown[] = [];
+      doctorModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doctors),
+      });
+
+      const query: ListDoctorsForReviewDto = {};
+      await service.listDoctorsForReview(query);
+
+      const findCall = doctorModelMock.find.mock.calls[0][0] as {
+        $or?: unknown;
+      };
+      expect(findCall.$or).toBeUndefined();
+    });
   });
 });
