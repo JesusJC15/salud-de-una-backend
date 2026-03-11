@@ -21,7 +21,7 @@ export class RefreshSession {
   @Prop({ required: true })
   tokenHash!: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true, index: true, expires: 0 })
   expiresAt!: Date;
 
   @Prop()
