@@ -45,8 +45,8 @@ Revision y verificacion de medicos por administradores (flujo REThUS).
 
 | Metodo | Ruta | Auth | Rol | Proposito |
 | --- | --- | --- | --- | --- |
-| GET | /v1/admin/doctors/review | JWT | ADMIN | Listar pendientes |
-| PATCH | /v1/admin/doctors/:id/rethus | JWT | ADMIN | Aprobar/rechazar verificacion |
+| GET | /v1/admin/doctors | JWT | ADMIN | Listar medicos (incluye pendientes) |
+| POST | /v1/admin/doctors/:doctorId/doctor-verify | JWT | ADMIN | Aprobar/rechazar verificacion REThUS |
 
 ## Ejemplos de codigo/payload
 
