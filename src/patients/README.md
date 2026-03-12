@@ -44,7 +44,7 @@ Perfil del paciente y actualizacion de datos permitidos.
 | Metodo | Ruta | Auth | Rol | Proposito |
 | --- | --- | --- | --- | --- |
 | GET | /v1/patients/me | JWT | PATIENT | Perfil paciente |
-| PATCH | /v1/patients/me | JWT | PATIENT | Actualizar perfil |
+| PUT | /v1/patients/me | JWT | PATIENT | Actualizar perfil |
 
 ## Ejemplos de codigo/payload
 
