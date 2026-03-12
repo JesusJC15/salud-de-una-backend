@@ -7,7 +7,7 @@ export const validationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   MONGODB_URI: Joi.string().required(),
   JWT_SECRET: Joi.string().min(32).required(),
-  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET: Joi.string().min(32).optional().default(Joi.ref('JWT_SECRET')),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('1h'),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
   REFRESH_MAX_ACTIVE_SESSIONS: Joi.number().integer().min(1).default(3),
