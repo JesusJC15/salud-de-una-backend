@@ -87,12 +87,18 @@ async function bootstrap() {
     configService.get<string[]>('web.corsOriginsStaff') ?? [],
   );
 
+  if (corsOrigins.length === 0 && nodeEnv !== 'test') {
+    throw new Error(
+      'No CORS origins configured. Set CORS_ORIGINS_PATIENT and/or CORS_ORIGINS_STAFF before starting the server.',
+    );
+  }
+
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+      if (!origin || corsOrigins.includes(origin)) {
         callback(null, true);
         return;
       }
@@ -101,7 +107,7 @@ async function bootstrap() {
     },
     credentials: false,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-correlation-id'],
     exposedHeaders: ['x-correlation-id'],
   });
 

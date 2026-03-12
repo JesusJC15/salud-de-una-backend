@@ -34,7 +34,7 @@ import { PatientsModule } from './patients/patients.module';
     }),
     ThrottlerModule.forRoot([
       {
-        ttl: 60,
+        ttl: 60_000,
         limit: 20,
       },
     ]),

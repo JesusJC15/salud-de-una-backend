@@ -7,6 +7,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { AuthMeResponseDto } from './dto/auth-me.response.dto';
@@ -23,18 +24,21 @@ export class AuthController {
 
   @Post('patient/register')
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   registerPatient(@Body() dto: RegisterPatientDto) {
     return this.authService.registerPatient(dto);
   }
 
   @Post('doctor/register')
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   registerDoctor(@Body() dto: RegisterDoctorDto) {
     return this.authService.registerDoctor(dto);
   }
 
   @Post('patient/login')
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async loginPatient(@Body() dto: LoginDto) {
     const session = await this.authService.loginPatient(
@@ -46,6 +50,7 @@ export class AuthController {
 
   @Post('staff/login')
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async loginStaff(@Body() dto: LoginDto) {
     const session = await this.authService.loginStaff(dto.email, dto.password);
@@ -54,6 +59,7 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshTokenDto) {
     const session = await this.authService.refreshTokens(dto.refreshToken);
@@ -62,6 +68,7 @@ export class AuthController {
 
   @Post('logout')
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async logout(@Body() dto: LogoutDto) {
     await this.authService.revokeRefreshSession(dto.refreshToken);

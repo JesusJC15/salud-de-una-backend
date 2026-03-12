@@ -73,7 +73,7 @@ Configuracion global:
 npm install
 ```
 
-2. Crear `.env` desde plantilla:
+1. Crear `.env` desde plantilla:
 
 ```bash
 cp .env.example .env
@@ -85,9 +85,9 @@ En PowerShell:
 Copy-Item .env.example .env
 ```
 
-3. Configurar variables reales en `.env`.
+1. Configurar variables reales en `.env`.
 
-4. Iniciar en modo desarrollo:
+2. Iniciar en modo desarrollo:
 
 ```bash
 npm run start:dev
