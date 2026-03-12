@@ -43,8 +43,9 @@ Notificaciones persistentes por usuario y estado de lectura.
 
 | Metodo | Ruta | Auth | Rol | Proposito |
 | --- | --- | --- | --- | --- |
-| GET | /v1/notifications | JWT | ALL | Listar notificaciones |
-| PATCH | /v1/notifications/:id/read | JWT | ALL | Marcar como leida |
+| GET | /v1/notifications/me | JWT | ALL | Listar notificaciones del usuario autenticado |
+| PATCH | /v1/notifications/:notificationId/read | JWT | ALL | Marcar notificacion como leida |
+| PATCH | /v1/notifications/me/read-all | JWT | ALL | Marcar todas las notificaciones como leidas |
 
 ## Ejemplos de codigo/payload
 

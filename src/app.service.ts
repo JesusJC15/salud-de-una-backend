@@ -1,17 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
-
-const READY_STATE_DESCRIPTIONS: Record<number, string> = {
-  0: 'disconnected',
-  1: 'connected',
-  2: 'connecting',
-  3: 'disconnecting',
-};
-
-function describeReadyState(readyState: number): string {
-  return READY_STATE_DESCRIPTIONS[readyState] ?? 'unknown';
-}
+import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
 type HealthStatus = {
   status: 'ok';

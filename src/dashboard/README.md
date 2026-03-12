@@ -44,6 +44,7 @@ Metricas tecnicas para vista administrativa.
 | Metodo | Ruta | Auth | Rol | Proposito |
 | --- | --- | --- | --- | --- |
 | GET | /v1/dashboard/technical | JWT | ADMIN | Metricas tecnicas |
+| GET | /v1/dashboard/business | JWT | ADMIN | KPIs de negocio |
 
 ## Ejemplos de codigo/payload
 

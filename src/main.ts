@@ -6,6 +6,7 @@ import { NextFunction, Request, Response } from 'express';
 import { Connection } from 'mongoose';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
 function sanitizeMongoUri(uri?: string): string {
   if (!uri) {
@@ -22,20 +23,7 @@ function parseCorsOrigins(
   return [...new Set([...patientOrigins, ...staffOrigins])];
 }
 
-function describeReadyState(readyState: number): string {
-  switch (readyState) {
-    case 0:
-      return 'disconnected';
-    case 1:
-      return 'connected';
-    case 2:
-      return 'connecting';
-    case 3:
-      return 'disconnecting';
-    default:
-      return 'unknown';
-  }
-}
+const MONGODB_CONNECT_TIMEOUT_MS = 30_000;
 
 async function waitForDatabaseConnection(
   dbConnection: Connection,
@@ -52,8 +40,32 @@ async function waitForDatabaseConnection(
     `Waiting for MongoDB connection. Current readyState: ${readyState} (${describeReadyState(readyState)})`,
   );
 
-  await dbConnection.asPromise();
-  logger.log('MongoDB connection is ready');
+  try {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `MongoDB connection timed out after ${MONGODB_CONNECT_TIMEOUT_MS}ms`,
+            ),
+          ),
+        MONGODB_CONNECT_TIMEOUT_MS,
+      );
+    });
+    await Promise.race([
+      dbConnection.asPromise().then((conn) => {
+        clearTimeout(timeoutHandle);
+        return conn;
+      }),
+      timeout,
+    ]);
+    logger.log('MongoDB connection is ready');
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to establish MongoDB connection: ${message}`);
+    process.exit(1);
+  }
 }
 
 async function bootstrap() {
@@ -87,9 +99,15 @@ async function bootstrap() {
     configService.get<string[]>('web.corsOriginsStaff') ?? [],
   );
 
-  if (corsOrigins.length === 0 && nodeEnv !== 'test') {
+  if (corsOrigins.length === 0 && nodeEnv === 'production') {
     throw new Error(
       'No CORS origins configured. Set CORS_ORIGINS_PATIENT and/or CORS_ORIGINS_STAFF before starting the server.',
+    );
+  }
+
+  if (corsOrigins.length === 0 && nodeEnv !== 'test') {
+    logger.warn(
+      'No CORS origins configured. All cross-origin requests will be rejected. Set CORS_ORIGINS_PATIENT and/or CORS_ORIGINS_STAFF to allow specific origins.',
     );
   }
 
