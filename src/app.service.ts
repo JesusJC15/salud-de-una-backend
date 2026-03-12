@@ -1,5 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import { connection } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
+
+function describeReadyState(readyState: number): string {
+  switch (readyState) {
+    case 0:
+      return 'disconnected';
+    case 1:
+      return 'connected';
+    case 2:
+      return 'connecting';
+    case 3:
+      return 'disconnecting';
+    default:
+      return 'unknown';
+  }
+}
 
 type HealthStatus = {
   status: 'ok';
@@ -22,6 +38,8 @@ type ReadinessStatus = {
 
 @Injectable()
 export class AppService {
+  constructor(@InjectConnection() private readonly dbConnection: Connection) {}
+
   getHealth(): HealthStatus {
     return {
       status: 'ok',
@@ -32,7 +50,8 @@ export class AppService {
   }
 
   getReadiness(): ReadinessStatus {
-    const isDatabaseUp = Number(connection.readyState) === 1;
+    const readyState = Number(this.dbConnection.readyState);
+    const isDatabaseUp = readyState === 1;
 
     return {
       status: isDatabaseUp ? 'ready' : 'not_ready',
@@ -41,7 +60,7 @@ export class AppService {
       checks: {
         database: {
           status: isDatabaseUp ? 'up' : 'down',
-          detail: `mongoose readyState: ${connection.readyState}`,
+          detail: `mongoose readyState: ${readyState} (${describeReadyState(readyState)})`,
         },
       },
     };

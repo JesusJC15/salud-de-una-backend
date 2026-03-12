@@ -1,8 +1,9 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { getConnectionToken } from '@nestjs/mongoose';
 import { NextFunction, Request, Response } from 'express';
-import { connection } from 'mongoose';
+import { Connection } from 'mongoose';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
@@ -21,31 +22,64 @@ function parseCorsOrigins(
   return [...new Set([...patientOrigins, ...staffOrigins])];
 }
 
+function describeReadyState(readyState: number): string {
+  switch (readyState) {
+    case 0:
+      return 'disconnected';
+    case 1:
+      return 'connected';
+    case 2:
+      return 'connecting';
+    case 3:
+      return 'disconnecting';
+    default:
+      return 'unknown';
+  }
+}
+
+async function waitForDatabaseConnection(
+  dbConnection: Connection,
+  logger: Logger,
+): Promise<void> {
+  const readyState = Number(dbConnection.readyState);
+
+  if (readyState === 1) {
+    logger.log('MongoDB connection is ready');
+    return;
+  }
+
+  logger.log(
+    `Waiting for MongoDB connection. Current readyState: ${readyState} (${describeReadyState(readyState)})`,
+  );
+
+  await dbConnection.asPromise();
+  logger.log('MongoDB connection is ready');
+}
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  const dbConnection = app.get<Connection>(getConnectionToken());
   const globalPrefix = 'v1';
   const port = Number(process.env.PORT ?? 3000);
   const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
   const databaseUri = configService.get<string>('database.uri');
 
-  connection.on('connected', () => {
+  dbConnection.on('connected', () => {
     logger.log('MongoDB connection established successfully');
   });
 
-  connection.on('error', (error: unknown) => {
+  dbConnection.on('error', (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`MongoDB connection error: ${message}`);
   });
 
-  connection.on('disconnected', () => {
+  dbConnection.on('disconnected', () => {
     logger.warn('MongoDB connection disconnected');
   });
 
-  if (Number(connection.readyState) === 1) {
-    logger.log('MongoDB connection is ready');
-  }
+  await waitForDatabaseConnection(dbConnection, logger);
 
   app.setGlobalPrefix(globalPrefix);
   const corsOrigins = parseCorsOrigins(
