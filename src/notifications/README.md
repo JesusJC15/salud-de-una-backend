@@ -1,0 +1,74 @@
+# README - src/notifications
+
+## Objetivo
+
+Notificaciones persistentes por usuario y estado de lectura.
+
+## Archivos actuales
+
+- notifications.controller.ts
+- notifications.module.ts
+- notifications.service.ts
+
+## Dependencias relacionadas
+
+- notifications/dto + notifications/schemas
+- auth/request user
+
+## Responsabilidades y limites
+
+- Delimitar alcance tecnico de la carpeta.
+- Mantener contratos y fronteras claras con otros modulos.
+- Reducir errores de implementacion por falta de contexto.
+
+## Que debe ir aqui
+
+- Artefactos propios de esta carpeta y su proposito.
+- Contratos relevantes que impacten otros modulos.
+- Notas de mantenimiento cuando una decision no sea obvia.
+
+## Que no debe ir aqui
+
+- Logica o archivos de otro dominio.
+- Codigo temporal de depuracion sin fecha de retiro.
+- Repetir reglas globales sin aportar contexto local.
+
+## Recomendaciones
+
+- Actualizar este README cuando cambie contrato, limite o flujo.
+- Agregar al menos un ejemplo util por cambio importante.
+- Mantener texto accionable y evitar contenido vacio.
+
+## Matriz de endpoints (si aplica)
+
+| Metodo | Ruta | Auth | Rol | Proposito |
+| --- | --- | --- | --- | --- |
+| GET | /v1/notifications/me | JWT | ALL | Listar notificaciones del usuario autenticado |
+| PATCH | /v1/notifications/:notificationId/read | JWT | ALL | Marcar notificacion como leida |
+| PATCH | /v1/notifications/me/read-all | JWT | ALL | Marcar todas las notificaciones como leidas |
+
+## Ejemplos de codigo/payload
+
+```ts
+// ejemplo minimo de referencia
+export class Example {}
+```
+
+## Errores comunes y mitigacion
+
+- Cambiar contrato sin actualizar README y pruebas.
+- Dejar secciones genericas sin contexto.
+- No revisar impacto hacia carpetas consumidoras.
+
+## Checklist de PR
+
+- [ ] Se actualizo README si hubo cambio de alcance/contrato.
+- [ ] Secciones obligatorias completas.
+- [ ] Riesgos y mitigaciones documentados.
+- [ ] Comandos de verificacion ejecutados o validados.
+
+## Comandos de pruebas/lint
+
+- `npm run lint`
+- `npm run test -- --runInBand`
+- `npm run test:e2e -- --runInBand`

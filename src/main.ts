@@ -1,10 +1,12 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { getConnectionToken } from '@nestjs/mongoose';
 import { NextFunction, Request, Response } from 'express';
-import { connection } from 'mongoose';
+import { Connection } from 'mongoose';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
 function sanitizeMongoUri(uri?: string): string {
   if (!uri) {
@@ -21,31 +23,75 @@ function parseCorsOrigins(
   return [...new Set([...patientOrigins, ...staffOrigins])];
 }
 
+const MONGODB_CONNECT_TIMEOUT_MS = 30_000;
+
+async function waitForDatabaseConnection(
+  dbConnection: Connection,
+  logger: Logger,
+): Promise<void> {
+  const readyState = Number(dbConnection.readyState);
+
+  if (readyState === 1) {
+    logger.log('MongoDB connection is ready');
+    return;
+  }
+
+  logger.log(
+    `Waiting for MongoDB connection. Current readyState: ${readyState} (${describeReadyState(readyState)})`,
+  );
+
+  try {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `MongoDB connection timed out after ${MONGODB_CONNECT_TIMEOUT_MS}ms`,
+            ),
+          ),
+        MONGODB_CONNECT_TIMEOUT_MS,
+      );
+    });
+    await Promise.race([
+      dbConnection.asPromise().then((conn) => {
+        clearTimeout(timeoutHandle);
+        return conn;
+      }),
+      timeout,
+    ]);
+    logger.log('MongoDB connection is ready');
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to establish MongoDB connection: ${message}`);
+    process.exit(1);
+  }
+}
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  const dbConnection = app.get<Connection>(getConnectionToken());
   const globalPrefix = 'v1';
   const port = Number(process.env.PORT ?? 3000);
   const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
   const databaseUri = configService.get<string>('database.uri');
 
-  connection.on('connected', () => {
+  dbConnection.on('connected', () => {
     logger.log('MongoDB connection established successfully');
   });
 
-  connection.on('error', (error: unknown) => {
+  dbConnection.on('error', (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`MongoDB connection error: ${message}`);
   });
 
-  connection.on('disconnected', () => {
+  dbConnection.on('disconnected', () => {
     logger.warn('MongoDB connection disconnected');
   });
 
-  if (Number(connection.readyState) === 1) {
-    logger.log('MongoDB connection is ready');
-  }
+  await waitForDatabaseConnection(dbConnection, logger);
 
   app.setGlobalPrefix(globalPrefix);
   const corsOrigins = parseCorsOrigins(
@@ -53,12 +99,24 @@ async function bootstrap() {
     configService.get<string[]>('web.corsOriginsStaff') ?? [],
   );
 
+  if (corsOrigins.length === 0 && nodeEnv === 'production') {
+    throw new Error(
+      'No CORS origins configured. Set CORS_ORIGINS_PATIENT and/or CORS_ORIGINS_STAFF before starting the server.',
+    );
+  }
+
+  if (corsOrigins.length === 0 && nodeEnv !== 'test') {
+    logger.warn(
+      'No CORS origins configured. All cross-origin requests will be rejected. Set CORS_ORIGINS_PATIENT and/or CORS_ORIGINS_STAFF to allow specific origins.',
+    );
+  }
+
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+      if (!origin || corsOrigins.includes(origin)) {
         callback(null, true);
         return;
       }
@@ -67,7 +125,7 @@ async function bootstrap() {
     },
     credentials: false,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-correlation-id'],
     exposedHeaders: ['x-correlation-id'],
   });
 

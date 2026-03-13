@@ -53,10 +53,12 @@ export class NotificationsService {
         .limit(sanitizedLimit)
         .lean()
         .exec(),
-      this.notificationModel.countDocuments({
-        userId: new Types.ObjectId(user.userId),
-        read: false,
-      }).exec(),
+      this.notificationModel
+        .countDocuments({
+          userId: new Types.ObjectId(user.userId),
+          read: false,
+        })
+        .exec(),
     ]);
 
     return {

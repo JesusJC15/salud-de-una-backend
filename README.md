@@ -76,13 +76,13 @@ npm install
 2. Crear `.env` desde plantilla:
 
 ```bash
-cp .env.example .env
+cp .env.development.example .env
 ```
 
 En PowerShell:
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.development.example .env
 ```
 
 3. Configurar variables reales en `.env`.
