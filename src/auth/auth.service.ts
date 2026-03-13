@@ -87,6 +87,7 @@ export class AuthService {
 
   async registerDoctor(dto: RegisterDoctorDto) {
     await this.assertEmailDoesNotExist(dto.email);
+    await this.assertPersonalIdDoesNotExist(dto.personalId);
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const doctor = await this.doctorModel.create({
@@ -441,6 +442,18 @@ export class AuthService {
 
     if (patient || doctor || admin) {
       throw new ConflictException('El correo ya esta registrado');
+    }
+  }
+
+  private async assertPersonalIdDoesNotExist(personalId: string): Promise<void> {
+    const normalized = personalId.trim();
+    const existing = await this.doctorModel
+      .findOne({ personalId: normalized })
+      .lean()
+      .exec();
+
+    if (existing) {
+      throw new ConflictException('El ID personal ya esta registrado');
     }
   }
 
