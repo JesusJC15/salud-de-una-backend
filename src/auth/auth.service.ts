@@ -470,7 +470,7 @@ export class AuthService {
     ]);
 
     if (patient || doctor || admin) {
-      throw new ConflictException('El correo ya esta registrado');
+      throw new ConflictException('El correo ya está registrado');
     }
   }
 
@@ -489,7 +489,7 @@ export class AuthService {
       .exec();
 
     if (existing) {
-      throw new ConflictException('El ID personal ya esta registrado');
+      throw new ConflictException('El ID personal ya está registrado');
     }
   }
 
