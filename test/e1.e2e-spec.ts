@@ -271,6 +271,36 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(409);
   });
 
+  it('POST /v1/auth/doctor/register should return 409 on duplicate personalId', async () => {
+    const sharedPersonalId = 'CC-DUPLICATE-TEST';
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/doctor/register')
+      .send({
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: 'dup-personalid-1@example.com',
+        password: 'StrongP@ss1',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: sharedPersonalId,
+        phoneNumber: '3001234567',
+      })
+      .expect(201);
+
+    return request(app.getHttpServer())
+      .post('/v1/auth/doctor/register')
+      .send({
+        firstName: 'Carlos',
+        lastName: 'Ruiz',
+        email: 'dup-personalid-2@example.com',
+        password: 'StrongP@ss1',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: sharedPersonalId,
+        phoneNumber: '3009876543',
+      })
+      .expect(409);
+  });
+
   it('POST /v1/auth/patient/login should return session tokens for valid credentials', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Ana',
