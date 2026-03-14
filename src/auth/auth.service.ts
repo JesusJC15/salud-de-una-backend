@@ -72,7 +72,7 @@ export class AuthService {
       lastName: dto.lastName,
       email: dto.email,
       passwordHash,
-      birthDate: dto.birthDate,
+      birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
       gender: dto.gender,
     });
 
