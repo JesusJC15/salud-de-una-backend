@@ -88,6 +88,11 @@ export class AuthService {
 
   async registerDoctor(dto: RegisterDoctorDto) {
     await this.assertEmailDoesNotExist(dto.email);
+
+    if (!dto.personalId || !dto.personalId.trim()) {
+      throw new BadRequestException('personalId must not be empty');
+    }
+
     await this.assertPersonalIdDoesNotExist(dto.personalId);
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
