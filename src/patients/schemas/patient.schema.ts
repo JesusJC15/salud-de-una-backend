@@ -22,8 +22,8 @@ export class Patient {
   @Prop({ type: String, enum: UserRole, default: UserRole.PATIENT })
   role!: UserRole;
 
-  @Prop()
-  birthDate?: Date;
+  @Prop({ default: null })
+  birthDate?: Date | null;
 
   @Prop({ type: String, enum: UserGender })
   gender?: UserGender;
