@@ -1,5 +1,7 @@
 # SaludDeUna Backend (NestJS)
 
+[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=JesusJC15_salud-de-una-backend)](https://sonarcloud.io/summary/new_code?id=JesusJC15_salud-de-una-backend)
+
 Backend del MVP de SaludDeUna construido con NestJS + MongoDB. Este documento refleja el estado actual de la API en la rama activa.
 
 ## Alcance Implementado
