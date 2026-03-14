@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -447,6 +448,11 @@ export class AuthService {
 
   private async assertPersonalIdDoesNotExist(personalId: string): Promise<void> {
     const normalized = personalId.trim();
+
+    if (!normalized) {
+      throw new BadRequestException('El ID personal no puede estar vacío');
+    }
+
     const existing = await this.doctorModel
       .findOne({ personalId: normalized })
       .lean()
