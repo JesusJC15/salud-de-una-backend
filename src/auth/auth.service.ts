@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -88,17 +89,34 @@ export class AuthService {
   async registerDoctor(dto: RegisterDoctorDto) {
     await this.assertEmailDoesNotExist(dto.email);
 
+    if (!dto.personalId || !dto.personalId.trim()) {
+      throw new BadRequestException('personalId must not be empty');
+    }
+
+    await this.assertPersonalIdDoesNotExist(dto.personalId);
+
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const doctor = await this.doctorModel.create({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      passwordHash,
-      specialty: dto.specialty,
-      personalId: dto.personalId,
-      phoneNumber: dto.phoneNumber,
-      professionalLicense: dto.professionalLicense,
-    });
+    let doctor: DoctorDocument;
+    try {
+      doctor = await this.doctorModel.create({
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        passwordHash,
+        specialty: dto.specialty,
+        personalId: dto.personalId,
+        phoneNumber: dto.phoneNumber,
+        professionalLicense: dto.professionalLicense,
+      });
+    } catch (err: unknown) {
+      if (this.isDuplicateKeyError(err, 'personalId')) {
+        throw new ConflictException('El ID personal ya esta registrado');
+      }
+      if (this.isDuplicateKeyError(err, 'email')) {
+        throw new ConflictException('El correo ya esta registrado');
+      }
+      throw err;
+    }
 
     return {
       id: doctor.id,
@@ -431,6 +449,23 @@ export class AuthService {
     return typeof candidate.exp === 'number';
   }
 
+  private isDuplicateKeyError(err: unknown, field: string): boolean {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as Record<string, unknown>).code === 11000
+    ) {
+      const keyPattern = (err as Record<string, unknown>).keyPattern;
+      return (
+        typeof keyPattern === 'object' &&
+        keyPattern !== null &&
+        field in (keyPattern as Record<string, unknown>)
+      );
+    }
+    return false;
+  }
+
   private async assertEmailDoesNotExist(email: string): Promise<void> {
     const normalized = email.toLowerCase().trim();
     const [patient, doctor, admin] = await Promise.all([
@@ -440,7 +475,26 @@ export class AuthService {
     ]);
 
     if (patient || doctor || admin) {
-      throw new ConflictException('El correo ya esta registrado');
+      throw new ConflictException('El correo ya está registrado');
+    }
+  }
+
+  private async assertPersonalIdDoesNotExist(
+    personalId: string,
+  ): Promise<void> {
+    const normalized = personalId.trim();
+
+    if (!normalized) {
+      throw new BadRequestException('El ID personal no puede estar vacío');
+    }
+
+    const existing = await this.doctorModel
+      .findOne({ personalId: normalized })
+      .lean()
+      .exec();
+
+    if (existing) {
+      throw new ConflictException('El ID personal ya está registrado');
     }
   }
 

@@ -26,7 +26,7 @@ export class Doctor {
   @Prop({ type: String, enum: Specialty, required: true })
   specialty!: Specialty;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, unique: true, trim: true })
   personalId!: string;
 
   @Prop({ required: true, trim: true })
