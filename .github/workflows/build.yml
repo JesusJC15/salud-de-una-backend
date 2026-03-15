@@ -17,8 +17,12 @@ jobs:
         run: yarn
       - name: Test and coverage
         run: yarn test:cov
+        env:
+          MONGODB_URI: mongodb://localhost:27017/test
       - name: E2E tests
         run: yarn test:e2e
+        env:
+          MONGODB_URI: mongodb://localhost:27017/test
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v7
         env:
