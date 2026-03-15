@@ -82,6 +82,7 @@
       "!**/*.dto.ts",
       "!**/*.schema.ts"
     ],
+    "coverageDirectory": "../coverage",
     "setupFilesAfterEnv": [
       "<rootDir>/../test/jest.setup.ts"
     ],
@@ -93,8 +94,6 @@
         "functions": 85,
         "lines": 85
       }
-    },
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    }
   }
 }

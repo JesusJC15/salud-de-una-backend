@@ -14,6 +14,12 @@ jobs:
     env:
       MONGODB_URI: mongodb://localhost:27017/test
       JWT_SECRET: secret-key-that-is-at-least-32-characters-long
+      JWT_REFRESH_SECRET: change-this-refresh-secret-with-at-least-32-characters
+      JWT_ACCESS_EXPIRES_IN: 1h
+      JWT_REFRESH_EXPIRES_IN: 7d
+      REFRESH_MAX_ACTIVE_SESSIONS: 3
+      CORS_ORIGINS_PATIENT: http://localhost:5173
+      CORS_ORIGINS_STAFF: http://localhost:5174
 
     steps:
       - uses: actions/checkout@v6
@@ -21,7 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install dependencies
-        run: yarn
+        run: yarn install --ignore-scripts
 
       - name: Test and coverage
         run: yarn test:cov
