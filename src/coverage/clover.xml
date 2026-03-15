@@ -1,0 +1,984 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1773550450679" clover="3.2.0">
+  <project timestamp="1773550450679" name="All files">
+    <metrics statements="792" coveredstatements="780" conditionals="533" coveredconditionals="461" methods="127" coveredmethods="125" elements="1452" coveredelements="1366" complexity="0" loc="792" ncloc="792" packages="17" files="45" classes="45"/>
+    <package name="src">
+      <metrics statements="118" coveredstatements="117" conditionals="44" coveredconditionals="41" methods="19" coveredmethods="18"/>
+      <file name="app.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\app.controller.ts">
+        <metrics statements="9" coveredstatements="9" conditionals="4" coveredconditionals="3" methods="3" coveredmethods="3"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="6" count="4" type="stmt"/>
+        <line num="7" count="2" type="cond" truecount="3" falsecount="1"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="12" count="1" type="stmt"/>
+        <line num="17" count="4" type="stmt"/>
+        <line num="18" count="1" type="stmt"/>
+      </file>
+      <file name="app.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\app.module.ts">
+        <metrics statements="24" coveredstatements="23" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="5" count="3" type="stmt"/>
+        <line num="6" count="3" type="stmt"/>
+        <line num="7" count="3" type="stmt"/>
+        <line num="8" count="3" type="stmt"/>
+        <line num="9" count="3" type="stmt"/>
+        <line num="10" count="3" type="stmt"/>
+        <line num="11" count="3" type="stmt"/>
+        <line num="12" count="3" type="stmt"/>
+        <line num="13" count="3" type="stmt"/>
+        <line num="14" count="3" type="stmt"/>
+        <line num="15" count="3" type="stmt"/>
+        <line num="16" count="3" type="stmt"/>
+        <line num="17" count="3" type="stmt"/>
+        <line num="18" count="3" type="stmt"/>
+        <line num="19" count="3" type="stmt"/>
+        <line num="20" count="3" type="stmt"/>
+        <line num="21" count="3" type="stmt"/>
+        <line num="22" count="3" type="stmt"/>
+        <line num="43" count="0" type="stmt"/>
+        <line num="77" count="3" type="stmt"/>
+      </file>
+      <file name="app.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\app.service.ts">
+        <metrics statements="10" coveredstatements="10" conditionals="8" coveredconditionals="7" methods="3" coveredmethods="3"/>
+        <line num="1" count="5" type="stmt"/>
+        <line num="2" count="5" type="stmt"/>
+        <line num="3" count="5" type="stmt"/>
+        <line num="4" count="5" type="stmt"/>
+        <line num="26" count="5" type="stmt"/>
+        <line num="27" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="30" count="1" type="stmt"/>
+        <line num="39" count="3" type="stmt"/>
+        <line num="40" count="3" type="stmt"/>
+        <line num="42" count="3" type="stmt"/>
+      </file>
+      <file name="main.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\main.ts">
+        <metrics statements="75" coveredstatements="75" conditionals="32" coveredconditionals="31" methods="12" coveredmethods="12"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="2" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="4" count="2" type="stmt"/>
+        <line num="7" count="2" type="stmt"/>
+        <line num="8" count="2" type="stmt"/>
+        <line num="9" count="2" type="stmt"/>
+        <line num="11" count="2" type="stmt"/>
+        <line num="12" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="16" count="5" type="stmt"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="23" count="7" type="stmt"/>
+        <line num="26" count="2" type="stmt"/>
+        <line num="28" count="2" type="stmt"/>
+        <line num="32" count="9" type="stmt"/>
+        <line num="34" count="9" type="cond" truecount="2" falsecount="0"/>
+        <line num="35" count="6" type="stmt"/>
+        <line num="36" count="6" type="stmt"/>
+        <line num="39" count="3" type="stmt"/>
+        <line num="43" count="3" type="stmt"/>
+        <line num="45" count="3" type="stmt"/>
+        <line num="46" count="3" type="stmt"/>
+        <line num="48" count="1" type="stmt"/>
+        <line num="56" count="3" type="stmt"/>
+        <line num="58" count="1" type="stmt"/>
+        <line num="59" count="1" type="stmt"/>
+        <line num="63" count="1" type="stmt"/>
+        <line num="65" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="66" count="2" type="stmt"/>
+        <line num="67" count="2" type="stmt"/>
+        <line num="71" count="2" type="stmt"/>
+        <line num="72" count="5" type="stmt"/>
+        <line num="73" count="5" type="stmt"/>
+        <line num="74" count="5" type="stmt"/>
+        <line num="75" count="5" type="stmt"/>
+        <line num="76" count="5" type="stmt"/>
+        <line num="77" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="78" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="79" count="5" type="stmt"/>
+        <line num="81" count="5" type="stmt"/>
+        <line num="82" count="1" type="stmt"/>
+        <line num="85" count="5" type="stmt"/>
+        <line num="86" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="87" count="2" type="stmt"/>
+        <line num="90" count="5" type="stmt"/>
+        <line num="91" count="1" type="stmt"/>
+        <line num="94" count="5" type="stmt"/>
+        <line num="96" count="5" type="stmt"/>
+        <line num="97" count="5" type="stmt"/>
+        <line num="102" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="103" count="1" type="stmt"/>
+        <line num="108" count="4" type="cond" truecount="4" falsecount="0"/>
+        <line num="109" count="2" type="stmt"/>
+        <line num="114" count="4" type="stmt"/>
+        <line num="119" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="120" count="2" type="stmt"/>
+        <line num="121" count="2" type="stmt"/>
+        <line num="124" count="1" type="stmt"/>
+        <line num="132" count="4" type="stmt"/>
+        <line num="133" count="1" type="stmt"/>
+        <line num="134" count="1" type="stmt"/>
+        <line num="135" count="1" type="stmt"/>
+        <line num="136" count="1" type="stmt"/>
+        <line num="137" count="1" type="stmt"/>
+        <line num="140" count="4" type="stmt"/>
+        <line num="148" count="4" type="stmt"/>
+        <line num="149" count="4" type="stmt"/>
+        <line num="151" count="4" type="stmt"/>
+        <line num="152" count="4" type="stmt"/>
+        <line num="155" count="4" type="stmt"/>
+        <line num="158" count="4" type="stmt"/>
+        <line num="159" count="4" type="stmt"/>
+        <line num="161" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="162" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.admin">
+      <metrics statements="97" coveredstatements="96" conditionals="63" coveredconditionals="52" methods="11" coveredmethods="11"/>
+      <file name="admin.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\admin\admin.controller.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="12" coveredconditionals="9" methods="3" coveredmethods="3"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="5" count="4" type="stmt"/>
+        <line num="6" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="11" count="2" type="cond" truecount="3" falsecount="1"/>
+        <line num="15" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="16" count="1" type="stmt"/>
+        <line num="21" count="4" type="stmt"/>
+        <line num="26" count="1" type="stmt"/>
+      </file>
+      <file name="admin.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\admin\admin.module.ts">
+        <metrics statements="8" coveredstatements="8" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="8" count="3" type="stmt"/>
+        <line num="9" count="3" type="stmt"/>
+        <line num="10" count="3" type="stmt"/>
+        <line num="23" count="3" type="stmt"/>
+      </file>
+      <file name="admin.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\admin\admin.service.ts">
+        <metrics statements="77" coveredstatements="76" conditionals="51" coveredconditionals="43" methods="8" coveredmethods="8"/>
+        <line num="1" count="5" type="stmt"/>
+        <line num="8" count="5" type="stmt"/>
+        <line num="9" count="5" type="stmt"/>
+        <line num="10" count="5" type="stmt"/>
+        <line num="13" count="5" type="stmt"/>
+        <line num="14" count="5" type="stmt"/>
+        <line num="18" count="5" type="stmt"/>
+        <line num="21" count="5" type="stmt"/>
+        <line num="24" count="5" type="stmt"/>
+        <line num="26" count="10" type="cond" truecount="6" falsecount="2"/>
+        <line num="28" count="10" type="cond" truecount="3" falsecount="1"/>
+        <line num="30" count="10" type="cond" truecount="3" falsecount="1"/>
+        <line num="31" count="10" type="stmt"/>
+        <line num="35" count="4" type="stmt"/>
+        <line num="40" count="4" type="stmt"/>
+        <line num="42" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="46" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="47" count="1" type="stmt"/>
+        <line num="50" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="51" count="2" type="stmt"/>
+        <line num="52" count="2" type="stmt"/>
+        <line num="53" count="2" type="stmt"/>
+        <line num="61" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="62" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="63" count="4" type="stmt"/>
+        <line num="65" count="4" type="stmt"/>
+        <line num="79" count="4" type="stmt"/>
+        <line num="81" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="114" count="4" type="stmt"/>
+        <line num="115" count="1" type="stmt"/>
+        <line num="121" count="4" type="stmt"/>
+        <line num="132" count="4" type="stmt"/>
+        <line num="133" count="4" type="stmt"/>
+        <line num="134" count="4" type="stmt"/>
+        <line num="135" count="4" type="stmt"/>
+        <line num="137" count="4" type="stmt"/>
+        <line num="138" count="3" type="stmt"/>
+        <line num="139" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="140" count="1" type="stmt"/>
+        <line num="141" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="142" count="1" type="stmt"/>
+        <line num="143" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="144" count="1" type="stmt"/>
+        <line num="147" count="4" type="stmt"/>
+        <line num="161" count="2" type="stmt"/>
+        <line num="162" count="2" type="stmt"/>
+        <line num="193" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="194" count="1" type="stmt"/>
+        <line num="197" count="5" type="stmt"/>
+        <line num="198" count="5" type="stmt"/>
+        <line num="215" count="5" type="stmt"/>
+        <line num="216" count="5" type="stmt"/>
+        <line num="217" count="5" type="stmt"/>
+        <line num="225" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="226" count="0" type="stmt"/>
+        <line num="230" count="3" type="stmt"/>
+        <line num="232" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="233" count="1" type="stmt"/>
+        <line num="235" count="1" type="stmt"/>
+        <line num="239" count="5" type="stmt"/>
+        <line num="249" count="5" type="stmt"/>
+        <line num="253" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="254" count="1" type="stmt"/>
+        <line num="257" count="4" type="stmt"/>
+        <line num="258" count="4" type="stmt"/>
+        <line num="278" count="3" type="cond" truecount="3" falsecount="0"/>
+        <line num="280" count="1" type="stmt"/>
+        <line num="281" count="1" type="stmt"/>
+        <line num="284" count="1" type="stmt"/>
+        <line num="285" count="1" type="stmt"/>
+        <line num="288" count="1" type="stmt"/>
+        <line num="289" count="1" type="stmt"/>
+        <line num="291" count="3" type="stmt"/>
+        <line num="292" count="3" type="stmt"/>
+        <line num="294" count="3" type="stmt"/>
+        <line num="301" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.admins">
+      <metrics statements="32" coveredstatements="32" conditionals="22" coveredconditionals="20" methods="2" coveredmethods="2"/>
+      <file name="admin-seeder.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\admins\admin-seeder.service.ts">
+        <metrics statements="27" coveredstatements="27" conditionals="22" coveredconditionals="20" methods="2" coveredmethods="2"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="4" count="4" type="stmt"/>
+        <line num="5" count="4" type="stmt"/>
+        <line num="6" count="4" type="stmt"/>
+        <line num="9" count="4" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="14" count="4" type="cond" truecount="6" falsecount="2"/>
+        <line num="15" count="4" type="stmt"/>
+        <line num="19" count="4" type="stmt"/>
+        <line num="20" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="21" count="1" type="stmt"/>
+        <line num="24" count="3" type="stmt"/>
+        <line num="25" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="26" count="3" type="stmt"/>
+        <line num="28" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="32" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="33" count="1" type="stmt"/>
+        <line num="34" count="1" type="stmt"/>
+        <line num="37" count="2" type="stmt"/>
+        <line num="38" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="39" count="1" type="stmt"/>
+        <line num="42" count="1" type="stmt"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="50" count="1" type="stmt"/>
+      </file>
+      <file name="admins.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\admins\admins.module.ts">
+        <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="13" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.auth">
+      <metrics statements="202" coveredstatements="193" conditionals="148" coveredconditionals="122" methods="33" coveredmethods="32"/>
+      <file name="auth.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\auth\auth.controller.ts">
+        <metrics statements="31" coveredstatements="31" conditionals="32" coveredconditionals="24" methods="9" coveredmethods="9"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="13" count="4" type="stmt"/>
+        <line num="14" count="4" type="stmt"/>
+        <line num="15" count="4" type="stmt"/>
+        <line num="16" count="4" type="stmt"/>
+        <line num="17" count="4" type="stmt"/>
+        <line num="18" count="4" type="stmt"/>
+        <line num="19" count="4" type="stmt"/>
+        <line num="22" count="4" type="stmt"/>
+        <line num="23" count="7" type="cond" truecount="3" falsecount="1"/>
+        <line num="28" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="29" count="1" type="stmt"/>
+        <line num="35" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="36" count="1" type="stmt"/>
+        <line num="43" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="44" count="1" type="stmt"/>
+        <line num="48" count="1" type="stmt"/>
+        <line num="55" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="56" count="1" type="stmt"/>
+        <line num="57" count="1" type="stmt"/>
+        <line num="64" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="65" count="1" type="stmt"/>
+        <line num="66" count="1" type="stmt"/>
+        <line num="73" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="74" count="1" type="stmt"/>
+        <line num="75" count="1" type="stmt"/>
+        <line num="79" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="80" count="1" type="stmt"/>
+        <line num="92" count="3" type="stmt"/>
+      </file>
+      <file name="auth.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\auth\auth.module.ts">
+        <metrics statements="14" coveredstatements="13" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="5" count="3" type="stmt"/>
+        <line num="6" count="3" type="stmt"/>
+        <line num="7" count="3" type="stmt"/>
+        <line num="8" count="3" type="stmt"/>
+        <line num="9" count="3" type="stmt"/>
+        <line num="10" count="3" type="stmt"/>
+        <line num="14" count="3" type="stmt"/>
+        <line num="15" count="3" type="stmt"/>
+        <line num="22" count="0" type="stmt"/>
+        <line num="37" count="3" type="stmt"/>
+      </file>
+      <file name="auth.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\auth\auth.service.ts">
+        <metrics statements="157" coveredstatements="149" conditionals="116" coveredconditionals="98" methods="23" coveredmethods="23"/>
+        <line num="1" count="5" type="stmt"/>
+        <line num="7" count="5" type="stmt"/>
+        <line num="8" count="5" type="stmt"/>
+        <line num="9" count="5" type="stmt"/>
+        <line num="10" count="5" type="stmt"/>
+        <line num="11" count="5" type="stmt"/>
+        <line num="13" count="5" type="stmt"/>
+        <line num="14" count="5" type="stmt"/>
+        <line num="15" count="5" type="stmt"/>
+        <line num="18" count="5" type="stmt"/>
+        <line num="21" count="5" type="stmt"/>
+        <line num="22" count="5" type="stmt"/>
+        <line num="52" count="5" type="stmt"/>
+        <line num="55" count="33" type="cond" truecount="6" falsecount="2"/>
+        <line num="57" count="33" type="cond" truecount="3" falsecount="1"/>
+        <line num="59" count="33" type="cond" truecount="3" falsecount="1"/>
+        <line num="61" count="33" type="cond" truecount="3" falsecount="1"/>
+        <line num="62" count="33" type="cond" truecount="3" falsecount="1"/>
+        <line num="63" count="33" type="stmt"/>
+        <line num="67" count="2" type="stmt"/>
+        <line num="69" count="1" type="stmt"/>
+        <line num="70" count="1" type="stmt"/>
+        <line num="79" count="1" type="stmt"/>
+        <line num="90" count="5" type="stmt"/>
+        <line num="92" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="93" count="1" type="stmt"/>
+        <line num="96" count="4" type="stmt"/>
+        <line num="98" count="3" type="stmt"/>
+        <line num="100" count="3" type="stmt"/>
+        <line num="101" count="3" type="stmt"/>
+        <line num="112" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="113" count="1" type="stmt"/>
+        <line num="115" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="116" count="1" type="stmt"/>
+        <line num="118" count="0" type="stmt"/>
+        <line num="121" count="1" type="stmt"/>
+        <line num="134" count="3" type="stmt"/>
+        <line num="135" count="3" type="stmt"/>
+        <line num="136" count="1" type="stmt"/>
+        <line num="140" count="2" type="stmt"/>
+        <line num="141" count="2" type="stmt"/>
+        <line num="142" count="1" type="stmt"/>
+        <line num="146" count="9" type="cond" truecount="2" falsecount="0"/>
+        <line num="147" count="1" type="stmt"/>
+        <line num="150" count="8" type="stmt"/>
+        <line num="155" count="8" type="stmt"/>
+        <line num="156" count="8" type="stmt"/>
+        <line num="160" count="1" type="stmt"/>
+        <line num="163" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="164" count="1" type="stmt"/>
+        <line num="167" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="168" count="1" type="stmt"/>
+        <line num="171" count="5" type="stmt"/>
+        <line num="173" count="1" type="stmt"/>
+        <line num="174" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="175" count="0" type="stmt"/>
+        <line num="178" count="1" type="stmt"/>
+        <line num="182" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="183" count="1" type="stmt"/>
+        <line num="186" count="2" type="stmt"/>
+        <line num="190" count="2" type="stmt"/>
+        <line num="191" count="2" type="stmt"/>
+        <line num="198" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="199" count="0" type="stmt"/>
+        <line num="202" count="1" type="stmt"/>
+        <line num="209" count="1" type="stmt"/>
+        <line num="223" count="5" type="stmt"/>
+        <line num="224" count="5" type="stmt"/>
+        <line num="227" count="5" type="stmt"/>
+        <line num="230" count="5" type="stmt"/>
+        <line num="234" count="5" type="stmt"/>
+        <line num="236" count="5" type="stmt"/>
+        <line num="243" count="5" type="stmt"/>
+        <line num="247" count="5" type="stmt"/>
+        <line num="261" count="5" type="stmt"/>
+        <line num="263" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="264" count="1" type="stmt"/>
+        <line num="267" count="5" type="stmt"/>
+        <line num="283" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="284" count="2" type="stmt"/>
+        <line num="287" count="3" type="stmt"/>
+        <line num="288" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="289" count="1" type="stmt"/>
+        <line num="292" count="2" type="stmt"/>
+        <line num="300" count="5" type="stmt"/>
+        <line num="301" count="5" type="stmt"/>
+        <line num="302" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="306" count="5" type="stmt"/>
+        <line num="315" count="5" type="stmt"/>
+        <line num="322" count="5" type="stmt"/>
+        <line num="332" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="333" count="1" type="stmt"/>
+        <line num="338" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="339" count="1" type="stmt"/>
+        <line num="340" count="1" type="stmt"/>
+        <line num="343" count="3" type="stmt"/>
+        <line num="347" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="348" count="1" type="stmt"/>
+        <line num="353" count="2" type="stmt"/>
+        <line num="371" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="372" count="1" type="stmt"/>
+        <line num="382" count="3" type="stmt"/>
+        <line num="401" count="6" type="cond" truecount="1" falsecount="1"/>
+        <line num="403" count="6" type="stmt"/>
+        <line num="414" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="415" count="5" type="stmt"/>
+        <line num="418" count="1" type="stmt"/>
+        <line num="419" count="3" type="stmt"/>
+        <line num="421" count="3" type="stmt"/>
+        <line num="423" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="424" count="0" type="stmt"/>
+        <line num="427" count="1" type="stmt"/>
+        <line num="444" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="445" count="1" type="stmt"/>
+        <line num="448" count="4" type="stmt"/>
+        <line num="449" count="4" type="stmt"/>
+        <line num="453" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="459" count="3" type="stmt"/>
+        <line num="460" count="3" type="stmt"/>
+        <line num="466" count="0" type="stmt"/>
+        <line num="470" count="7" type="stmt"/>
+        <line num="471" count="7" type="stmt"/>
+        <line num="477" count="7" type="cond" truecount="5" falsecount="0"/>
+        <line num="478" count="1" type="stmt"/>
+        <line num="485" count="5" type="stmt"/>
+        <line num="487" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="488" count="1" type="stmt"/>
+        <line num="491" count="4" type="stmt"/>
+        <line num="496" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="497" count="1" type="stmt"/>
+        <line num="502" count="3" type="stmt"/>
+        <line num="504" count="3" type="stmt"/>
+        <line num="509" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="510" count="2" type="stmt"/>
+        <line num="518" count="1" type="stmt"/>
+        <line num="522" count="2" type="stmt"/>
+        <line num="524" count="2" type="stmt"/>
+        <line num="528" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="529" count="1" type="stmt"/>
+        <line num="537" count="1" type="stmt"/>
+        <line num="541" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="542" count="0" type="stmt"/>
+        <line num="550" count="1" type="stmt"/>
+        <line num="557" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="558" count="3" type="stmt"/>
+        <line num="564" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="565" count="1" type="stmt"/>
+        <line num="568" count="2" type="stmt"/>
+        <line num="575" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="576" count="1" type="stmt"/>
+        <line num="582" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="583" count="0" type="stmt"/>
+        <line num="586" count="1" type="stmt"/>
+        <line num="593" count="1" type="stmt"/>
+        <line num="599" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="600" count="0" type="stmt"/>
+        <line num="603" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.auth.strategies">
+      <metrics statements="30" coveredstatements="30" conditionals="30" coveredconditionals="25" methods="2" coveredmethods="2"/>
+      <file name="jwt.strategy.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\auth\strategies\jwt.strategy.ts">
+        <metrics statements="30" coveredstatements="30" conditionals="30" coveredconditionals="25" methods="2" coveredmethods="2"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="4" count="4" type="stmt"/>
+        <line num="5" count="4" type="stmt"/>
+        <line num="6" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="8" count="4" type="stmt"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="12" count="4" type="stmt"/>
+        <line num="18" count="4" type="stmt"/>
+        <line num="22" count="5" type="cond" truecount="3" falsecount="1"/>
+        <line num="24" count="5" type="cond" truecount="3" falsecount="1"/>
+        <line num="26" count="5" type="stmt"/>
+        <line num="28" count="5" type="stmt"/>
+        <line num="36" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="42" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="46" count="3" type="stmt"/>
+        <line num="48" count="3" type="stmt"/>
+        <line num="50" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="51" count="1" type="stmt"/>
+        <line num="56" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="57" count="1" type="stmt"/>
+        <line num="62" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="63" count="1" type="stmt"/>
+        <line num="70" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="71" count="1" type="stmt"/>
+        <line num="74" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.common.decorators">
+      <metrics statements="6" coveredstatements="6" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+      <file name="public.decorator.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\decorators\public.decorator.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="1" count="6" type="stmt"/>
+        <line num="3" count="6" type="stmt"/>
+        <line num="4" count="32" type="stmt"/>
+      </file>
+      <file name="roles.decorator.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\decorators\roles.decorator.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="1" count="9" type="stmt"/>
+        <line num="4" count="9" type="stmt"/>
+        <line num="5" count="28" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.common.enums">
+      <metrics statements="31" coveredstatements="31" conditionals="14" coveredconditionals="14" methods="7" coveredmethods="7"/>
+      <file name="doctor-status.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\doctor-status.enum.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="15" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="15" type="stmt"/>
+        <line num="3" count="15" type="stmt"/>
+        <line num="4" count="15" type="stmt"/>
+      </file>
+      <file name="program-type.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\program-type.enum.ts">
+        <metrics statements="9" coveredstatements="9" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="3" count="7" type="stmt"/>
+        <line num="4" count="7" type="stmt"/>
+        <line num="5" count="7" type="stmt"/>
+        <line num="6" count="7" type="stmt"/>
+        <line num="7" count="7" type="stmt"/>
+        <line num="8" count="7" type="stmt"/>
+        <line num="9" count="7" type="stmt"/>
+      </file>
+      <file name="rethus-state.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\rethus-state.enum.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="3" count="7" type="stmt"/>
+        <line num="4" count="7" type="stmt"/>
+      </file>
+      <file name="specialty.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\specialty.enum.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="15" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="15" type="stmt"/>
+        <line num="3" count="15" type="stmt"/>
+      </file>
+      <file name="title-obtaining-origin.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\title-obtaining-origin.enum.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="3" count="7" type="stmt"/>
+      </file>
+      <file name="user-gender.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\user-gender.enum.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="11" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="11" type="stmt"/>
+        <line num="3" count="11" type="stmt"/>
+        <line num="4" count="11" type="stmt"/>
+      </file>
+      <file name="user-role.enum.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\enums\user-role.enum.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="19" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="19" type="stmt"/>
+        <line num="3" count="19" type="stmt"/>
+        <line num="4" count="19" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.common.filters">
+      <metrics statements="19" coveredstatements="19" conditionals="26" coveredconditionals="24" methods="1" coveredmethods="1"/>
+      <file name="http-exception.filter.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\filters\http-exception.filter.ts">
+        <metrics statements="19" coveredstatements="19" conditionals="26" coveredconditionals="24" methods="1" coveredmethods="1"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="9" count="3" type="stmt"/>
+        <line num="14" count="3" type="stmt"/>
+        <line num="15" count="6" type="stmt"/>
+        <line num="18" count="2" type="stmt"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="20" count="2" type="stmt"/>
+        <line num="22" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="27" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="2" type="cond" truecount="5" falsecount="0"/>
+        <line num="35" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="36" count="2" type="stmt"/>
+        <line num="38" count="2" type="cond" truecount="3" falsecount="0"/>
+        <line num="41" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="42" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="44" count="2" type="cond" truecount="6" falsecount="0"/>
+        <line num="53" count="2" type="stmt"/>
+        <line num="54" count="2" type="stmt"/>
+        <line num="69" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.common.guards">
+      <metrics statements="43" coveredstatements="43" conditionals="34" coveredconditionals="32" methods="7" coveredmethods="7"/>
+      <file name="doctor-verified.guard.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\guards\doctor-verified.guard.ts">
+        <metrics statements="15" coveredstatements="15" conditionals="10" coveredconditionals="9" methods="2" coveredmethods="2"/>
+        <line num="1" count="5" type="stmt"/>
+        <line num="7" count="5" type="stmt"/>
+        <line num="8" count="5" type="stmt"/>
+        <line num="9" count="5" type="stmt"/>
+        <line num="10" count="5" type="stmt"/>
+        <line num="12" count="5" type="stmt"/>
+        <line num="15" count="5" type="stmt"/>
+        <line num="18" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="22" count="4" type="stmt"/>
+        <line num="23" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="27" count="3" type="stmt"/>
+        <line num="33" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="34" count="2" type="stmt"/>
+        <line num="39" count="1" type="stmt"/>
+      </file>
+      <file name="jwt-auth.guard.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\guards\jwt-auth.guard.ts">
+        <metrics statements="15" coveredstatements="15" conditionals="12" coveredconditionals="11" methods="3" coveredmethods="3"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="8" count="4" type="stmt"/>
+        <line num="9" count="4" type="stmt"/>
+        <line num="12" count="4" type="stmt"/>
+        <line num="13" count="4" type="cond" truecount="4" falsecount="0"/>
+        <line num="14" count="4" type="stmt"/>
+        <line num="18" count="2" type="stmt"/>
+        <line num="23" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="27" count="1" type="stmt"/>
+        <line num="35" count="2" type="stmt"/>
+        <line num="36" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="37" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="41" count="1" type="stmt"/>
+      </file>
+      <file name="roles.guard.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\guards\roles.guard.ts">
+        <metrics statements="13" coveredstatements="13" conditionals="12" coveredconditionals="12" methods="2" coveredmethods="2"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="9" count="4" type="stmt"/>
+        <line num="13" count="4" type="stmt"/>
+        <line num="14" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="17" count="3" type="stmt"/>
+        <line num="22" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="26" count="2" type="stmt"/>
+        <line num="27" count="2" type="stmt"/>
+        <line num="28" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="29" count="1" type="stmt"/>
+        <line num="32" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.common.interceptors">
+      <metrics statements="29" coveredstatements="29" conditionals="22" coveredconditionals="18" methods="4" coveredmethods="4"/>
+      <file name="request-logging.interceptor.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\interceptors\request-logging.interceptor.ts">
+        <metrics statements="29" coveredstatements="29" conditionals="22" coveredconditionals="18" methods="4" coveredmethods="4"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="12" count="4" type="stmt"/>
+        <line num="16" count="4" type="stmt"/>
+        <line num="17" count="5" type="stmt"/>
+        <line num="19" count="5" type="cond" truecount="3" falsecount="1"/>
+        <line num="22" count="5" type="stmt"/>
+        <line num="23" count="5" type="stmt"/>
+        <line num="24" count="5" type="stmt"/>
+        <line num="30" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="5" type="stmt"/>
+        <line num="32" count="5" type="stmt"/>
+        <line num="34" count="5" type="stmt"/>
+        <line num="35" count="5" type="stmt"/>
+        <line num="36" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="38" count="5" type="stmt"/>
+        <line num="41" count="2" type="stmt"/>
+        <line num="42" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="43" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="44" count="2" type="stmt"/>
+        <line num="46" count="2" type="stmt"/>
+        <line num="47" count="2" type="stmt"/>
+        <line num="62" count="3" type="stmt"/>
+        <line num="63" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="64" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="66" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="70" count="3" type="stmt"/>
+        <line num="71" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.common.utils">
+      <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+      <file name="mongo-ready-state.util.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\common\utils\mongo-ready-state.util.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="6" type="stmt"/>
+        <line num="8" count="6" type="stmt"/>
+        <line num="9" count="9" type="cond" truecount="2" falsecount="0"/>
+      </file>
+    </package>
+    <package name="src.config">
+      <metrics statements="13" coveredstatements="13" conditionals="10" coveredconditionals="10" methods="7" coveredmethods="7"/>
+      <file name="auth.config.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\config\auth.config.ts">
+        <metrics statements="2" coveredstatements="2" conditionals="4" coveredconditionals="4" methods="1" coveredmethods="1"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+      </file>
+      <file name="database.config.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\config\database.config.ts">
+        <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+      </file>
+      <file name="web.config.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\config\web.config.ts">
+        <metrics statements="9" coveredstatements="9" conditionals="6" coveredconditionals="6" methods="5" coveredmethods="5"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="4" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="5" count="2" type="stmt"/>
+        <line num="8" count="2" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="15" count="2" type="stmt"/>
+        <line num="16" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="19" count="4" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.consultations">
+      <metrics statements="13" coveredstatements="13" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+      <file name="consultations.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\consultations\consultations.controller.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="4" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="11" count="4" type="stmt"/>
+        <line num="12" count="1" type="stmt"/>
+      </file>
+      <file name="consultations.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\consultations\consultations.module.ts">
+        <metrics statements="6" coveredstatements="6" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="5" count="3" type="stmt"/>
+        <line num="14" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.dashboard">
+      <metrics statements="57" coveredstatements="56" conditionals="46" coveredconditionals="41" methods="10" coveredmethods="10"/>
+      <file name="dashboard.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\dashboard\dashboard.controller.ts">
+        <metrics statements="10" coveredstatements="10" conditionals="4" coveredconditionals="3" methods="3" coveredmethods="3"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="4" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="8" count="2" type="cond" truecount="3" falsecount="1"/>
+        <line num="12" count="4" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="18" count="4" type="stmt"/>
+        <line num="19" count="1" type="stmt"/>
+      </file>
+      <file name="dashboard.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\dashboard\dashboard.module.ts">
+        <metrics statements="8" coveredstatements="8" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="8" count="3" type="stmt"/>
+        <line num="9" count="3" type="stmt"/>
+        <line num="10" count="3" type="stmt"/>
+        <line num="24" count="3" type="stmt"/>
+      </file>
+      <file name="dashboard.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\dashboard\dashboard.service.ts">
+        <metrics statements="39" coveredstatements="38" conditionals="42" coveredconditionals="38" methods="7" coveredmethods="7"/>
+        <line num="1" count="6" type="stmt"/>
+        <line num="2" count="6" type="stmt"/>
+        <line num="3" count="6" type="stmt"/>
+        <line num="4" count="6" type="stmt"/>
+        <line num="5" count="6" type="stmt"/>
+        <line num="6" count="6" type="stmt"/>
+        <line num="10" count="6" type="stmt"/>
+        <line num="18" count="6" type="stmt"/>
+        <line num="19" count="5" type="stmt"/>
+        <line num="23" count="5" type="cond" truecount="6" falsecount="2"/>
+        <line num="25" count="5" type="cond" truecount="3" falsecount="1"/>
+        <line num="27" count="5" type="stmt"/>
+        <line num="31" count="6" type="stmt"/>
+        <line num="32" count="6" type="cond" truecount="1" falsecount="1"/>
+        <line num="33" count="0" type="stmt"/>
+        <line num="38" count="2" type="stmt"/>
+        <line num="39" count="2" type="stmt"/>
+        <line num="40" count="6" type="stmt"/>
+        <line num="41" count="5" type="stmt"/>
+        <line num="42" count="2" type="stmt"/>
+        <line num="43" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="44" count="6" type="stmt"/>
+        <line num="45" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="47" count="2" type="stmt"/>
+        <line num="56" count="3" type="stmt"/>
+        <line num="57" count="3" type="stmt"/>
+        <line num="59" count="3" type="stmt"/>
+        <line num="115" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="123" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="128" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="132" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="133" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="134" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="135" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="136" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="138" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="139" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="141" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="142" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.doctors">
+      <metrics statements="28" coveredstatements="28" conditionals="16" coveredconditionals="13" methods="4" coveredmethods="4"/>
+      <file name="doctors.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\doctors\doctors.controller.ts">
+        <metrics statements="8" coveredstatements="8" conditionals="4" coveredconditionals="3" methods="2" coveredmethods="2"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="5" count="4" type="stmt"/>
+        <line num="8" count="4" type="stmt"/>
+        <line num="9" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="13" count="4" type="stmt"/>
+        <line num="14" count="1" type="stmt"/>
+      </file>
+      <file name="doctors.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\doctors\doctors.module.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="5" count="3" type="stmt"/>
+        <line num="6" count="3" type="stmt"/>
+        <line num="22" count="3" type="stmt"/>
+      </file>
+      <file name="doctors.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\doctors\doctors.service.ts">
+        <metrics statements="13" coveredstatements="13" conditionals="12" coveredconditionals="10" methods="2" coveredmethods="2"/>
+        <line num="1" count="5" type="stmt"/>
+        <line num="2" count="5" type="stmt"/>
+        <line num="3" count="5" type="stmt"/>
+        <line num="6" count="5" type="stmt"/>
+        <line num="7" count="5" type="stmt"/>
+        <line num="13" count="5" type="stmt"/>
+        <line num="16" count="4" type="cond" truecount="6" falsecount="2"/>
+        <line num="18" count="4" type="stmt"/>
+        <line num="22" count="4" type="stmt"/>
+        <line num="28" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="1" type="stmt"/>
+        <line num="32" count="3" type="stmt"/>
+        <line num="41" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.notifications">
+      <metrics statements="40" coveredstatements="40" conditionals="32" coveredconditionals="26" methods="10" coveredmethods="10"/>
+      <file name="notifications.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\notifications\notifications.controller.ts">
+        <metrics statements="11" coveredstatements="11" conditionals="12" coveredconditionals="10" methods="4" coveredmethods="4"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="4" count="4" type="stmt"/>
+        <line num="7" count="4" type="stmt"/>
+        <line num="8" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="11" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="12" count="2" type="stmt"/>
+        <line num="20" count="4" type="stmt"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="28" count="4" type="stmt"/>
+        <line num="29" count="1" type="stmt"/>
+      </file>
+      <file name="notifications.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\notifications\notifications.module.ts">
+        <metrics statements="6" coveredstatements="6" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="7" count="3" type="stmt"/>
+        <line num="8" count="3" type="stmt"/>
+        <line num="20" count="3" type="stmt"/>
+      </file>
+      <file name="notifications.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\notifications\notifications.service.ts">
+        <metrics statements="23" coveredstatements="23" conditionals="20" coveredconditionals="16" methods="6" coveredmethods="6"/>
+        <line num="1" count="7" type="stmt"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="3" count="7" type="stmt"/>
+        <line num="5" count="7" type="stmt"/>
+        <line num="11" count="7" type="stmt"/>
+        <line num="12" count="12" type="stmt"/>
+        <line num="16" count="12" type="cond" truecount="3" falsecount="1"/>
+        <line num="25" count="2" type="stmt"/>
+        <line num="39" count="2" type="stmt"/>
+        <line num="43" count="4" type="stmt"/>
+        <line num="44" count="4" type="stmt"/>
+        <line num="49" count="4" type="stmt"/>
+        <line num="64" count="4" type="stmt"/>
+        <line num="65" count="2" type="stmt"/>
+        <line num="79" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="80" count="1" type="stmt"/>
+        <line num="83" count="3" type="stmt"/>
+        <line num="100" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="101" count="1" type="stmt"/>
+        <line num="104" count="2" type="stmt"/>
+        <line num="112" count="2" type="stmt"/>
+        <line num="113" count="2" type="stmt"/>
+        <line num="128" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.patients">
+      <metrics statements="31" coveredstatements="31" conditionals="24" coveredconditionals="21" methods="6" coveredmethods="6"/>
+      <file name="patients.controller.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\patients\patients.controller.ts">
+        <metrics statements="11" coveredstatements="11" conditionals="8" coveredconditionals="6" methods="3" coveredmethods="3"/>
+        <line num="1" count="4" type="stmt"/>
+        <line num="2" count="4" type="stmt"/>
+        <line num="3" count="4" type="stmt"/>
+        <line num="5" count="4" type="stmt"/>
+        <line num="6" count="4" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="11" count="2" type="cond" truecount="3" falsecount="1"/>
+        <line num="14" count="4" type="stmt"/>
+        <line num="15" count="1" type="stmt"/>
+        <line num="19" count="4" type="cond" truecount="3" falsecount="1"/>
+        <line num="20" count="1" type="stmt"/>
+      </file>
+      <file name="patients.module.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\patients\patients.module.ts">
+        <metrics statements="6" coveredstatements="6" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="3" type="stmt"/>
+        <line num="2" count="3" type="stmt"/>
+        <line num="3" count="3" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
+        <line num="5" count="3" type="stmt"/>
+        <line num="15" count="3" type="stmt"/>
+      </file>
+      <file name="patients.service.ts" path="C:\Users\jesjc\OneDrive\Documentos\SaludDeUna\salud-de-una-backend\src\patients\patients.service.ts">
+        <metrics statements="14" coveredstatements="14" conditionals="16" coveredconditionals="15" methods="3" coveredmethods="3"/>
+        <line num="1" count="5" type="stmt"/>
+        <line num="2" count="5" type="stmt"/>
+        <line num="3" count="5" type="stmt"/>
+        <line num="6" count="5" type="stmt"/>
+        <line num="9" count="5" type="stmt"/>
+        <line num="12" count="7" type="cond" truecount="3" falsecount="1"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="24" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="25" count="1" type="stmt"/>
+        <line num="28" count="1" type="stmt"/>
+        <line num="42" count="5" type="stmt"/>
+        <line num="61" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="62" count="1" type="stmt"/>
+        <line num="65" count="4" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>

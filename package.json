@@ -93,9 +93,6 @@
         "functions": 85,
         "lines": 85
       }
-    },
-    "collectCoverage": true,
-    "coverageDirectory": "coverage",
-    "coverageReporters": ["lcov", "text"]
+    }
   }
 }
