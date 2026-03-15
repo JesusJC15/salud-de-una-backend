@@ -695,4 +695,156 @@ describe('AuthService', () => {
       role: UserRole.ADMIN,
     });
   });
+
+  it('loginStaff should login doctor successfully', async () => {
+    doctorModel.findOne.mockReturnValue(
+      createFindOneChain({
+        id: 'd1',
+        email: 'doc@example.com',
+        passwordHash: 'hash',
+      }),
+    );
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh');
+
+    refreshSessionModel.create.mockResolvedValue({});
+    refreshSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([{ sessionId: 'session-1' }]),
+    });
+
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+    });
+
+    const result = await service.loginStaff('doc@example.com', 'StrongP@ss1');
+
+    expect(result.user).toEqual({
+      id: 'd1',
+      email: 'doc@example.com',
+      role: UserRole.DOCTOR,
+    });
+  });
+
+  it('registerDoctor should create doctor successfully', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
+
+    doctorModel.create.mockResolvedValue({
+      id: 'd1',
+      firstName: 'Laura',
+      lastName: 'Medina',
+      email: 'doc@example.com',
+      role: UserRole.DOCTOR,
+      specialty: 'GENERAL_MEDICINE',
+      doctorStatus: 'PENDING',
+      createdAt: new Date(),
+    });
+
+    const result = await service.registerDoctor({
+      firstName: 'Laura',
+      lastName: 'Medina',
+      email: 'doc@example.com',
+      password: 'StrongP@ss1',
+      specialty: 'GENERAL_MEDICINE',
+      personalId: 'CC123',
+      phoneNumber: '3001234567',
+      professionalLicense: 'P123',
+    });
+
+    expect(result.role).toBe(UserRole.DOCTOR);
+  });
+
+  it('assertPersonalIdDoesNotExist should throw on empty id', async () => {
+    await expect(
+      (service as any).assertPersonalIdDoesNotExist('   '),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('me should return current user payload', () => {
+    const result = service.me({
+      userId: 'u1',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    } as any);
+
+    expect(result).toEqual({
+      user: {
+        id: 'u1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+    });
+  });
+
+  it('findAuthUserById should resolve doctor user', async () => {
+    doctorModel.findById.mockReturnValue(
+      createFindOneChain({
+        _id: 'd1',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        isActive: true,
+      }),
+    );
+
+    const result = await (service as any).findAuthUserById(
+      'd1',
+      UserRole.DOCTOR,
+    );
+
+    expect(result).toEqual({
+      id: 'd1',
+      email: 'doc@example.com',
+      role: UserRole.DOCTOR,
+    });
+  });
+
+  it('findAuthUserById should resolve patient user', async () => {
+    patientModel.findById.mockReturnValue(
+      createFindOneChain({
+        _id: 'p1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      }),
+    );
+
+    const result = await (service as any).findAuthUserById(
+      'p1',
+      UserRole.PATIENT,
+    );
+
+    expect(result).toEqual({
+      id: 'p1',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+    });
+  });
+
+  it('enforceActiveSessionLimit should do nothing when under limit', async () => {
+    configService.get.mockReturnValue(5);
+
+    refreshSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([{ sessionId: 's1' }]),
+    });
+
+    await (service as any).enforceActiveSessionLimit(
+      'u1',
+      UserRole.PATIENT,
+      's1',
+    );
+
+    expect(refreshSessionModel.updateMany).not.toHaveBeenCalled();
+  });
+
+
 });
