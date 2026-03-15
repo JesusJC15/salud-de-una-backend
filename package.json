@@ -78,8 +78,22 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!**/*.dto.ts",
+      "!**/*.schema.ts"
     ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/../test/jest.setup.ts"
+    ],
+    "silent": true,
+    "coverageThreshold": {
+      "global": {
+        "statements": 85,
+        "branches": 85,
+        "functions": 85,
+        "lines": 85
+      }
+    },
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }

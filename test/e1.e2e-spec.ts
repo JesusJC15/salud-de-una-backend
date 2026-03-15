@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { getModelToken } from '@nestjs/mongoose';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -156,6 +157,9 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   }
 
   beforeAll(async () => {
+    jest
+      .spyOn(ThrottlerGuard.prototype, 'canActivate')
+      .mockImplementation(() => true);
     mongoServer = await MongoMemoryReplSet.create({
       replSet: { count: 1 },
     });
@@ -173,7 +177,10 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('v1');
@@ -224,6 +231,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     if (mongoServer) {
       await mongoServer.stop();
     }
+    jest.restoreAllMocks();
   });
 
   it('POST /v1/auth/patient/register should create a patient', async () => {
@@ -699,6 +707,33 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     expect(unreadBody.items).toHaveLength(0);
   });
 
+  it('PATCH /v1/notifications/me/read-all should mark all as read', async () => {
+    const doctorEmail = 'doctor-notify-all@example.com';
+    const doctorId = await registerDoctor(doctorEmail);
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    await request(app.getHttpServer())
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(buildRethusVerifyPayload())
+      .expect(201);
+
+    const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
+
+    await request(app.getHttpServer())
+      .patch('/v1/notifications/me/read-all')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .expect(200);
+
+    const unreadResponse = await request(app.getHttpServer())
+      .get('/v1/notifications/me?unreadOnly=true')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .expect(200);
+
+    const unreadBody = unreadResponse.body as NotificationsListResponseBody;
+    expect(unreadBody.unreadCount).toBe(0);
+  });
+
   it('GET /v1/dashboard/business should return business KPIs from real persisted data', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Business',
@@ -738,5 +773,27 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       unreadNotifications: 1,
       verificationCoverage: 100,
     });
+  });
+
+  it('GET /v1/dashboard/technical should return technical metrics', async () => {
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    const response = await request(app.getHttpServer())
+      .get('/v1/dashboard/technical')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sampleSize: expect.any(Number),
+      p95LatencyMs: expect.any(Number),
+      errorRate: expect.any(Number),
+    });
+  });
+
+  it('POST /v1/auth/refresh should return 401 for invalid token', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: 'invalid-token' })
+      .expect(401);
   });
 });
