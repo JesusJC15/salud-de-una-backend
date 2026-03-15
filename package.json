@@ -94,7 +94,8 @@
         "lines": 85
       }
     },
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "collectCoverage": true,
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["lcov", "text"]
   }
 }
