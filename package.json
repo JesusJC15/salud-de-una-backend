@@ -82,6 +82,7 @@
       "!**/*.dto.ts",
       "!**/*.schema.ts"
     ],
+    "coverageDirectory": "../coverage",
     "setupFilesAfterEnv": [
       "<rootDir>/../test/jest.setup.ts"
     ],

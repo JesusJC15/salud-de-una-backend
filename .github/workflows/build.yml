@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install dependencies
-        run: yarn
+        run: yarn install --ignore-scripts
 
       - name: Test and coverage
         run: yarn test:cov
