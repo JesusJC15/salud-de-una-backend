@@ -5,6 +5,9 @@ import {
 } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Types } from 'mongoose';
+import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Doctor } from '../doctors/schemas/doctor.schema';
@@ -177,6 +180,92 @@ describe('AdminService', () => {
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 
+  it('should verify doctor with expired rethus state', async () => {
+    const doctorDocument = {
+      id: validDoctorId,
+      doctorStatus: 'PENDING',
+      rethusVerification: undefined,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+
+    rethusVerificationModelMock.create.mockResolvedValue([
+      {
+        _id: 'verification-id',
+        programType: 'UNIVERSITY',
+        titleObtainingOrigin: 'LOCAL',
+        professionOccupation: 'MEDICO GENERAL',
+        startDate: new Date('2024-01-15'),
+        rethusState: 'EXPIRED',
+        administrativeAct: 'ACT-2026-001',
+        reportingEntity: 'MINISTERIO DE SALUD',
+      },
+    ]);
+
+    const result = await service.verifyDoctor(
+      validDoctorId,
+      { ...dto, rethusState: 'EXPIRED' as RethusVerifyDto['rethusState'] },
+      actor,
+    );
+
+    expect(result.doctorStatus).toBe(DoctorStatus.REJECTED);
+    expect(
+      notificationsServiceMock.createDoctorStatusChange,
+    ).toHaveBeenCalledWith(
+      validDoctorId,
+      DoctorStatus.REJECTED,
+      'ok',
+      sessionMock,
+    );
+  });
+
+  it('should verify doctor with pending rethus state', async () => {
+    const doctorDocument = {
+      id: validDoctorId,
+      doctorStatus: 'PENDING',
+      rethusVerification: undefined,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+
+    rethusVerificationModelMock.create.mockResolvedValue([
+      {
+        _id: 'verification-id',
+        programType: 'UNIVERSITY',
+        titleObtainingOrigin: 'LOCAL',
+        professionOccupation: 'MEDICO GENERAL',
+        startDate: new Date('2024-01-15'),
+        rethusState: 'PENDING',
+        administrativeAct: 'ACT-2026-001',
+        reportingEntity: 'MINISTERIO DE SALUD',
+      },
+    ]);
+
+    const result = await service.verifyDoctor(
+      validDoctorId,
+      { ...dto, rethusState: 'PENDING' as RethusVerifyDto['rethusState'] },
+      actor,
+    );
+
+    expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
+    expect(
+      notificationsServiceMock.createDoctorStatusChange,
+    ).toHaveBeenCalledWith(
+      validDoctorId,
+      DoctorStatus.PENDING,
+      'ok',
+      sessionMock,
+    );
+  });
+
   describe('listDoctorsForReview', () => {
     const setupFindMock = () => {
       const rethusAggMock = { exec: jest.fn().mockResolvedValue([]) };
@@ -235,6 +324,120 @@ describe('AdminService', () => {
         $or?: unknown;
       };
       expect(findCall.$or).toBeUndefined();
+    });
+
+    it('should skip verification aggregate when no doctors', async () => {
+      setupFindMock();
+      rethusVerificationModelMock.aggregate = jest.fn();
+
+      doctorModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.listDoctorsForReview({ search: '   ' });
+
+      expect(rethusVerificationModelMock.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('should apply filters and map latest verification + status summary', async () => {
+      const doctorAId = new Types.ObjectId();
+      const doctorBId = new Types.ObjectId();
+      const doctors = [
+        {
+          _id: doctorAId,
+          firstName: 'Ana',
+          lastName: 'Lopez',
+          email: 'ana@example.com',
+          specialty: Specialty.GENERAL_MEDICINE,
+          doctorStatus: DoctorStatus.VERIFIED,
+          professionalLicense: 'P-123',
+          personalId: 'CC-1',
+          phoneNumber: '3001234567',
+          createdAt: new Date('2026-03-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-03-02T00:00:00.000Z'),
+        },
+        {
+          _id: doctorBId,
+          firstName: 'Luis',
+          lastName: 'Perez',
+          email: 'luis@example.com',
+          specialty: Specialty.GENERAL_MEDICINE,
+          doctorStatus: DoctorStatus.PENDING,
+          professionalLicense: 'P-456',
+          personalId: 'CC-2',
+          phoneNumber: '3009876543',
+          createdAt: new Date('2026-03-03T00:00:00.000Z'),
+          updatedAt: new Date('2026-03-04T00:00:00.000Z'),
+        },
+      ];
+
+      doctorModelMock.find.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doctors),
+      });
+
+      rethusVerificationModelMock.aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          {
+            doctorId: doctorAId,
+            checkedAt: new Date('2026-03-05T00:00:00.000Z'),
+            checkedBy: 'admin@example.com',
+            rethusState: 'VALID',
+            reportingEntity: 'MINISTERIO DE SALUD',
+            notes: 'ok',
+          },
+        ]),
+      });
+
+      doctorModelMock.countDocuments.mockResolvedValue(2);
+      doctorModelMock.aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          { _id: DoctorStatus.PENDING, count: 1 },
+          { _id: DoctorStatus.VERIFIED, count: 1 },
+          { _id: DoctorStatus.REJECTED, count: 0 },
+        ]),
+      });
+
+      const result = await service.listDoctorsForReview({
+        search: 'ana',
+        status: DoctorStatus.VERIFIED,
+        specialty: Specialty.GENERAL_MEDICINE,
+        page: 2,
+        limit: 1,
+      });
+
+      const filter = doctorModelMock.find.mock.calls[0][0] as {
+        doctorStatus?: DoctorStatus;
+        specialty?: Specialty;
+        $or?: Array<Record<string, unknown>>;
+      };
+
+      expect(filter.doctorStatus).toBe(DoctorStatus.VERIFIED);
+      expect(filter.specialty).toBe(Specialty.GENERAL_MEDICINE);
+      expect(filter.$or).toBeDefined();
+      expect(result.summary).toEqual({
+        total: 2,
+        pending: 1,
+        verified: 1,
+        rejected: 0,
+      });
+      expect(result.pagination).toEqual({
+        page: 2,
+        limit: 1,
+        total: 2,
+        totalPages: 2,
+      });
+      expect(result.items[0].latestVerification).toBeDefined();
+      expect(result.items[1].latestVerification).toBeNull();
     });
   });
 });

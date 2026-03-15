@@ -1,4 +1,8 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { getModelToken } from '@nestjs/mongoose';
@@ -20,11 +24,14 @@ jest.mock('bcrypt', () => ({
 type BaseMockModel = {
   create: jest.Mock;
   findOne: jest.Mock;
+  findById?: jest.Mock;
 };
 
 type RefreshSessionMockModel = BaseMockModel & {
   find: jest.Mock;
   updateMany: jest.Mock;
+  updateOne?: jest.Mock;
+  findOneAndUpdate?: jest.Mock;
 };
 
 function createFindOneChain(result: unknown) {
@@ -41,23 +48,30 @@ describe('AuthService', () => {
   let doctorModel: BaseMockModel;
   let adminModel: BaseMockModel;
   let refreshSessionModel: RefreshSessionMockModel;
-  let jwtService: { signAsync: jest.Mock; decode: jest.Mock };
+  let jwtService: {
+    signAsync: jest.Mock;
+    decode: jest.Mock;
+    verifyAsync: jest.Mock;
+  };
   let configService: { getOrThrow: jest.Mock; get: jest.Mock };
 
   beforeEach(async () => {
     patientModel = {
       create: jest.fn(),
       findOne: jest.fn(),
+      findById: jest.fn(),
     };
 
     doctorModel = {
       create: jest.fn(),
       findOne: jest.fn(),
+      findById: jest.fn(),
     };
 
     adminModel = {
       create: jest.fn(),
       findOne: jest.fn(),
+      findById: jest.fn(),
     };
 
     refreshSessionModel = {
@@ -65,6 +79,8 @@ describe('AuthService', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       updateMany: jest.fn(),
+      updateOne: jest.fn(),
+      findOneAndUpdate: jest.fn(),
     };
 
     jwtService = {
@@ -75,6 +91,7 @@ describe('AuthService', () => {
       decode: jest
         .fn()
         .mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+      verifyAsync: jest.fn(),
     };
 
     configService = {
@@ -266,5 +283,416 @@ describe('AuthService', () => {
     await expect(
       service.loginStaff('ana@example.com', 'StrongP@ss1'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('registerDoctor should fail when personalId is empty', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.registerDoctor({
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: 'doc@example.com',
+        password: 'StrongP@ss1',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: '   ',
+        phoneNumber: '3001234567',
+        professionalLicense: 'P-123',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('registerDoctor should map duplicate personalId to ConflictException', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.create.mockRejectedValue({
+      code: 11000,
+      keyPattern: { personalId: 1 },
+    });
+
+    await expect(
+      service.registerDoctor({
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: 'doc@example.com',
+        password: 'StrongP@ss1',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: 'CC-123',
+        phoneNumber: '3001234567',
+        professionalLicense: 'P-123',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('registerDoctor should map duplicate email to ConflictException', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.create.mockRejectedValue({
+      code: 11000,
+      keyPattern: { email: 1 },
+    });
+
+    await expect(
+      service.registerDoctor({
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: 'doc@example.com',
+        password: 'StrongP@ss1',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: 'CC-123',
+        phoneNumber: '3001234567',
+        professionalLicense: 'P-123',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('registerDoctor should fail when personalId already exists', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne
+      .mockReturnValueOnce(createFindOneChain(null))
+      .mockReturnValueOnce(createFindOneChain({ _id: 'exists' }));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.registerDoctor({
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: 'doc@example.com',
+        password: 'StrongP@ss1',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: 'CC-123',
+        phoneNumber: '3001234567',
+        professionalLicense: 'P-123',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('refreshTokens should fail without token', async () => {
+    await expect(service.refreshTokens()).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should fail on invalid token', async () => {
+    jwtService.verifyAsync.mockRejectedValue(new Error('invalid'));
+    await expect(service.refreshTokens('bad-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should fail when tokenType is not refresh', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'access',
+    });
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should fail when jti is missing', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+    });
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should fail when session does not exist', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should fail when refresh token hash does not match', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.findOne.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+        userId: 'u1',
+        role: UserRole.PATIENT,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    );
+    refreshSessionModel.findOneAndUpdate.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+      }),
+    );
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should fail when refresh session is expired', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.findOne.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+        userId: 'u1',
+        role: UserRole.PATIENT,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() - 1000),
+      }),
+    );
+    refreshSessionModel.updateOne?.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(refreshSessionModel.updateOne).toHaveBeenCalled();
+  });
+
+  it('refreshTokens should fail when session cannot be consumed', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.findOne.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+        userId: 'u1',
+        role: UserRole.PATIENT,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    );
+    refreshSessionModel.findOneAndUpdate?.mockReturnValue(
+      createFindOneChain(null),
+    );
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('refreshTokens should return new session when valid', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.findOne.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+        userId: 'u1',
+        role: UserRole.PATIENT,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    );
+    refreshSessionModel.findOneAndUpdate.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+      }),
+    );
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    patientModel.findById?.mockReturnValue(
+      createFindOneChain({
+        _id: 'u1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      }),
+    );
+    jwtService.signAsync
+      .mockResolvedValueOnce('access')
+      .mockResolvedValueOnce('refresh');
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh-token');
+    refreshSessionModel.create.mockResolvedValue({});
+    refreshSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([{ sessionId: 'session-1' }]),
+    });
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+    });
+
+    const session = await service.refreshTokens('token');
+
+    expect(session).toMatchObject({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: { id: 'u1', email: 'ana@example.com', role: UserRole.PATIENT },
+    });
+  });
+
+  it('revokeRefreshSession should be noop without token', async () => {
+    await expect(service.revokeRefreshSession()).resolves.toBeUndefined();
+  });
+
+  it('revokeRefreshSession should ignore invalid token', async () => {
+    jwtService.verifyAsync.mockRejectedValue(new Error('invalid'));
+    await expect(service.revokeRefreshSession('bad')).resolves.toBeUndefined();
+  });
+
+  it('revokeRefreshSession should revoke when token is valid', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.updateOne?.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    await expect(
+      service.revokeRefreshSession('token'),
+    ).resolves.toBeUndefined();
+    expect(refreshSessionModel.updateOne).toHaveBeenCalled();
+  });
+
+  it('buildSession should revoke previous session and enforce session limit', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'web.refreshMaxActiveSessions') return 1;
+      return undefined;
+    });
+    jwtService.signAsync
+      .mockResolvedValueOnce('access')
+      .mockResolvedValueOnce('refresh');
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-token');
+    refreshSessionModel.create.mockResolvedValue({});
+    refreshSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest
+        .fn()
+        .mockResolvedValue([
+          { sessionId: 'new-session' },
+          { sessionId: 'old-1' },
+          { sessionId: 'old-2' },
+        ]),
+    });
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 2 }),
+    });
+    refreshSessionModel.updateOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    const result = await (service as any).buildSession(
+      { id: 'u1', email: 'ana@example.com', role: UserRole.PATIENT },
+      'previous-session',
+    );
+
+    expect(result.accessToken).toBe('access-token');
+    expect(refreshSessionModel.updateOne).toHaveBeenCalled();
+    expect(refreshSessionModel.updateMany).toHaveBeenCalled();
+  });
+
+  it('buildSession should set fallback expiry when decode has no exp', async () => {
+    const now = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    jwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh-token');
+    jwtService.decode.mockReturnValue(null);
+    refreshSessionModel.create.mockResolvedValue({});
+    refreshSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([{ sessionId: 'session-1' }]),
+    });
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+    });
+
+    const result = await (service as any).buildSession({
+      id: 'u1',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+    });
+
+    const createPayload = refreshSessionModel.create.mock.calls[0][0];
+    expect(createPayload.expiresAt.getTime()).toBeGreaterThan(now);
+    expect(result.accessToken).toBe('access-token');
+    (Date.now as jest.Mock).mockRestore();
+  });
+
+  it('findAuthUserById should return null for inactive patient', async () => {
+    patientModel.findById?.mockReturnValue(
+      createFindOneChain({
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: false,
+      }),
+    );
+
+    const result = await (service as any).findAuthUserById(
+      'u1',
+      UserRole.PATIENT,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('findAuthUserById should resolve admin user', async () => {
+    adminModel.findById?.mockReturnValue(
+      createFindOneChain({
+        _id: 'a1',
+        email: 'admin@example.com',
+        role: UserRole.ADMIN,
+        isActive: true,
+      }),
+    );
+
+    const result = await (service as any).findAuthUserById(
+      'a1',
+      UserRole.ADMIN,
+    );
+
+    expect(result).toEqual({
+      id: 'a1',
+      email: 'admin@example.com',
+      role: UserRole.ADMIN,
+    });
   });
 });

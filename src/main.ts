@@ -8,7 +8,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
-function sanitizeMongoUri(uri?: string): string {
+export function sanitizeMongoUri(uri?: string): string {
   if (!uri) {
     return 'not configured';
   }
@@ -16,7 +16,7 @@ function sanitizeMongoUri(uri?: string): string {
   return uri.replace(/:\/\/([^:@]+):([^@]+)@/u, '://$1:***@');
 }
 
-function parseCorsOrigins(
+export function parseCorsOrigins(
   patientOrigins: string[] = [],
   staffOrigins: string[] = [],
 ): string[] {
@@ -25,7 +25,7 @@ function parseCorsOrigins(
 
 const MONGODB_CONNECT_TIMEOUT_MS = 30_000;
 
-async function waitForDatabaseConnection(
+export async function waitForDatabaseConnection(
   dbConnection: Connection,
   logger: Logger,
 ): Promise<void> {
@@ -68,7 +68,7 @@ async function waitForDatabaseConnection(
   }
 }
 
-async function bootstrap() {
+export async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
@@ -158,4 +158,6 @@ async function bootstrap() {
   logger.log(`Environment: ${nodeEnv} | PID: ${process.pid}`);
   logger.log(`Database URI: ${sanitizeMongoUri(databaseUri)}`);
 }
-void bootstrap();
+if (process.env.NODE_ENV !== 'test') {
+  void bootstrap();
+}
