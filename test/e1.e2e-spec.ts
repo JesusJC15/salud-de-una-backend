@@ -102,6 +102,31 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     };
   };
 
+  type ReadinessResponseBody = {
+    status: 'ready' | 'not_ready';
+    checks: {
+      database: { status: 'up' | 'down' };
+      redis: { status: 'up' | 'down' | 'disabled'; degraded: boolean };
+      ai: { status: 'up' | 'degraded' | 'disabled'; degraded: boolean };
+    };
+  };
+
+  type AiHealthCheckResponseBody = {
+    provider: string;
+    model: string;
+    status: 'up' | 'down' | 'disabled';
+    degraded: boolean;
+    requestId: string;
+  };
+
+  type TechnicalDashboardResponseBody = {
+    sampleSize: number;
+    p95LatencyMs: number;
+    errorRate: number;
+    source: string;
+    degraded: boolean;
+  };
+
   async function login(
     email: string,
     password: string,
@@ -783,11 +808,44 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
-    expect(response.body).toMatchObject({
-      sampleSize: expect.any(Number),
-      p95LatencyMs: expect.any(Number),
-      errorRate: expect.any(Number),
+    const body = response.body as TechnicalDashboardResponseBody;
+
+    expect(typeof body.sampleSize).toBe('number');
+    expect(typeof body.p95LatencyMs).toBe('number');
+    expect(typeof body.errorRate).toBe('number');
+    expect(typeof body.source).toBe('string');
+    expect(typeof body.degraded).toBe('boolean');
+  });
+
+  it('GET /v1/ready should report Redis and AI as degraded/disabled without failing readiness', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/v1/ready')
+      .expect(200);
+
+    const body = response.body as ReadinessResponseBody;
+
+    expect(body.status).toBe('ready');
+    expect(body.checks.database.status).toBe('up');
+    expect(body.checks.redis.status).toBe('disabled');
+    expect(body.checks.ai.status).toBe('disabled');
+  });
+
+  it('POST /v1/admin/ai/health-check should report disabled when AI is not configured', async () => {
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/admin/ai/health-check')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(201);
+
+    const body = response.body as AiHealthCheckResponseBody;
+
+    expect(body).toMatchObject({
+      provider: 'gemini',
+      status: 'disabled',
+      degraded: true,
     });
+    expect(typeof body.requestId).toBe('string');
   });
 
   it('POST /v1/auth/refresh should return 401 for invalid token', async () => {

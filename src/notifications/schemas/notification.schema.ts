@@ -17,6 +17,9 @@ export class Notification {
   @Prop({ required: true })
   message!: string;
 
+  @Prop({ unique: true, sparse: true, index: true })
+  sourceEventId?: string;
+
   @Prop({ default: false })
   read!: boolean;
 

@@ -35,6 +35,7 @@ Backend del MVP de SaludDeUna construido con NestJS + MongoDB. Este documento re
 Modulos cargados en `src/app.module.ts`:
 
 - `AuthModule`
+- `AiModule`
 - `PatientsModule`
 - `DoctorsModule`
 - `AdminModule`
@@ -42,6 +43,8 @@ Modulos cargados en `src/app.module.ts`:
 - `NotificationsModule`
 - `DashboardModule`
 - `ConsultationsModule`
+- `OutboxModule`
+- `RedisModule`
 
 Configuracion global:
 
@@ -50,6 +53,8 @@ Configuracion global:
 - Filtro global de excepciones con salida estandarizada y `correlation_id`.
 - Interceptor global para logging estructurado y metricas tecnicas.
 - Guardas globales: `ThrottlerGuard`, `JwtAuthGuard`, `RolesGuard`.
+- Redis Cloud opcional para throttling distribuido, metricas tecnicas distribuidas y jobs BullMQ.
+- Outbox transaccional para eventos de dominio criticos.
 
 ## Seguridad y Comportamiento Transversal
 
@@ -116,6 +121,13 @@ Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | - | Password del admin inicial. |
 | `BOOTSTRAP_ADMIN_FIRST_NAME` | No | `Admin` | Nombre del admin inicial. |
 | `BOOTSTRAP_ADMIN_LAST_NAME` | No | `System` | Apellido del admin inicial. |
+| `REDIS_URL` | No | - | Conexion Redis Cloud para throttling distribuido, metricas tecnicas y outbox/BullMQ. |
+| `REDIS_KEY_PREFIX` | No | `salud-de-una` | Prefijo de llaves Redis/BullMQ. |
+| `OUTBOX_DISPATCH_INTERVAL_MS` | No | `1000` | Intervalo de polling del despachador outbox cuando no hay worker Redis disponible. |
+| `AI_ENABLED` | No | `false` | Activa la integracion AI administrativa. |
+| `AI_PROVIDER` | No | `gemini` | Proveedor AI activo. |
+| `GEMINI_API_KEY` | No | - | API key de Google AI Studio para Gemini. |
+| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Modelo Gemini por defecto para health-check y prompts versionados. |
 
 ## Scripts Disponibles
 
@@ -209,6 +221,7 @@ Sesiones autenticadas:
 | `GET /v1/doctors/me` | No | Si | `DOCTOR` |
 | `GET /v1/dashboard/technical` | No | Si | `ADMIN` |
 | `GET /v1/dashboard/business` | No | Si | `ADMIN` |
+| `POST /v1/admin/ai/health-check` | No | Si | `ADMIN` |
 | `GET /v1/health` | Si | No | - |
 | `GET /v1/ready` | Si | No | - |
 
@@ -532,7 +545,29 @@ Response (200):
   "sampleSize": 120,
   "p95LatencyMs": 84,
   "errorRate": 0.83,
-  "timestamp": "2026-03-08T18:06:33.404Z"
+  "timestamp": "2026-03-08T18:06:33.404Z",
+  "source": "redis",
+  "degraded": false
+}
+```
+
+### 8) Health-check administrativo de Gemini
+
+`POST /v1/admin/ai/health-check`
+
+Requiere JWT con rol `ADMIN`.
+
+Response (201):
+
+```json
+{
+  "provider": "gemini",
+  "model": "gemini-2.5-flash",
+  "status": "up",
+  "latencyMs": 210,
+  "checkedAt": "2026-03-21T00:00:00.000Z",
+  "degraded": false,
+  "requestId": "corr-123"
 }
 ```
 

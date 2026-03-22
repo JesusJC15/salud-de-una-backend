@@ -4,12 +4,17 @@ import { DashboardService } from './dashboard.service';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Notification } from '../notifications/schemas/notification.schema';
 import { Patient } from '../patients/schemas/patient.schema';
+import { TechnicalMetricsService } from './metrics/technical-metrics.service';
 
 describe('DashboardService', () => {
   let service: DashboardService;
   const doctorModel = { aggregate: jest.fn() };
   const patientModel = { aggregate: jest.fn() };
   const notificationModel = { aggregate: jest.fn() };
+  const technicalMetricsService = {
+    record: jest.fn(),
+    getSummary: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -21,27 +26,50 @@ describe('DashboardService', () => {
           provide: getModelToken(Notification.name),
           useValue: notificationModel,
         },
+        {
+          provide: TechnicalMetricsService,
+          useValue: technicalMetricsService,
+        },
       ],
     }).compile();
 
     service = module.get<DashboardService>(DashboardService);
   });
 
-  it('record should keep last 1000 metrics and compute technical metrics', () => {
+  it('record should delegate to technical metrics service', async () => {
+    technicalMetricsService.getSummary.mockResolvedValue({
+      sampleSize: 6,
+      p95LatencyMs: 500,
+      errorRate: 16.67,
+      timestamp: '2026-03-14T12:00:00.000Z',
+      source: 'memory',
+      degraded: false,
+    });
+
     for (let i = 0; i < 5; i += 1) {
-      service.record({ latencyMs: 100 + i, statusCode: 200 });
+      await service.record({ latencyMs: 100 + i, statusCode: 200 });
     }
-    service.record({ latencyMs: 500, statusCode: 500 });
+    await service.record({ latencyMs: 500, statusCode: 500 });
 
-    const metrics = service.getTechnicalMetrics();
+    const metrics = await service.getTechnicalMetrics();
 
+    expect(technicalMetricsService.record).toHaveBeenCalledTimes(6);
     expect(metrics.sampleSize).toBe(6);
     expect(metrics.p95LatencyMs).toBeGreaterThan(0);
     expect(metrics.errorRate).toBeGreaterThan(0);
   });
 
-  it('getTechnicalMetrics should return zeros when no metrics', () => {
-    const metrics = service.getTechnicalMetrics();
+  it('getTechnicalMetrics should return zeros when no metrics', async () => {
+    technicalMetricsService.getSummary.mockResolvedValue({
+      sampleSize: 0,
+      p95LatencyMs: 0,
+      errorRate: 0,
+      timestamp: '2026-03-14T12:00:00.000Z',
+      source: 'memory',
+      degraded: true,
+    });
+
+    const metrics = await service.getTechnicalMetrics();
     expect(metrics.sampleSize).toBe(0);
     expect(metrics.p95LatencyMs).toBe(0);
     expect(metrics.errorRate).toBe(0);

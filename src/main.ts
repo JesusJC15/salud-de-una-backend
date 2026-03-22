@@ -158,6 +158,6 @@ export async function bootstrap() {
   logger.log(`Environment: ${nodeEnv} | PID: ${process.pid}`);
   logger.log(`Database URI: ${sanitizeMongoUri(databaseUri)}`);
 }
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
   void bootstrap();
 }

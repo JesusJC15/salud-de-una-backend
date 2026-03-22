@@ -21,22 +21,35 @@ export class NotificationsService {
     doctorStatus: string,
     notes?: string,
     session?: ClientSession,
+    options?: { sourceEventId?: string },
   ): Promise<void> {
-    await this.notificationModel.create(
-      [
-        {
-          userId: new Types.ObjectId(userId),
-          type: 'DOCTOR_STATUS_CHANGE',
-          status: doctorStatus,
-          message: notes
-            ? `Tu verificacion como doctor fue ${doctorStatus}. Notas: ${notes}`
-            : `Tu verificacion como doctor fue ${doctorStatus}.`,
-          read: false,
-        },
-      ],
-      { session },
-    );
-    this.logger.log(`Notificacion creada para ${userId}`);
+    try {
+      await this.notificationModel.create(
+        [
+          {
+            userId: new Types.ObjectId(userId),
+            type: 'DOCTOR_STATUS_CHANGE',
+            status: doctorStatus,
+            message: notes
+              ? `Tu verificacion como doctor fue ${doctorStatus}. Notas: ${notes}`
+              : `Tu verificacion como doctor fue ${doctorStatus}.`,
+            sourceEventId: options?.sourceEventId,
+            read: false,
+          },
+        ],
+        session ? { session } : undefined,
+      );
+      this.logger.log(`Notificacion creada para ${userId}`);
+    } catch (error: unknown) {
+      if (this.isDuplicateSourceEvent(error)) {
+        this.logger.warn(
+          `Notificacion duplicada ignorada para sourceEventId=${options?.sourceEventId}`,
+        );
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async getMine(user: RequestUser, unreadOnly = false, limit = 20) {
@@ -129,5 +142,23 @@ export class NotificationsService {
       updatedCount: result.modifiedCount,
       readAt: now,
     };
+  }
+
+  private isDuplicateSourceEvent(error: unknown): boolean {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as Record<string, unknown>).code === 11000
+    ) {
+      const keyPattern = (error as Record<string, unknown>).keyPattern;
+      return (
+        typeof keyPattern === 'object' &&
+        keyPattern !== null &&
+        'sourceEventId' in (keyPattern as Record<string, unknown>)
+      );
+    }
+
+    return false;
   }
 }

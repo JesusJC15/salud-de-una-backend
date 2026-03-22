@@ -5,13 +5,13 @@ import {
   RethusVerification,
   RethusVerificationSchema,
 } from '../doctors/schemas/rethus-verification.schema';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { OutboxModule } from '../outbox/outbox.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
 @Module({
   imports: [
-    NotificationsModule,
+    OutboxModule,
     MongooseModule.forFeature([
       { name: Doctor.name, schema: DoctorSchema },
       { name: RethusVerification.name, schema: RethusVerificationSchema },

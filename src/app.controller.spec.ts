@@ -43,8 +43,8 @@ describe('AppController', () => {
       expect(typeof result.timestamp).toBe('string');
     });
 
-    it('should return readiness payload', () => {
-      appServiceMock.getReadiness.mockReturnValue({
+    it('should return readiness payload', async () => {
+      appServiceMock.getReadiness.mockResolvedValue({
         status: 'ready',
         service: 'salud-de-una-backend',
         timestamp: new Date().toISOString(),
@@ -53,10 +53,21 @@ describe('AppController', () => {
             status: 'up',
             detail: 'mongoose readyState: 1 (connected)',
           },
+          redis: {
+            status: 'disabled',
+            detail: 'Redis disabled',
+            latencyMs: null,
+            degraded: true,
+          },
+          ai: {
+            status: 'disabled',
+            detail: 'AI disabled',
+            degraded: true,
+          },
         },
       });
 
-      const result = appController.getReadiness();
+      const result = await appController.getReadiness();
 
       expect(appServiceMock.getReadiness).toHaveBeenCalledTimes(1);
       expect(result.service).toBe('salud-de-una-backend');

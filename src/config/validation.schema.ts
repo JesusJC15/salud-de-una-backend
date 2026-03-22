@@ -21,4 +21,11 @@ export const validationSchema = Joi.object({
   BOOTSTRAP_ADMIN_PASSWORD: Joi.string().optional(),
   BOOTSTRAP_ADMIN_FIRST_NAME: Joi.string().optional(),
   BOOTSTRAP_ADMIN_LAST_NAME: Joi.string().optional(),
+  REDIS_URL: Joi.string().uri().optional(),
+  REDIS_KEY_PREFIX: Joi.string().optional(),
+  OUTBOX_DISPATCH_INTERVAL_MS: Joi.number().integer().min(1).optional(),
+  AI_ENABLED: Joi.boolean().default(false),
+  AI_PROVIDER: Joi.string().valid('gemini').default('gemini'),
+  GEMINI_API_KEY: Joi.string().optional(),
+  GEMINI_MODEL: Joi.string().optional(),
 });

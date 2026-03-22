@@ -845,6 +845,4 @@ describe('AuthService', () => {
 
     expect(refreshSessionModel.updateMany).not.toHaveBeenCalled();
   });
-
-
 });

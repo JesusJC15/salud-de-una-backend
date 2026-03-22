@@ -12,10 +12,11 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { RethusVerification } from '../doctors/schemas/rethus-verification.schema';
-import { NotificationsService } from '../notifications/notifications.service';
 import { AdminService } from './admin.service';
 import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
+import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
+import { OutboxService } from '../outbox/outbox.service';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -40,8 +41,12 @@ describe('AdminService', () => {
     create: jest.fn(),
   };
 
-  const notificationsServiceMock = {
-    createDoctorStatusChange: jest.fn(),
+  const outboxServiceMock = {
+    createDoctorVerificationChangedEvent: jest.fn(),
+  };
+
+  const outboxDispatcherServiceMock = {
+    dispatchPendingEvents: jest.fn(),
   };
 
   const dto: RethusVerifyDto = {
@@ -87,8 +92,12 @@ describe('AdminService', () => {
           useValue: rethusVerificationModelMock,
         },
         {
-          provide: NotificationsService,
-          useValue: notificationsServiceMock,
+          provide: OutboxService,
+          useValue: outboxServiceMock,
+        },
+        {
+          provide: OutboxDispatcherService,
+          useValue: outboxDispatcherServiceMock,
         },
       ],
     }).compile();
@@ -96,7 +105,7 @@ describe('AdminService', () => {
     service = module.get<AdminService>(AdminService);
   });
 
-  it('should verify doctor and persist verification + notification', async () => {
+  it('should verify doctor and persist verification + outbox event', async () => {
     const doctorDocument = {
       id: validDoctorId,
       doctorStatus: 'VERIFIED',
@@ -134,8 +143,19 @@ describe('AdminService', () => {
     });
     expect(doctorDocument.save).toHaveBeenCalled();
     expect(
-      notificationsServiceMock.createDoctorStatusChange,
-    ).toHaveBeenCalledWith(validDoctorId, 'VERIFIED', 'ok', sessionMock);
+      outboxServiceMock.createDoctorVerificationChangedEvent,
+    ).toHaveBeenCalledWith(
+      {
+        doctorId: validDoctorId,
+        doctorStatus: 'VERIFIED',
+        notes: 'ok',
+      },
+      undefined,
+      sessionMock,
+    );
+    expect(
+      outboxDispatcherServiceMock.dispatchPendingEvents,
+    ).toHaveBeenCalled();
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 
@@ -214,11 +234,14 @@ describe('AdminService', () => {
 
     expect(result.doctorStatus).toBe(DoctorStatus.REJECTED);
     expect(
-      notificationsServiceMock.createDoctorStatusChange,
+      outboxServiceMock.createDoctorVerificationChangedEvent,
     ).toHaveBeenCalledWith(
-      validDoctorId,
-      DoctorStatus.REJECTED,
-      'ok',
+      {
+        doctorId: validDoctorId,
+        doctorStatus: DoctorStatus.REJECTED,
+        notes: 'ok',
+      },
+      undefined,
       sessionMock,
     );
   });
@@ -257,11 +280,14 @@ describe('AdminService', () => {
 
     expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
     expect(
-      notificationsServiceMock.createDoctorStatusChange,
+      outboxServiceMock.createDoctorVerificationChangedEvent,
     ).toHaveBeenCalledWith(
-      validDoctorId,
-      DoctorStatus.PENDING,
-      'ok',
+      {
+        doctorId: validDoctorId,
+        doctorStatus: DoctorStatus.PENDING,
+        notes: 'ok',
+      },
+      undefined,
       sessionMock,
     );
   });
@@ -293,7 +319,8 @@ describe('AdminService', () => {
       const query: ListDoctorsForReviewDto = { search: '.*+?^${}()|[]\\' };
       await service.listDoctorsForReview(query);
 
-      const findCall = doctorModelMock.find.mock.calls[0][0] as {
+      const [findCallArg] = doctorModelMock.find.mock.calls[0] as [unknown];
+      const findCall = findCallArg as {
         $or?: Array<{ firstName: RegExp }>;
       };
       expect(findCall.$or).toBeDefined();
@@ -320,7 +347,8 @@ describe('AdminService', () => {
       const query: ListDoctorsForReviewDto = {};
       await service.listDoctorsForReview(query);
 
-      const findCall = doctorModelMock.find.mock.calls[0][0] as {
+      const [findCallArg] = doctorModelMock.find.mock.calls[0] as [unknown];
+      const findCall = findCallArg as {
         $or?: unknown;
       };
       expect(findCall.$or).toBeUndefined();
@@ -415,7 +443,8 @@ describe('AdminService', () => {
         limit: 1,
       });
 
-      const filter = doctorModelMock.find.mock.calls[0][0] as {
+      const [filterArg] = doctorModelMock.find.mock.calls[0] as [unknown];
+      const filter = filterArg as {
         doctorStatus?: DoctorStatus;
         specialty?: Specialty;
         $or?: Array<Record<string, unknown>>;

@@ -1,17 +1,20 @@
 import { AdminModule } from './admin/admin.module';
 import { AdminsModule } from './admins/admins.module';
+import { AiModule } from './ai/ai.module';
 import { AppModule } from './app.module';
 import { AuthModule } from './auth/auth.module';
 import { ConsultationsModule } from './consultations/consultations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
 
 describe('Module definitions', () => {
   it('should load feature modules', () => {
     expect(AppModule).toBeDefined();
     expect(AuthModule).toBeDefined();
+    expect(AiModule).toBeDefined();
     expect(PatientsModule).toBeDefined();
     expect(DoctorsModule).toBeDefined();
     expect(AdminModule).toBeDefined();
@@ -19,5 +22,6 @@ describe('Module definitions', () => {
     expect(DashboardModule).toBeDefined();
     expect(ConsultationsModule).toBeDefined();
     expect(AdminsModule).toBeDefined();
+    expect(OutboxModule).toBeDefined();
   });
 });
