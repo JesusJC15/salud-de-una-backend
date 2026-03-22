@@ -33,17 +33,32 @@ describe('RequestLoggingInterceptor', () => {
     errorSpy.mockRestore();
   });
 
-  function createContext(overrides?: Partial<any>): ExecutionContext {
+  type TestRequest = {
+    headers: Record<string, string>;
+    method: string;
+    originalUrl: string;
+    user?: { userId: string; role: string };
+  };
+
+  type TestResponse = {
+    setHeader: jest.Mock;
+    statusCode: number;
+  };
+
+  function createContext(overrides?: {
+    request?: Partial<TestRequest>;
+    response?: Partial<TestResponse>;
+  }): ExecutionContext {
     const request = {
       headers: {},
       method: 'GET',
       originalUrl: '/test',
       user: { userId: 'u1', role: 'PATIENT' },
-    };
+    } satisfies TestRequest;
     const response = {
       setHeader: jest.fn(),
       statusCode: 200,
-    };
+    } satisfies TestResponse;
     return {
       switchToHttp: () => ({
         getRequest: () => ({ ...request, ...overrides?.request }),
@@ -103,7 +118,9 @@ describe('RequestLoggingInterceptor', () => {
     };
 
     interceptor.intercept(context, next).subscribe({
-      next: () => done(new Error('expected error')),
+      next: () => {
+        done(new Error('expected error'));
+      },
       error: () => {
         expect(dashboardService.record).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -125,7 +142,9 @@ describe('RequestLoggingInterceptor', () => {
     };
 
     interceptor.intercept(context, next).subscribe({
-      next: () => done(new Error('expected error')),
+      next: () => {
+        done(new Error('expected error'));
+      },
       error: () => {
         expect(dashboardService.record).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -145,7 +164,9 @@ describe('RequestLoggingInterceptor', () => {
     };
 
     interceptor.intercept(context, next).subscribe({
-      next: () => done(new Error('expected error')),
+      next: () => {
+        done(new Error('expected error'));
+      },
       error: () => {
         expect(dashboardService.record).toHaveBeenCalledWith(
           expect.objectContaining({

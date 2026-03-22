@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserRole } from '../enums/user-role.enum';
@@ -16,7 +17,7 @@ describe('RolesGuard', () => {
     guard = module.get<RolesGuard>(RolesGuard);
   });
 
-  function createContext(role?: UserRole) {
+  function createContext(role?: UserRole): ExecutionContext {
     return {
       getHandler: () => ({}),
       getClass: () => ({}),
@@ -25,7 +26,7 @@ describe('RolesGuard', () => {
           user: role ? { role } : undefined,
         }),
       }),
-    } as any;
+    } as unknown as ExecutionContext;
   }
 
   it('should allow when no roles required', () => {

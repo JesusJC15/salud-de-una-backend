@@ -6,7 +6,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 export default registerAs('redis', () => ({
-  url: process.env.REDIS_URL,
+  url: process.env.REDIS_URL || undefined,
   keyPrefix: process.env.REDIS_KEY_PREFIX ?? 'salud-de-una',
   outboxDispatchIntervalMs: parsePositiveInt(
     process.env.OUTBOX_DISPATCH_INTERVAL_MS,
