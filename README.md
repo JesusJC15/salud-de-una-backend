@@ -104,45 +104,45 @@ npm run start:dev
 
 Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
 
-| Variable | Requerida | Default | Descripcion |
-| --- | --- | --- | --- |
-| `NODE_ENV` | No | `development` | Entorno: `development`, `production`, `test`. |
-| `PORT` | No | `3000` | Puerto HTTP. |
-| `MONGODB_URI` | Si | - | Cadena de conexion MongoDB. |
-| `JWT_SECRET` | Si | - | Secreto JWT (minimo 32 chars recomendado). |
-| `JWT_REFRESH_SECRET` | No | `JWT_SECRET` | Secreto del refresh token. |
-| `JWT_ACCESS_EXPIRES_IN` | No | `1h` | Duracion access token. |
-| `JWT_REFRESH_EXPIRES_IN` | No | `7d` | Duracion refresh token. |
-| `REFRESH_MAX_ACTIVE_SESSIONS` | No | `3` | Maximo de sesiones refresh activas por usuario. |
-| `CORS_ORIGINS_PATIENT` | No | - | Origenes permitidos del frontend paciente (CSV). |
-| `CORS_ORIGINS_STAFF` | No | - | Origenes permitidos del frontend staff (CSV). |
-| `ENABLE_BOOTSTRAP_ADMIN` | No | `false` | Habilita creacion automatica de admin. |
-| `BOOTSTRAP_ADMIN_EMAIL` | No | - | Email del admin inicial. |
-| `BOOTSTRAP_ADMIN_PASSWORD` | No | - | Password del admin inicial. |
-| `BOOTSTRAP_ADMIN_FIRST_NAME` | No | `Admin` | Nombre del admin inicial. |
-| `BOOTSTRAP_ADMIN_LAST_NAME` | No | `System` | Apellido del admin inicial. |
-| `REDIS_URL` | No | - | Conexion Redis Cloud para throttling distribuido, metricas tecnicas y outbox/BullMQ. |
-| `REDIS_KEY_PREFIX` | No | `salud-de-una` | Prefijo de llaves Redis/BullMQ. |
-| `OUTBOX_DISPATCH_INTERVAL_MS` | No | `1000` | Intervalo de polling del despachador outbox cuando no hay worker Redis disponible. |
-| `AI_ENABLED` | No | `false` | Activa la integracion AI administrativa. |
-| `AI_PROVIDER` | No | `gemini` | Proveedor AI activo. |
-| `GEMINI_API_KEY` | No | - | API key de Google AI Studio para Gemini. |
-| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Modelo Gemini por defecto para health-check y prompts versionados. |
+| Variable                      | Requerida | Default            | Descripcion                                                                          |
+| ----------------------------- | --------- | ------------------ | ------------------------------------------------------------------------------------ |
+| `NODE_ENV`                    | No        | `development`      | Entorno: `development`, `production`, `test`.                                        |
+| `PORT`                        | No        | `3000`             | Puerto HTTP.                                                                         |
+| `MONGODB_URI`                 | Si        | -                  | Cadena de conexion MongoDB.                                                          |
+| `JWT_SECRET`                  | Si        | -                  | Secreto JWT (minimo 32 chars recomendado).                                           |
+| `JWT_REFRESH_SECRET`          | No        | `JWT_SECRET`       | Secreto del refresh token.                                                           |
+| `JWT_ACCESS_EXPIRES_IN`       | No        | `1h`               | Duracion access token.                                                               |
+| `JWT_REFRESH_EXPIRES_IN`      | No        | `7d`               | Duracion refresh token.                                                              |
+| `REFRESH_MAX_ACTIVE_SESSIONS` | No        | `3`                | Maximo de sesiones refresh activas por usuario.                                      |
+| `CORS_ORIGINS_PATIENT`        | No        | -                  | Origenes permitidos del frontend paciente (CSV).                                     |
+| `CORS_ORIGINS_STAFF`          | No        | -                  | Origenes permitidos del frontend staff (CSV).                                        |
+| `ENABLE_BOOTSTRAP_ADMIN`      | No        | `false`            | Habilita creacion automatica de admin.                                               |
+| `BOOTSTRAP_ADMIN_EMAIL`       | No        | -                  | Email del admin inicial.                                                             |
+| `BOOTSTRAP_ADMIN_PASSWORD`    | No        | -                  | Password del admin inicial.                                                          |
+| `BOOTSTRAP_ADMIN_FIRST_NAME`  | No        | `Admin`            | Nombre del admin inicial.                                                            |
+| `BOOTSTRAP_ADMIN_LAST_NAME`   | No        | `System`           | Apellido del admin inicial.                                                          |
+| `REDIS_URL`                   | No        | -                  | Conexion Redis Cloud para throttling distribuido, metricas tecnicas y outbox/BullMQ. |
+| `REDIS_KEY_PREFIX`            | No        | `salud-de-una`     | Prefijo de llaves Redis/BullMQ.                                                      |
+| `OUTBOX_DISPATCH_INTERVAL_MS` | No        | `1000`             | Intervalo de polling del despachador outbox cuando no hay worker Redis disponible.   |
+| `AI_ENABLED`                  | No        | `false`            | Activa la integracion AI administrativa.                                             |
+| `AI_PROVIDER`                 | No        | `gemini`           | Proveedor AI activo.                                                                 |
+| `GEMINI_API_KEY`              | No        | -                  | API key de Google AI Studio para Gemini.                                             |
+| `GEMINI_MODEL`                | No        | `gemini-2.5-flash` | Modelo Gemini por defecto para health-check y prompts versionados.                   |
 
 ## Scripts Disponibles
 
-| Script | Comando | Uso |
-| --- | --- | --- |
-| `build` | `npm run build` | Compila a `dist/`. |
-| `start` | `npm run start` | Inicia app Nest. |
-| `start:dev` | `npm run start:dev` | Desarrollo con watch. |
+| Script        | Comando               | Uso                           |
+| ------------- | --------------------- | ----------------------------- |
+| `build`       | `npm run build`       | Compila a `dist/`.            |
+| `start`       | `npm run start`       | Inicia app Nest.              |
+| `start:dev`   | `npm run start:dev`   | Desarrollo con watch.         |
 | `start:debug` | `npm run start:debug` | Desarrollo con debug + watch. |
-| `start:prod` | `npm run start:prod` | Ejecuta `dist/main`. |
-| `lint` | `npm run lint` | Ejecuta ESLint con autofix. |
-| `test` | `npm run test` | Pruebas unitarias. |
-| `test:watch` | `npm run test:watch` | Pruebas unitarias en watch. |
-| `test:cov` | `npm run test:cov` | Cobertura. |
-| `test:e2e` | `npm run test:e2e` | Pruebas end-to-end. |
+| `start:prod`  | `npm run start:prod`  | Ejecuta `dist/main`.          |
+| `lint`        | `npm run lint`        | Ejecuta ESLint con autofix.   |
+| `test`        | `npm run test`        | Pruebas unitarias.            |
+| `test:watch`  | `npm run test:watch`  | Pruebas unitarias en watch.   |
+| `test:cov`    | `npm run test:cov`    | Cobertura.                    |
+| `test:e2e`    | `npm run test:e2e`    | Pruebas end-to-end.           |
 
 ## Endpoints de Salud
 
@@ -201,29 +201,36 @@ Sesiones autenticadas:
 
 ## Matriz de Acceso
 
-| Endpoint | Publico | Requiere JWT | Roles |
-| --- | --- | --- | --- |
-| `POST /v1/auth/patient/register` | Si | No | - |
-| `POST /v1/auth/doctor/register` | Si | No | - |
-| `POST /v1/auth/patient/login` | Si | No | - |
-| `POST /v1/auth/staff/login` | Si | No | - |
-| `POST /v1/auth/refresh` | Si | No | Requiere `refreshToken` en body |
-| `POST /v1/auth/logout` | Si | No | `refreshToken` opcional en body; si falta, la operación sigue siendo exitosa (idempotente) |
-| `GET /v1/auth/me` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
-| `GET /v1/admin/doctors` | No | Si | `ADMIN` |
-| `POST /v1/admin/doctors/:doctorId/doctor-verify` | No | Si | `ADMIN` |
-| `GET /v1/consultations/queue` | No | Si | `DOCTOR` + verificado |
-| `GET /v1/notifications/me` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
-| `PATCH /v1/notifications/:notificationId/read` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
-| `PATCH /v1/notifications/me/read-all` | No | Si | `PATIENT` / `DOCTOR` / `ADMIN` |
-| `GET /v1/patients/me` | No | Si | `PATIENT` |
-| `PUT /v1/patients/me` | No | Si | `PATIENT` |
-| `GET /v1/doctors/me` | No | Si | `DOCTOR` |
-| `GET /v1/dashboard/technical` | No | Si | `ADMIN` |
-| `GET /v1/dashboard/business` | No | Si | `ADMIN` |
-| `POST /v1/admin/ai/health-check` | No | Si | `ADMIN` |
-| `GET /v1/health` | Si | No | - |
-| `GET /v1/ready` | Si | No | - |
+| Endpoint                                         | Publico | Requiere JWT | Roles                                                                                      |
+| ------------------------------------------------ | ------- | ------------ | ------------------------------------------------------------------------------------------ |
+| `POST /v1/auth/patient/register`                 | Si      | No           | -                                                                                          |
+| `POST /v1/auth/doctor/register`                  | Si      | No           | -                                                                                          |
+| `POST /v1/auth/patient/login`                    | Si      | No           | -                                                                                          |
+| `POST /v1/auth/staff/login`                      | Si      | No           | -                                                                                          |
+| `POST /v1/auth/refresh`                          | Si      | No           | Requiere `refreshToken` en body                                                            |
+| `POST /v1/auth/logout`                           | Si      | No           | `refreshToken` opcional en body; si falta, la operación sigue siendo exitosa (idempotente) |
+| `GET /v1/auth/me`                                | No      | Si           | `PATIENT` / `DOCTOR` / `ADMIN`                                                             |
+| `GET /v1/admin/doctors`                          | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/admin/doctors/review`                   | No      | Si           | `ADMIN`                                                                                    |
+| `POST /v1/admin/doctors/:doctorId/doctor-verify` | No      | Si           | `ADMIN` (canonical)                                                                        |
+| `POST /v1/admin/doctors/:doctorId/rethus-verify` | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/admin/users`                            | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/admin/users/:role`                      | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/admin/users/:role/:userId`              | No      | Si           | `ADMIN`                                                                                    |
+| `PATCH /v1/admin/users/:role/:userId/active`     | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/consultations/queue`                    | No      | Si           | `DOCTOR` + verificado                                                                      |
+| `GET /v1/notifications/me`                       | No      | Si           | `PATIENT` / `DOCTOR` / `ADMIN`                                                             |
+| `PATCH /v1/notifications/:notificationId/read`   | No      | Si           | `PATIENT` / `DOCTOR` / `ADMIN`                                                             |
+| `PATCH /v1/notifications/me/read-all`            | No      | Si           | `PATIENT` / `DOCTOR` / `ADMIN`                                                             |
+| `GET /v1/patients/me`                            | No      | Si           | `PATIENT`                                                                                  |
+| `PUT /v1/patients/me`                            | No      | Si           | `PATIENT`                                                                                  |
+| `GET /v1/doctors/me`                             | No      | Si           | `DOCTOR`                                                                                   |
+| `POST /v1/doctors/me/rethus-resubmit`            | No      | Si           | `DOCTOR`                                                                                   |
+| `GET /v1/dashboard/technical`                    | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/dashboard/business`                     | No      | Si           | `ADMIN`                                                                                    |
+| `POST /v1/admin/ai/health-check`                 | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/health`                                 | Si      | No           | -                                                                                          |
+| `GET /v1/ready`                                  | Si      | No           | -                                                                                          |
 
 ## API de Negocio (Estado Actual)
 
@@ -388,9 +395,11 @@ Response:
 }
 ```
 
-### 7) Verificacion REThUS por admin
+### 7) Verificacion REThUS por admin (compatibilidad dual)
 
-`POST /v1/admin/doctors/:doctorId/doctor-verify`
+`POST /v1/admin/doctors/:doctorId/doctor-verify` (canonical)
+
+`POST /v1/admin/doctors/:doctorId/rethus-verify` (alias de compatibilidad front)
 
 Requiere:
 
@@ -441,6 +450,16 @@ Regla de negocio aplicada:
 - `rethusState=EXPIRED` -> `doctorStatus=REJECTED`
 - `rethusState=PENDING` -> `doctorStatus=PENDING`
 
+Payload alterno compacto soportado por ambos endpoints:
+
+```json
+{
+  "action": "APPROVE",
+  "notes": "Validacion manual",
+  "evidenceUrl": "https://example.com/evidence.pdf"
+}
+```
+
 ### 8) Notificaciones autenticadas
 
 `GET /v1/notifications/me`
@@ -481,6 +500,50 @@ Response (200):
   }
 }
 ```
+
+### 9.1) Resubmision REThUS por medico
+
+`POST /v1/doctors/me/rethus-resubmit`
+
+Requiere JWT con rol `DOCTOR`.
+
+Request:
+
+```json
+{
+  "notes": "Actualizo soporte",
+  "evidenceUrl": "https://example.com/new-evidence.pdf"
+}
+```
+
+Regla de negocio:
+
+- Solo aplica cuando `doctorStatus=REJECTED`.
+- Al reenviar, el estado cambia a `PENDING`.
+
+### 9.2) CRUD minimo de usuarios (ADMIN)
+
+`GET /v1/admin/users`
+
+`GET /v1/admin/users/:role`
+
+`GET /v1/admin/users/:role/:userId`
+
+`PATCH /v1/admin/users/:role/:userId/active`
+
+`PATCH /active` usa body:
+
+```json
+{
+  "isActive": false
+}
+```
+
+Nota de contrato (2026-04-05):
+
+- `doctor-verify` se mantiene como ruta canonical para estabilidad del backend.
+- `rethus-verify` se mantiene como alias de compatibilidad.
+- No hay retiro programado de alias en el MVP actual; cualquier deprecacion futura se anunciara en release notes.
 
 ### 10) Dashboard de negocio
 

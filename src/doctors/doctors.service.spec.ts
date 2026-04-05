@@ -1,7 +1,14 @@
-import { NotFoundException } from '@nestjs/common';
-import { getModelToken } from '@nestjs/mongoose';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { DoctorsService } from './doctors.service';
 import { Doctor } from './schemas/doctor.schema';
 import { RethusVerification } from './schemas/rethus-verification.schema';
@@ -12,6 +19,7 @@ function createFindChain(result: unknown) {
     lean: jest.fn().mockReturnThis(),
     exec: jest.fn().mockResolvedValue(result),
     sort: jest.fn().mockReturnThis(),
+    session: jest.fn().mockReturnThis(),
   };
 }
 
@@ -22,16 +30,43 @@ describe('DoctorsService', () => {
   };
   const rethusVerificationModel = {
     findOne: jest.fn(),
+    create: jest.fn(),
+  };
+  const connectionMock = {
+    startSession: jest.fn(),
+  };
+  const sessionMock = {
+    withTransaction: jest.fn(),
+    endSession: jest.fn(),
+  };
+  const outboxServiceMock = {
+    createDoctorVerificationChangedEvent: jest.fn(),
+  };
+  const outboxDispatcherServiceMock = {
+    dispatchPendingEvents: jest.fn(),
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    connectionMock.startSession.mockResolvedValue(sessionMock);
+    sessionMock.withTransaction.mockImplementation(
+      async (cb: () => Promise<void>) => cb(),
+    );
+    sessionMock.endSession.mockResolvedValue(undefined);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DoctorsService,
+        { provide: getConnectionToken(), useValue: connectionMock },
         { provide: getModelToken(Doctor.name), useValue: doctorModel },
         {
           provide: getModelToken(RethusVerification.name),
           useValue: rethusVerificationModel,
+        },
+        { provide: OutboxService, useValue: outboxServiceMock },
+        {
+          provide: OutboxDispatcherService,
+          useValue: outboxDispatcherServiceMock,
         },
       ],
     }).compile();
@@ -160,5 +195,115 @@ describe('DoctorsService', () => {
     expect(result.doctorStatus).toBeNull();
     expect(result.verification).toBeDefined();
     expect(result.verification.programType).toBeNull();
+  });
+
+  it('rethusResubmit should set status to pending and emit outbox', async () => {
+    const doctorId = new Types.ObjectId().toString();
+    const doctorDocument = {
+      id: doctorId,
+      _id: new Types.ObjectId(doctorId),
+      doctorStatus: DoctorStatus.REJECTED,
+      save: jest.fn().mockResolvedValue(undefined),
+      rethusVerification: undefined,
+    };
+
+    doctorModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+
+    rethusVerificationModel.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    rethusVerificationModel.create.mockResolvedValue([
+      {
+        _id: 'verification-id',
+        rethusState: 'PENDING',
+        checkedBy: 'doc@example.com',
+        evidenceUrl: 'https://example.com/rethus.pdf',
+        notes: 'updated',
+      },
+    ]);
+
+    const result = await service.rethusResubmit(
+      {
+        userId: doctorId,
+        email: 'doc@example.com',
+        role: 'DOCTOR',
+        isActive: true,
+      },
+      {
+        evidenceUrl: 'https://example.com/rethus.pdf',
+        notes: 'updated',
+      },
+    );
+
+    expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
+    expect(doctorDocument.save).toHaveBeenCalled();
+    expect(
+      outboxServiceMock.createDoctorVerificationChangedEvent,
+    ).toHaveBeenCalled();
+    expect(
+      outboxDispatcherServiceMock.dispatchPendingEvents,
+    ).toHaveBeenCalled();
+  });
+
+  it('rethusResubmit should reject non-rejected doctor', async () => {
+    const doctorId = new Types.ObjectId().toString();
+    doctorModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        id: doctorId,
+        _id: new Types.ObjectId(doctorId),
+        doctorStatus: DoctorStatus.VERIFIED,
+      }),
+    });
+
+    await expect(
+      service.rethusResubmit(
+        {
+          userId: doctorId,
+          email: 'doc@example.com',
+          role: 'DOCTOR',
+          isActive: true,
+        },
+        { notes: 'nueva evidencia' },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rethusResubmit should map unexpected errors', async () => {
+    const doctorId = new Types.ObjectId().toString();
+    doctorModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        id: doctorId,
+        _id: new Types.ObjectId(doctorId),
+        doctorStatus: DoctorStatus.REJECTED,
+      }),
+    });
+    rethusVerificationModel.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    rethusVerificationModel.create.mockRejectedValue(new Error('db fail'));
+
+    await expect(
+      service.rethusResubmit(
+        {
+          userId: doctorId,
+          email: 'doc@example.com',
+          role: 'DOCTOR',
+          isActive: true,
+        },
+        { notes: 'nueva evidencia' },
+      ),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
   });
 });

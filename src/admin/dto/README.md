@@ -7,7 +7,10 @@ Contratos DTO de request/response del modulo.
 ## Archivos actuales
 
 - list-doctors-for-review.dto.ts
+- list-users.dto.ts
+- rethus-decision.dto.ts
 - rethus-verify.dto.ts
+- update-user-active.dto.ts
 
 ## Dependencias relacionadas
 
