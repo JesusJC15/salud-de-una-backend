@@ -42,22 +42,15 @@ export class ConsultationsService {
 
   async getQueue(options: { limit?: number; page?: number } = {}) {
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 100);
-    const page = Math.max(options.page ?? 1, 1);
-    const skip = (page - 1) * limit;
-
-    const items = await this.consultationModel
-      .aggregate<
-        Pick<
-          ConsultationDocument,
-          | '_id'
-          | 'patientId'
-          | 'triageSessionId'
-          | 'specialty'
-          | 'priority'
-          | 'status'
-          | 'createdAt'
-        >
-      >([
+      .aggregate<{
+        id: string;
+        patientId: string;
+        triageSessionId: string;
+        specialty: Specialty;
+        priority: TriagePriority;
+        status: string;
+        createdAt: Date | null;
+      }>([
         {
           $match: {
             status: 'PENDING',
@@ -72,7 +65,34 @@ export class ConsultationsService {
                   { case: { $eq: ['$priority', 'MODERATE'] }, then: 1 },
                   { case: { $eq: ['$priority', 'LOW'] }, then: 2 },
                 ],
-                default: 3,
+                default: 99,
+              },
+            },
+          },
+        },
+        {
+          $sort: {
+            priorityRank: 1,
+            createdAt: 1,
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            id: { $toString: '$_id' },
+            patientId: { $toString: '$patientId' },
+            triageSessionId: { $toString: '$triageSessionId' },
+            specialty: 1,
+            priority: 1,
+            status: 1,
+            createdAt: { $ifNull: ['$createdAt', null] },
+          },
+        },
+      ])
+      .exec();
+
+    return {
+      items,
               },
             },
           },
