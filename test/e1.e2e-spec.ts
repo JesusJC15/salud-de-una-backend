@@ -22,6 +22,14 @@ import {
   Patient,
   PatientDocument,
 } from '../src/patients/schemas/patient.schema';
+import {
+  TriageSession,
+  TriageSessionDocument,
+} from '../src/triage/schemas/triage-session.schema';
+import {
+  Consultation,
+  ConsultationDocument,
+} from '../src/consultations/schemas/consultation.schema';
 import { DoctorStatus } from '../src/common/enums/doctor-status.enum';
 import { RethusState } from '../src/common/enums/rethus-state.enum';
 
@@ -51,6 +59,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   let doctorModel: Model<DoctorDocument>;
   let rethusVerificationModel: Model<RethusVerificationDocument>;
   let notificationModel: Model<NotificationDocument>;
+  let triageSessionModel: Model<TriageSessionDocument>;
+  let consultationModel: Model<ConsultationDocument>;
 
   const adminEmail = 'admin@example.com';
   const adminPassword = 'AdminP@ss1';
@@ -156,6 +166,41 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     errorRate: number;
     source: string;
     degraded: boolean;
+  };
+
+  type CreateTriageSessionResponseBody = {
+    sessionId: string;
+    specialty: string;
+    status: string;
+    totalQuestions: number;
+    answeredCount: number;
+    remainingQuestions: number;
+    progressPercent: number;
+    nextQuestionId: string | null;
+    isComplete: boolean;
+    questions: Array<{
+      questionId: string;
+      questionText: string;
+    }>;
+  };
+
+  type SaveTriageAnswersResponseBody = {
+    sessionId: string;
+    answersCount: number;
+    isComplete: boolean;
+    totalQuestions: number;
+    answeredCount: number;
+    remainingQuestions: number;
+    progressPercent: number;
+    nextQuestionId: string | null;
+  };
+
+  type AnalyzeTriageSessionResponseBody = {
+    sessionId: string;
+    priority: string;
+    redFlags: unknown[];
+    message: string;
+    highPriorityAlert: boolean;
   };
 
   async function login(
@@ -295,6 +340,12 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     notificationModel = app.get<Model<NotificationDocument>>(
       getModelToken(Notification.name),
     );
+    triageSessionModel = app.get<Model<TriageSessionDocument>>(
+      getModelToken(TriageSession.name),
+    );
+    consultationModel = app.get<Model<ConsultationDocument>>(
+      getModelToken(Consultation.name),
+    );
   });
 
   beforeEach(async () => {
@@ -304,6 +355,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       doctorModel.deleteMany({}),
       rethusVerificationModel.deleteMany({}),
       notificationModel.deleteMany({}),
+      triageSessionModel.deleteMany({}),
+      consultationModel.deleteMany({}),
     ]);
 
     const passwordHash = await bcrypt.hash(adminPassword, 12);
@@ -671,6 +724,460 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .get('/v1/consultations/queue')
       .set('Authorization', `Bearer ${doctorToken}`)
       .expect(403);
+  });
+
+  it('POST /v1/triage/sessions should create a triage session for patient role', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Sofia',
+      lastName: 'Mendez',
+      email: 'triage-patient@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'triage-patient@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const body = response.body as CreateTriageSessionResponseBody;
+    expect(body.sessionId).toBeDefined();
+    expect(body.specialty).toBe('GENERAL_MEDICINE');
+    expect(body.status).toBe('IN_PROGRESS');
+    expect(body.totalQuestions).toBeGreaterThan(0);
+    expect(body.answeredCount).toBe(0);
+    expect(body.progressPercent).toBe(0);
+    expect(body.isComplete).toBe(false);
+    expect(Array.isArray(body.questions)).toBe(true);
+    expect(body.questions.length).toBeGreaterThan(0);
+    expect(typeof body.questions[0]?.questionId).toBe('string');
+    expect(typeof body.questions[0]?.questionText).toBe('string');
+  });
+
+  it('POST /v1/triage/sessions should return 409 when an active session already exists', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Paula',
+      lastName: 'Rios',
+      email: 'triage-conflict@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'triage-conflict@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(409);
+  });
+
+  it('POST /v1/triage/sessions should return 400 for invalid specialty', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Nora',
+      lastName: 'Diaz',
+      email: 'triage-invalid-specialty@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'triage-invalid-specialty@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'DENTISTRY' })
+      .expect(400);
+  });
+
+  it('POST /v1/triage/sessions should return 401 without token', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(401);
+  });
+
+  it('POST /v1/triage/sessions should return 403 for non-patient roles', async () => {
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(403);
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/answers should save partial answers and return isComplete false', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Rosa',
+      lastName: 'Perez',
+      email: 'triage-answers-partial@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-answers-partial@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    const saveResponse = await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        answers: [{ questionId: 'MG-Q1', answerValue: 'dolor de cabeza' }],
+      })
+      .expect(200);
+
+    const saveBody = saveResponse.body as SaveTriageAnswersResponseBody;
+    expect(saveBody).toMatchObject({
+      sessionId: createBody.sessionId,
+      answersCount: 1,
+      isComplete: false,
+      totalQuestions: 5,
+      answeredCount: 1,
+      remainingQuestions: 4,
+      progressPercent: 20,
+      nextQuestionId: 'MG-Q2',
+    });
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/answers should return isComplete true when all questions are answered', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Marta',
+      lastName: 'Lopez',
+      email: 'triage-answers-complete@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-answers-complete@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    const saveResponse = await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        answers: [
+          { questionId: 'MG-Q1', answerValue: 'dolor de cabeza' },
+          { questionId: 'MG-Q2', answerValue: '2 dias' },
+          { questionId: 'MG-Q3', answerValue: 5 },
+          { questionId: 'MG-Q4', answerValue: 'no' },
+          { questionId: 'MG-Q5', answerValue: 'no' },
+        ],
+      })
+      .expect(200);
+
+    const saveBody = saveResponse.body as SaveTriageAnswersResponseBody;
+    expect(saveBody).toMatchObject({
+      sessionId: createBody.sessionId,
+      answersCount: 5,
+      isComplete: true,
+      totalQuestions: 5,
+      answeredCount: 5,
+      remainingQuestions: 0,
+      progressPercent: 100,
+      nextQuestionId: null,
+    });
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/answers should return 404 for non-owned session', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Nadia',
+      lastName: 'Ruiz',
+      email: 'triage-owner-a@example.com',
+      password: 'StrongP@ss1',
+    });
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Julia',
+      lastName: 'Ruiz',
+      email: 'triage-owner-b@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientAToken = await login(
+      'triage-owner-a@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+    const patientBToken = await login(
+      'triage-owner-b@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientAToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientBToken}`)
+      .send({
+        answers: [{ questionId: 'MG-Q1', answerValue: 'dolor de cabeza' }],
+      })
+      .expect(404);
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/answers should return 400 for invalid session status', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Clara',
+      lastName: 'Vega',
+      email: 'triage-invalid-status@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-invalid-status@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    await triageSessionModel
+      .updateOne(
+        { _id: new Types.ObjectId(createBody.sessionId) },
+        { $set: { status: 'COMPLETED' } },
+      )
+      .exec();
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        answers: [{ questionId: 'MG-Q1', answerValue: 'dolor de cabeza' }],
+      })
+      .expect(400);
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/answers should return 400 for invalid question ids', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Sandra',
+      lastName: 'Mora',
+      email: 'triage-invalid-question@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-invalid-question@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        answers: [{ questionId: 'INVALID-Q', answerValue: 'x' }],
+      })
+      .expect(400);
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/analyze should return 422 when session is incomplete', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Monica',
+      lastName: 'Gil',
+      email: 'triage-analyze-incomplete@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-analyze-incomplete@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'ODONTOLOGY' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/analyze`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .expect(422);
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/analyze should mark FAILED and return 503 when AI fails', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Laura',
+      lastName: 'Saenz',
+      email: 'triage-analyze-failed@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-analyze-failed@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'GENERAL_MEDICINE' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        answers: [
+          { questionId: 'MG-Q1', answerValue: 'dolor de cabeza' },
+          { questionId: 'MG-Q2', answerValue: '2 dias' },
+          { questionId: 'MG-Q3', answerValue: 5 },
+          { questionId: 'MG-Q4', answerValue: 'no' },
+          { questionId: 'MG-Q5', answerValue: 'no' },
+        ],
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/analyze`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .expect(503);
+
+    const triageSession = await triageSessionModel
+      .findById(createBody.sessionId)
+      .lean()
+      .exec();
+
+    expect(triageSession?.status).toBe('FAILED');
+
+    const consultation = await consultationModel
+      .findOne({ triageSessionId: new Types.ObjectId(createBody.sessionId) })
+      .lean()
+      .exec();
+
+    expect(consultation).toBeNull();
+  });
+
+  it('POST /v1/triage/sessions/:sessionId/analyze should complete session and create consultation', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Erika',
+      lastName: 'Nuñez',
+      email: 'triage-analyze-success@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'triage-analyze-success@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ specialty: 'ODONTOLOGY' })
+      .expect(201);
+
+    const createBody = createResponse.body as CreateTriageSessionResponseBody;
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/answers`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        answers: [
+          { questionId: 'OD-Q1', answerValue: 'muela superior derecha' },
+          { questionId: 'OD-Q2', answerValue: '3 dias' },
+          { questionId: 'OD-Q3', answerValue: 8 },
+          { questionId: 'OD-Q4', answerValue: 'si' },
+          { questionId: 'OD-Q5', answerValue: 'si' },
+        ],
+      })
+      .expect(200);
+
+    const analyzeResponse = await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${createBody.sessionId}/analyze`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .expect(200);
+
+    const analyzeBody =
+      analyzeResponse.body as AnalyzeTriageSessionResponseBody;
+
+    expect(analyzeBody).toMatchObject({
+      sessionId: createBody.sessionId,
+      priority: 'MODERATE',
+      highPriorityAlert: false,
+    });
+    expect(typeof analyzeBody.message).toBe('string');
+    expect(Array.isArray(analyzeBody.redFlags)).toBe(true);
+
+    const triageSession = await triageSessionModel
+      .findById(createBody.sessionId)
+      .lean()
+      .exec();
+
+    expect(triageSession?.status).toBe('COMPLETED');
+    expect(triageSession?.analysis?.priority).toBe('MODERATE');
+    expect(triageSession?.analysis?.analysisDurationMs).toBeGreaterThanOrEqual(
+      0,
+    );
+
+    const consultation = await consultationModel
+      .findOne({ triageSessionId: new Types.ObjectId(createBody.sessionId) })
+      .lean()
+      .exec();
+
+    expect(consultation).toMatchObject({
+      specialty: 'ODONTOLOGY',
+      priority: 'MODERATE',
+      status: 'PENDING',
+    });
   });
 
   it('GET /v1/consultations/queue should allow verified doctor', async () => {

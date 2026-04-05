@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "categories": [
+    {
+      "id": "diagnosis",
+      "label": "Lenguaje de diagnostico",
+      "patterns": [
+        "diagnostico\\s+de",
+        "padece\\s+de",
+        "tiene\\s+(una|un)\\s+[a-záéíóúñ]+",
+        "presenta\\s+cuadro\\s+de",
+        "es\\s+compatible\\s+con"
+      ]
+    },
+    {
+      "id": "prescription",
+      "label": "Lenguaje de prescripcion",
+      "patterns": [
+        "tomar\\s+[a-záéíóúñ]+",
+        "administrar",
+        "recetar",
+        "iniciar\\s+tratamiento",
+        "dosis\\s+de"
+      ]
+    },
+    {
+      "id": "clinical-assertion",
+      "label": "Afirmacion clinica",
+      "patterns": [
+        "es\\s+[a-záéíóúñ]+",
+        "sufre\\s+de",
+        "corresponde\\s+a",
+        "confirmamos\\s+que"
+      ]
+    }
+  ]
+}

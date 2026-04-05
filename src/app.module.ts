@@ -26,6 +26,7 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
+import { TriageModule } from './triage/triage.module';
 import {
   REDIS_CLIENT,
   REDIS_CONNECTION_OPTIONS,
@@ -94,6 +95,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     NotificationsModule,
     DashboardModule,
     ConsultationsModule,
+    TriageModule,
     AdminsModule,
     OutboxModule,
   ],

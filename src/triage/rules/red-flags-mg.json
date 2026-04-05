@@ -1,0 +1,105 @@
+{
+  "version": "1.0.0",
+  "specialty": "GENERAL_MEDICINE",
+  "rules": [
+    {
+      "code": "RF-MG-001",
+      "severity": "CRITICAL",
+      "evidence": "Combinacion de dolor toracico y dificultad respiratoria reportada",
+      "questionScope": ["MG-Q1", "MG-Q5"],
+      "allOf": [
+        {
+          "anyOf": [
+            "dolor\\s+torac",
+            "opresion\\s+en\\s+el\\s+pecho",
+            "dolor\\s+en\\s+el\\s+pecho"
+          ]
+        },
+        {
+          "anyOf": [
+            "dificultad\\s+para\\s+respirar",
+            "disnea",
+            "falta\\s+de\\s+aire"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "RF-MG-002",
+      "severity": "CRITICAL",
+      "evidence": "Perdida de consciencia o sincope reportado",
+      "questionScope": ["MG-Q1", "MG-Q2", "MG-Q5"],
+      "allOf": [
+        {
+          "anyOf": [
+            "perdida\\s+de\\s+consciencia",
+            "perdio\\s+la\\s+consciencia",
+            "sincope",
+            "desmayo"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "RF-MG-003",
+      "severity": "CRITICAL",
+      "evidence": "Fiebre alta con rigidez de nuca reportada",
+      "questionScope": ["MG-Q1", "MG-Q4"],
+      "allOf": [
+        {
+          "anyOf": [
+            "fiebre\\s*(de|>|mayor\\s+de)?\\s*(39|40|41|42)",
+            "39\\s*\\u00b0?c",
+            "40\\s*\\u00b0?c",
+            "fiebre\\s+alta"
+          ]
+        },
+        {
+          "anyOf": [
+            "rigidez\\s+de\\s+nuca",
+            "nuca\\s+rigida",
+            "dolor\\s+de\\s+nuca"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "RF-MG-004",
+      "severity": "CRITICAL",
+      "evidence": "Dolor abdominal intenso de inicio subito reportado",
+      "questionScope": ["MG-Q1", "MG-Q2", "MG-Q3"],
+      "allOf": [
+        {
+          "anyOf": [
+            "dolor\\s+abdominal\\s+intenso",
+            "dolor\\s+abdominal\\s+severo"
+          ]
+        },
+        {
+          "anyOf": [
+            "inicio\\s+subito",
+            "aparecio\\s+de\\s+repente",
+            "comenzo\\s+de\\s+repente"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "RF-MG-005",
+      "severity": "WARNING",
+      "evidence": "Alteraciones visuales repentinas reportadas",
+      "questionScope": ["MG-Q1", "MG-Q2"],
+      "allOf": [
+        {
+          "anyOf": [
+            "vision\\s+borrosa",
+            "perdida\\s+de\\s+vision",
+            "destellos",
+            "alteraciones\\s+visuales",
+            "no\\s+veo\\s+bien"
+          ]
+        }
+      ]
+    }
+  ]
+}
