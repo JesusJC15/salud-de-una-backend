@@ -1,5 +1,4 @@
 the markdown file and the skill saluddeuna-backlog-hu003. Create a step-by-step execution plan and implement it incrementally. Focus on one task at a time (schema → endpoints → services), validate each step, and ensure DTOs, guards, and business rules strictly match the specification.
-Rompiste la integridad del archivo markdown, hazlo en un solo bloque
 # Triage Module – Technical Specification (HU003)
 
 ## T-003-01 – Diseño del modelo TriageSession en MongoDB

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
+import type { ConnectionOptions } from 'bullmq';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
@@ -71,14 +72,15 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
       inject: [ConfigService, REDIS_CONNECTION_OPTIONS],
       useFactory: (
         configService: ConfigService,
-        connectionOptions: unknown,
+        connectionOptions: ConnectionOptions | null,
       ) => {
-        const redisUrl = configService.get<string>('redis.url');
+        const resolvedConnection: ConnectionOptions = connectionOptions ?? {
+          host: '127.0.0.1',
+          port: 6379,
+        };
 
         return {
-          connection: redisUrl
-            ? (connectionOptions as Record<string, unknown>)
-            : undefined,
+          connection: resolvedConnection,
           prefix: `${configService.get<string>('redis.keyPrefix') ?? 'salud-de-una'}:bull`,
         };
       },
