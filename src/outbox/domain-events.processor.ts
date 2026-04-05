@@ -32,7 +32,7 @@ export class DomainEventsProcessor extends WorkerHost {
     if ((job.attemptsMade ?? 0) >= (job.opts.attempts ?? 1)) {
       await this.outboxService.reschedule(
         job.data.outboxEventId,
-        Math.max(job.attemptsMade, 5),
+        job.attemptsMade,
         error.message,
       );
     }
