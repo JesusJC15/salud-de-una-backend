@@ -1,9 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
-import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
 import Redis from 'ioredis';
 import { RedisHealthService } from './redis-health.service';
 
+type ThrottlerStorageRecord = {
+  totalHits: number;
+  timeToExpire: number;
+  isBlocked: boolean;
+  timeToBlockExpire: number;
+};
 @Injectable()
 export class RedisThrottlerStorage implements ThrottlerStorage {
   private readonly logger = new Logger(RedisThrottlerStorage.name);
