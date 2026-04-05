@@ -180,7 +180,7 @@ describe('TriageService', () => {
           role: UserRole.PATIENT,
           isActive: true,
         },
-        { answers: [{ questionId: 'MG-Q1', answerValue: 'si' }] },
+        { answers: [{ questionId: 'MG-Q1', answerValue: true }] },
       ),
     ).rejects.toThrow('Sesion de triage no encontrada');
   });
@@ -205,7 +205,7 @@ describe('TriageService', () => {
           role: UserRole.PATIENT,
           isActive: true,
         },
-        { answers: [{ questionId: 'MG-Q1', answerValue: 'si' }] },
+        { answers: [{ questionId: 'MG-Q1', answerValue: true }] },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -231,7 +231,7 @@ describe('TriageService', () => {
           role: UserRole.PATIENT,
           isActive: true,
         },
-        { answers: [{ questionId: 'OD-Q9', answerValue: 'si' }] },
+        { answers: [{ questionId: 'OD-Q9', answerValue: true }] },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -266,7 +266,7 @@ describe('TriageService', () => {
         role: UserRole.PATIENT,
         isActive: true,
       },
-      { answers: [{ questionId: 'MG-Q1', answerValue: 'si' }] },
+      { answers: [{ questionId: 'MG-Q1', answerValue: true }] },
     );
 
     expect(saveMock).toHaveBeenCalled();
@@ -316,8 +316,8 @@ describe('TriageService', () => {
       },
       {
         answers: [
-          { questionId: 'MG-Q1', answerValue: 'si' },
-          { questionId: 'MG-Q2', answerValue: 'no' },
+          { questionId: 'MG-Q1', answerValue: true },
+          { questionId: 'MG-Q2', answerValue: false },
         ],
       },
     );
@@ -342,7 +342,7 @@ describe('TriageService', () => {
         patientId: new Types.ObjectId(),
         specialty: Specialty.GENERAL_MEDICINE,
         status: 'IN_PROGRESS',
-        answers: [{ questionId: 'MG-Q1', answerValue: 'si' }],
+        answers: [{ questionId: 'MG-Q1', answerValue: true }],
         save: jest.fn(),
       }),
     });

@@ -46,18 +46,15 @@ export class ConsultationsService {
     const skip = (page - 1) * limit;
 
     const items = await this.consultationModel
-      .aggregate<
-        Pick<
-          ConsultationDocument,
-          | '_id'
-          | 'patientId'
-          | 'triageSessionId'
-          | 'specialty'
-          | 'priority'
-          | 'status'
-          | 'createdAt'
-        >
-      >([
+      .aggregate<{
+        id: string;
+        patientId: string;
+        triageSessionId: string;
+        specialty: Specialty;
+        priority: TriagePriority;
+        status: string;
+        createdAt: Date | null;
+      }>([
         {
           $match: {
             status: 'PENDING',
@@ -72,7 +69,7 @@ export class ConsultationsService {
                   { case: { $eq: ['$priority', 'MODERATE'] }, then: 1 },
                   { case: { $eq: ['$priority', 'LOW'] }, then: 2 },
                 ],
-                default: 3,
+                default: 99,
               },
             },
           },
@@ -91,23 +88,21 @@ export class ConsultationsService {
         },
         {
           $project: {
+            _id: 0,
             priorityRank: 0,
+            id: { $toString: '$_id' },
+            patientId: { $toString: '$patientId' },
+            triageSessionId: { $toString: '$triageSessionId' },
+            specialty: 1,
+            priority: 1,
+            status: 1,
+            createdAt: { $ifNull: ['$createdAt', null] },
           },
         },
       ])
       .exec();
 
-    return {
-      items: items.map((consultation) => ({
-        id: consultation._id.toString(),
-        patientId: consultation.patientId.toString(),
-        triageSessionId: consultation.triageSessionId.toString(),
-        specialty: consultation.specialty,
-        priority: consultation.priority,
-        status: consultation.status,
-        createdAt: consultation.createdAt ?? null,
-      })),
-    };
+    return { items };
   }
 
   private toObjectId(value: string | Types.ObjectId): Types.ObjectId {

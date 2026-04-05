@@ -71,13 +71,13 @@ describe('TriageController', () => {
     } as unknown as RequestContext;
 
     const result = await controller.saveAnswers(request, 's1', {
-      answers: [{ questionId: 'MG-Q1', answerValue: 'si' }],
+      answers: [{ questionId: 'MG-Q1', answerValue: true }],
     });
 
     expect(service.saveAnswers).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({ userId: 'p1' }),
-      { answers: [{ questionId: 'MG-Q1', answerValue: 'si' }] },
+      { answers: [{ questionId: 'MG-Q1', answerValue: true }] },
       'corr-2',
     );
     expect(result).toEqual({
