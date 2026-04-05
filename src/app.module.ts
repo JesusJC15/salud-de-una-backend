@@ -56,7 +56,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
       ) => ({
         throttlers: [
           {
-            ttl: 60_000,
+            ttl: 60,
             limit: 20,
           },
         ],
