@@ -40,31 +40,65 @@ export class ConsultationsService {
     );
   }
 
-  async getQueue() {
+  async getQueue(options: { limit?: number; page?: number } = {}) {
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 100);
+    const page = Math.max(options.page ?? 1, 1);
+    const skip = (page - 1) * limit;
+
     const items = await this.consultationModel
-      .find({ status: 'PENDING' })
-      .lean()
+      .aggregate<
+        Pick<
+          ConsultationDocument,
+          | '_id'
+          | 'patientId'
+          | 'triageSessionId'
+          | 'specialty'
+          | 'priority'
+          | 'status'
+          | 'createdAt'
+        >
+      >([
+        {
+          $match: {
+            status: 'PENDING',
+          },
+        },
+        {
+          $addFields: {
+            priorityRank: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ['$priority', 'HIGH'] }, then: 0 },
+                  { case: { $eq: ['$priority', 'MODERATE'] }, then: 1 },
+                  { case: { $eq: ['$priority', 'LOW'] }, then: 2 },
+                ],
+                default: 3,
+              },
+            },
+          },
+        },
+        {
+          $sort: {
+            priorityRank: 1,
+            createdAt: 1,
+          },
+        },
+        {
+          $skip: skip,
+        },
+        {
+          $limit: limit,
+        },
+        {
+          $project: {
+            priorityRank: 0,
+          },
+        },
+      ])
       .exec();
 
-    const priorityRank: Record<TriagePriority, number> = {
-      HIGH: 0,
-      MODERATE: 1,
-      LOW: 2,
-    };
-
-    const orderedItems = [...items].sort((a, b) => {
-      const byPriority = priorityRank[a.priority] - priorityRank[b.priority];
-      if (byPriority !== 0) {
-        return byPriority;
-      }
-
-      const aCreatedAt = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bCreatedAt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return aCreatedAt - bCreatedAt;
-    });
-
     return {
-      items: orderedItems.map((consultation) => ({
+      items: items.map((consultation) => ({
         id: consultation._id.toString(),
         patientId: consultation.patientId.toString(),
         triageSessionId: consultation.triageSessionId.toString(),
