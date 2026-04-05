@@ -66,21 +66,23 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
         ),
       }),
     }),
-    ...(process.env.REDIS_URL
-      ? [
-          BullModule.forRootAsync({
-            imports: [RedisModule],
-            inject: [ConfigService, REDIS_CONNECTION_OPTIONS],
-            useFactory: (
-              configService: ConfigService,
-              connectionOptions: unknown,
-            ) => ({
-              connection: connectionOptions as Record<string, unknown>,
-              prefix: `${configService.get<string>('redis.keyPrefix') ?? 'salud-de-una'}:bull`,
-            }),
-          }),
-        ]
-      : []),
+    BullModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [ConfigService, REDIS_CONNECTION_OPTIONS],
+      useFactory: (
+        configService: ConfigService,
+        connectionOptions: unknown,
+      ) => {
+        const redisUrl = configService.get<string>('redis.url');
+
+        return {
+          connection: redisUrl
+            ? (connectionOptions as Record<string, unknown>)
+            : undefined,
+          prefix: `${configService.get<string>('redis.keyPrefix') ?? 'salud-de-una'}:bull`,
+        };
+      },
+    }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
