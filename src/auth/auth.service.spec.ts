@@ -9,7 +9,9 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { Admin } from '../admins/schemas/admin.schema';
+import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Patient } from '../patients/schemas/patient.schema';
 import { AuthService } from './auth.service';
@@ -24,14 +26,17 @@ jest.mock('bcrypt', () => ({
 type BaseMockModel = {
   create: jest.Mock;
   findOne: jest.Mock;
-  findById?: jest.Mock;
+};
+
+type UserMockModel = BaseMockModel & {
+  findById: jest.Mock;
 };
 
 type RefreshSessionMockModel = BaseMockModel & {
   find: jest.Mock;
   updateMany: jest.Mock;
-  updateOne?: jest.Mock;
-  findOneAndUpdate?: jest.Mock;
+  updateOne: jest.Mock;
+  findOneAndUpdate: jest.Mock;
 };
 
 function createFindOneChain(result: unknown) {
@@ -42,11 +47,54 @@ function createFindOneChain(result: unknown) {
   };
 }
 
+type InternalTokenUser = {
+  id: string;
+  email: string;
+  role: UserRole;
+};
+
+type InternalAuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  refreshSessionId: string;
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+  };
+};
+
+type RefreshSessionCreatePayload = {
+  sessionId: string;
+  userId: string;
+  email: string;
+  role: UserRole;
+  tokenHash: string;
+  expiresAt: Date;
+};
+
+type AuthServiceInternals = {
+  buildSession(
+    authUser: InternalTokenUser,
+    previousSessionId?: string,
+  ): Promise<InternalAuthSession>;
+  findAuthUserById(
+    userId: string,
+    role: UserRole,
+  ): Promise<InternalTokenUser | null>;
+  assertPersonalIdDoesNotExist(personalId: string): Promise<void>;
+  enforceActiveSessionLimit(
+    userId: string,
+    role: UserRole,
+    keepSessionId: string,
+  ): Promise<void>;
+};
+
 describe('AuthService', () => {
   let service: AuthService;
-  let patientModel: BaseMockModel;
-  let doctorModel: BaseMockModel;
-  let adminModel: BaseMockModel;
+  let patientModel: UserMockModel;
+  let doctorModel: UserMockModel;
+  let adminModel: UserMockModel;
   let refreshSessionModel: RefreshSessionMockModel;
   let jwtService: {
     signAsync: jest.Mock;
@@ -144,6 +192,10 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
   });
+
+  function getInternals(): AuthServiceInternals {
+    return service as unknown as AuthServiceInternals;
+  }
 
   it('registerPatient should create user and return safe payload', async () => {
     patientModel.findOne.mockReturnValue(createFindOneChain(null));
@@ -296,7 +348,7 @@ describe('AuthService', () => {
         lastName: 'Medina',
         email: 'doc@example.com',
         password: 'StrongP@ss1',
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         personalId: '   ',
         phoneNumber: '3001234567',
         professionalLicense: 'P-123',
@@ -319,7 +371,7 @@ describe('AuthService', () => {
         lastName: 'Medina',
         email: 'doc@example.com',
         password: 'StrongP@ss1',
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         personalId: 'CC-123',
         phoneNumber: '3001234567',
         professionalLicense: 'P-123',
@@ -342,7 +394,7 @@ describe('AuthService', () => {
         lastName: 'Medina',
         email: 'doc@example.com',
         password: 'StrongP@ss1',
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         personalId: 'CC-123',
         phoneNumber: '3001234567',
         professionalLicense: 'P-123',
@@ -363,7 +415,7 @@ describe('AuthService', () => {
         lastName: 'Medina',
         email: 'doc@example.com',
         password: 'StrongP@ss1',
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         personalId: 'CC-123',
         phoneNumber: '3001234567',
         professionalLicense: 'P-123',
@@ -471,7 +523,7 @@ describe('AuthService', () => {
         expiresAt: new Date(Date.now() - 1000),
       }),
     );
-    refreshSessionModel.updateOne?.mockReturnValue({
+    refreshSessionModel.updateOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     });
 
@@ -498,7 +550,7 @@ describe('AuthService', () => {
         expiresAt: new Date(Date.now() + 60_000),
       }),
     );
-    refreshSessionModel.findOneAndUpdate?.mockReturnValue(
+    refreshSessionModel.findOneAndUpdate.mockReturnValue(
       createFindOneChain(null),
     );
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
@@ -531,7 +583,7 @@ describe('AuthService', () => {
       }),
     );
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-    patientModel.findById?.mockReturnValue(
+    patientModel.findById.mockReturnValue(
       createFindOneChain({
         _id: 'u1',
         email: 'ana@example.com',
@@ -579,7 +631,7 @@ describe('AuthService', () => {
       tokenType: 'refresh',
       jti: 'session-1',
     });
-    refreshSessionModel.updateOne?.mockReturnValue({
+    refreshSessionModel.updateOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     });
 
@@ -617,7 +669,7 @@ describe('AuthService', () => {
       exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     });
 
-    const result = await (service as any).buildSession(
+    const result = await getInternals().buildSession(
       { id: 'u1', email: 'ana@example.com', role: UserRole.PATIENT },
       'previous-session',
     );
@@ -645,20 +697,22 @@ describe('AuthService', () => {
       exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     });
 
-    const result = await (service as any).buildSession({
+    const result = await getInternals().buildSession({
       id: 'u1',
       email: 'ana@example.com',
       role: UserRole.PATIENT,
     });
 
-    const createPayload = refreshSessionModel.create.mock.calls[0][0];
+    const [createPayload] = refreshSessionModel.create.mock.calls[0] as [
+      RefreshSessionCreatePayload,
+    ];
     expect(createPayload.expiresAt.getTime()).toBeGreaterThan(now);
     expect(result.accessToken).toBe('access-token');
     (Date.now as jest.Mock).mockRestore();
   });
 
   it('findAuthUserById should return null for inactive patient', async () => {
-    patientModel.findById?.mockReturnValue(
+    patientModel.findById.mockReturnValue(
       createFindOneChain({
         email: 'ana@example.com',
         role: UserRole.PATIENT,
@@ -666,7 +720,7 @@ describe('AuthService', () => {
       }),
     );
 
-    const result = await (service as any).findAuthUserById(
+    const result = await getInternals().findAuthUserById(
       'u1',
       UserRole.PATIENT,
     );
@@ -675,7 +729,7 @@ describe('AuthService', () => {
   });
 
   it('findAuthUserById should resolve admin user', async () => {
-    adminModel.findById?.mockReturnValue(
+    adminModel.findById.mockReturnValue(
       createFindOneChain({
         _id: 'a1',
         email: 'admin@example.com',
@@ -684,10 +738,7 @@ describe('AuthService', () => {
       }),
     );
 
-    const result = await (service as any).findAuthUserById(
-      'a1',
-      UserRole.ADMIN,
-    );
+    const result = await getInternals().findAuthUserById('a1', UserRole.ADMIN);
 
     expect(result).toEqual({
       id: 'a1',
@@ -741,7 +792,7 @@ describe('AuthService', () => {
       lastName: 'Medina',
       email: 'doc@example.com',
       role: UserRole.DOCTOR,
-      specialty: 'GENERAL_MEDICINE',
+      specialty: Specialty.GENERAL_MEDICINE,
       doctorStatus: 'PENDING',
       createdAt: new Date(),
     });
@@ -751,7 +802,7 @@ describe('AuthService', () => {
       lastName: 'Medina',
       email: 'doc@example.com',
       password: 'StrongP@ss1',
-      specialty: 'GENERAL_MEDICINE',
+      specialty: Specialty.GENERAL_MEDICINE,
       personalId: 'CC123',
       phoneNumber: '3001234567',
       professionalLicense: 'P123',
@@ -762,17 +813,18 @@ describe('AuthService', () => {
 
   it('assertPersonalIdDoesNotExist should throw on empty id', async () => {
     await expect(
-      (service as any).assertPersonalIdDoesNotExist('   '),
+      getInternals().assertPersonalIdDoesNotExist('   '),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('me should return current user payload', () => {
-    const result = service.me({
+    const user: RequestUser = {
       userId: 'u1',
       email: 'ana@example.com',
       role: UserRole.PATIENT,
       isActive: true,
-    } as any);
+    };
+    const result = service.me(user);
 
     expect(result).toEqual({
       user: {
@@ -794,10 +846,7 @@ describe('AuthService', () => {
       }),
     );
 
-    const result = await (service as any).findAuthUserById(
-      'd1',
-      UserRole.DOCTOR,
-    );
+    const result = await getInternals().findAuthUserById('d1', UserRole.DOCTOR);
 
     expect(result).toEqual({
       id: 'd1',
@@ -816,7 +865,7 @@ describe('AuthService', () => {
       }),
     );
 
-    const result = await (service as any).findAuthUserById(
+    const result = await getInternals().findAuthUserById(
       'p1',
       UserRole.PATIENT,
     );
@@ -837,7 +886,7 @@ describe('AuthService', () => {
       exec: jest.fn().mockResolvedValue([{ sessionId: 's1' }]),
     });
 
-    await (service as any).enforceActiveSessionLimit(
+    await getInternals().enforceActiveSessionLimit(
       'u1',
       UserRole.PATIENT,
       's1',
@@ -845,6 +894,4 @@ describe('AuthService', () => {
 
     expect(refreshSessionModel.updateMany).not.toHaveBeenCalled();
   });
-
-
 });

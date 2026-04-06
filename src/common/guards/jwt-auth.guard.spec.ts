@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import type { ExecutionContext } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
@@ -15,12 +16,12 @@ describe('JwtAuthGuard', () => {
     guard = module.get<JwtAuthGuard>(JwtAuthGuard);
   });
 
-  function createContext() {
+  function createContext(): ExecutionContext {
     return {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({ getRequest: () => ({}) }),
-    } as any;
+    } as unknown as ExecutionContext;
   }
 
   it('should allow public routes without calling passport', () => {
@@ -31,7 +32,9 @@ describe('JwtAuthGuard', () => {
 
   it('should delegate to passport for non-public routes', () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    const parent = Object.getPrototypeOf(JwtAuthGuard.prototype);
+    const parent = Object.getPrototypeOf(JwtAuthGuard.prototype) as {
+      canActivate: (context: ExecutionContext) => boolean;
+    };
     const spy = jest.spyOn(parent, 'canActivate').mockReturnValue(true);
 
     const result = guard.canActivate(createContext());

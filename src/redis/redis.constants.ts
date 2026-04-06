@@ -1,0 +1,2 @@
+export const REDIS_CLIENT = Symbol('REDIS_CLIENT');
+export const REDIS_CONNECTION_OPTIONS = Symbol('REDIS_CONNECTION_OPTIONS');

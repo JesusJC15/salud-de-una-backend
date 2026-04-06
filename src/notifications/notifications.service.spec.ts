@@ -5,6 +5,15 @@ import { Types } from 'mongoose';
 import { NotificationsService } from './notifications.service';
 import { Notification } from './schemas/notification.schema';
 
+type NotificationCreatePayload = Array<{
+  userId: Types.ObjectId;
+  type: string;
+  status: string;
+  message: string;
+  sourceEventId?: string;
+  read: boolean;
+}>;
+
 function createFindChain(result: unknown) {
   return {
     sort: jest.fn().mockReturnThis(),
@@ -59,8 +68,39 @@ describe('NotificationsService', () => {
       'REJECTED',
     );
 
-    const payload = notificationModel.create.mock.calls[0][0][0];
+    const [payloads] = notificationModel.create.mock.calls[0] as [
+      NotificationCreatePayload,
+    ];
+    const [payload] = payloads;
     expect(payload.message).toContain('REJECTED');
+  });
+
+  it('createDoctorStatusChange should ignore duplicate source event errors', async () => {
+    notificationModel.create.mockRejectedValue({
+      code: 11000,
+      keyPattern: { sourceEventId: 1 },
+    });
+
+    await expect(
+      service.createDoctorStatusChange(
+        new Types.ObjectId().toString(),
+        'VERIFIED',
+        'ok',
+        undefined,
+        { sourceEventId: 'event-1' },
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('createDoctorStatusChange should rethrow non-duplicate errors', async () => {
+    notificationModel.create.mockRejectedValue(new Error('db down'));
+
+    await expect(
+      service.createDoctorStatusChange(
+        new Types.ObjectId().toString(),
+        'VERIFIED',
+      ),
+    ).rejects.toThrow('db down');
   });
 
   it('getMine should return notifications with unread count', async () => {

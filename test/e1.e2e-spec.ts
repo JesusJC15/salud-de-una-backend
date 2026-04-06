@@ -25,7 +25,26 @@ import {
 import { DoctorStatus } from '../src/common/enums/doctor-status.enum';
 import { RethusState } from '../src/common/enums/rethus-state.enum';
 
+jest.mock('dotenv/config', () => ({}));
+jest.setTimeout(120_000);
+
 describe('Epic 1 HU-001/HU-002 (e2e)', () => {
+  const originalEnv = {
+    NODE_ENV: process.env.NODE_ENV,
+    MONGODB_URI: process.env.MONGODB_URI,
+    JWT_SECRET: process.env.JWT_SECRET,
+    JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN,
+    JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN,
+    ENABLE_BOOTSTRAP_ADMIN: process.env.ENABLE_BOOTSTRAP_ADMIN,
+    AI_ENABLED: process.env.AI_ENABLED,
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GEMINI_MODEL: process.env.GEMINI_MODEL,
+    REDIS_URL: process.env.REDIS_URL,
+    REDIS_KEY_PREFIX: process.env.REDIS_KEY_PREFIX,
+    OUTBOX_DISPATCH_INTERVAL_MS: process.env.OUTBOX_DISPATCH_INTERVAL_MS,
+    DOTENV_CONFIG_PATH: process.env.DOTENV_CONFIG_PATH,
+  };
   let app: INestApplication<App>;
   let mongoServer: MongoMemoryReplSet;
   let adminModel: Model<AdminDocument>;
@@ -102,6 +121,31 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     };
   };
 
+  type ReadinessResponseBody = {
+    status: 'ready' | 'not_ready';
+    checks: {
+      database: { status: 'up' | 'down' };
+      redis: { status: 'up' | 'down' | 'disabled'; degraded: boolean };
+      ai: { status: 'up' | 'degraded' | 'disabled'; degraded: boolean };
+    };
+  };
+
+  type AiHealthCheckResponseBody = {
+    provider: string;
+    model: string;
+    status: 'up' | 'down' | 'disabled';
+    degraded: boolean;
+    requestId: string;
+  };
+
+  type TechnicalDashboardResponseBody = {
+    sampleSize: number;
+    p95LatencyMs: number;
+    errorRate: number;
+    source: string;
+    degraded: boolean;
+  };
+
   async function login(
     email: string,
     password: string,
@@ -138,6 +182,35 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     return body.id;
   }
 
+  async function waitForNotificationCount(
+    userId: string,
+    expectedCount: number,
+    timeoutMs = 2_000,
+  ): Promise<void> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const count = await notificationModel
+        .countDocuments({
+          userId: new Types.ObjectId(userId),
+          type: 'DOCTOR_STATUS_CHANGE',
+        })
+        .exec();
+
+      if (count === expectedCount) {
+        return;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+    }
+
+    throw new Error(
+      `Timed out waiting for ${expectedCount} notifications for user ${userId}`,
+    );
+  }
+
   function buildRethusVerifyPayload(
     doctorStatus: DoctorStatus = DoctorStatus.VERIFIED,
   ) {
@@ -157,19 +230,25 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   }
 
   beforeAll(async () => {
-    jest
-      .spyOn(ThrottlerGuard.prototype, 'canActivate')
-      .mockImplementation(() => true);
+    jest.spyOn(ThrottlerGuard.prototype, 'canActivate').mockResolvedValue(true);
     mongoServer = await MongoMemoryReplSet.create({
       replSet: { count: 1 },
     });
 
     process.env.NODE_ENV = 'test';
+    process.env.DOTENV_CONFIG_PATH = 'test/.env.does-not-exist';
     process.env.MONGODB_URI = mongoServer.getUri();
     process.env.JWT_SECRET = 'test-secret-12345678901234567890123456789012';
     process.env.JWT_ACCESS_EXPIRES_IN = '1h';
     process.env.JWT_REFRESH_EXPIRES_IN = '7d';
     process.env.ENABLE_BOOTSTRAP_ADMIN = 'false';
+    process.env.AI_ENABLED = 'false';
+    process.env.AI_PROVIDER = 'gemini';
+    process.env.GEMINI_API_KEY = '';
+    process.env.GEMINI_MODEL = '';
+    process.env.REDIS_URL = '';
+    process.env.REDIS_KEY_PREFIX = 'salud-de-una-e2e';
+    process.env.OUTBOX_DISPATCH_INTERVAL_MS = '50';
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { AppModule } = require('../src/app.module') as {
@@ -179,7 +258,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       imports: [AppModule],
     })
       .overrideGuard(ThrottlerGuard)
-      .useValue({ canActivate: () => true })
+      .useValue({ canActivate: jest.fn().mockResolvedValue(true) })
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -204,7 +283,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     notificationModel = app.get<Model<NotificationDocument>>(
       getModelToken(Notification.name),
     );
-  });
+  }, 120_000);
 
   beforeEach(async () => {
     await Promise.all([
@@ -230,6 +309,13 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     }
     if (mongoServer) {
       await mongoServer.stop();
+    }
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = value;
+      }
     }
     jest.restoreAllMocks();
   });
@@ -412,6 +498,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .exec();
     expect(verificationCount).toBe(1);
 
+    await waitForNotificationCount(doctorId, 1);
+
     const notificationCount = await notificationModel
       .countDocuments({
         userId: new Types.ObjectId(doctorId),
@@ -442,6 +530,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send(buildRethusVerifyPayload())
       .expect(201);
+
+    await waitForNotificationCount(doctorId, 1);
 
     const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
     const response = await request(app.getHttpServer())
@@ -670,6 +760,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send(buildRethusVerifyPayload())
       .expect(201);
 
+    await waitForNotificationCount(doctorId, 1);
+
     const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
 
     const notificationsResponse = await request(app.getHttpServer())
@@ -718,6 +810,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send(buildRethusVerifyPayload())
       .expect(201);
 
+    await waitForNotificationCount(doctorId, 1);
+
     const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
 
     await request(app.getHttpServer())
@@ -751,6 +845,8 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send(buildRethusVerifyPayload())
       .expect(201);
 
+    await waitForNotificationCount(doctorId, 1);
+
     const response = await request(app.getHttpServer())
       .get('/v1/dashboard/business')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -783,11 +879,44 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
-    expect(response.body).toMatchObject({
-      sampleSize: expect.any(Number),
-      p95LatencyMs: expect.any(Number),
-      errorRate: expect.any(Number),
+    const body = response.body as TechnicalDashboardResponseBody;
+
+    expect(typeof body.sampleSize).toBe('number');
+    expect(typeof body.p95LatencyMs).toBe('number');
+    expect(typeof body.errorRate).toBe('number');
+    expect(typeof body.source).toBe('string');
+    expect(typeof body.degraded).toBe('boolean');
+  });
+
+  it('GET /v1/ready should report Redis and AI as degraded/disabled without failing readiness', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/v1/ready')
+      .expect(200);
+
+    const body = response.body as ReadinessResponseBody;
+
+    expect(body.status).toBe('ready');
+    expect(body.checks.database.status).toBe('up');
+    expect(body.checks.redis.status).toBe('disabled');
+    expect(body.checks.ai.status).toBe('disabled');
+  });
+
+  it('POST /v1/admin/ai/health-check should report disabled when AI is not configured', async () => {
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/admin/ai/health-check')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(201);
+
+    const body = response.body as AiHealthCheckResponseBody;
+
+    expect(body).toMatchObject({
+      provider: 'gemini',
+      status: 'disabled',
+      degraded: true,
     });
+    expect(typeof body.requestId).toBe('string');
   });
 
   it('POST /v1/auth/refresh should return 401 for invalid token', async () => {

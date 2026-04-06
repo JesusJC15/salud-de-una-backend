@@ -1,6 +1,6 @@
 {
     "sonarlint.connectedMode.project": {
-        "connectionId": "salud-de-una",
+        "connectionId": "salud-de-una-backend",
         "projectKey": "JesusJC15_salud-de-una-backend"
     }
 }

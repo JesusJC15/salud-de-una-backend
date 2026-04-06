@@ -43,7 +43,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
           const userId = request.user?.userId ?? 'anonymous';
           const statusCode = response.statusCode;
 
-          this.dashboardService.record({ latencyMs, statusCode });
+          void this.dashboardService.record({ latencyMs, statusCode });
           this.logger.log(
             JSON.stringify({
               timestamp: new Date().toISOString(),
@@ -67,7 +67,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
               ? error.getStatus()
               : HttpStatus.INTERNAL_SERVER_ERROR;
 
-          this.dashboardService.record({ latencyMs, statusCode });
+          void this.dashboardService.record({ latencyMs, statusCode });
           this.logger.error(
             JSON.stringify({
               timestamp: new Date().toISOString(),

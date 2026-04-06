@@ -1,5 +1,7 @@
+import aiConfig from './ai.config';
 import authConfig from './auth.config';
 import databaseConfig from './database.config';
+import redisConfig from './redis.config';
 import webConfig from './web.config';
 
 describe('config factories', () => {
@@ -37,6 +39,29 @@ describe('config factories', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017/db';
     const config = databaseConfig();
     expect(config.uri).toBe('mongodb://localhost:27017/db');
+  });
+
+  it('redisConfig should map redis values with defaults', () => {
+    process.env.REDIS_URL = 'rediss://default:secret@example.redis.cloud:6379';
+
+    const config = redisConfig();
+
+    expect(config.url).toBe('rediss://default:secret@example.redis.cloud:6379');
+    expect(config.keyPrefix).toBe('salud-de-una');
+    expect(config.outboxDispatchIntervalMs).toBe(1000);
+  });
+
+  it('aiConfig should map ai flags and defaults', () => {
+    process.env.AI_ENABLED = 'true';
+    process.env.AI_PROVIDER = 'gemini';
+    process.env.GEMINI_API_KEY = 'key';
+
+    const config = aiConfig();
+
+    expect(config.enabled).toBe(true);
+    expect(config.provider).toBe('gemini');
+    expect(config.geminiApiKey).toBe('key');
+    expect(config.model).toBe('gemini-2.5-flash');
   });
 
   it('webConfig should parse CORS origins and numeric limits', () => {

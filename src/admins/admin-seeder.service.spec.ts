@@ -1,7 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import type { Model } from 'mongoose';
 import { AdminSeederService } from './admin-seeder.service';
+import type { AdminDocument } from './schemas/admin.schema';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -36,7 +38,10 @@ describe('AdminSeederService', () => {
     configService = {
       get: jest.fn((key: string) => values[key]),
     } as unknown as ConfigService;
-    return new AdminSeederService(adminModel as any, configService);
+    return new AdminSeederService(
+      adminModel as unknown as Model<AdminDocument>,
+      configService,
+    );
   }
 
   it('should skip when bootstrap is disabled', async () => {

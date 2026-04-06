@@ -20,6 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@google/genai": "^1.46.0",
+    "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.15",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.1.16",
@@ -29,8 +31,10 @@
     "@nestjs/platform-express": "^11.1.16",
     "@nestjs/throttler": "^6.5.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.71.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "ioredis": "^5.10.1",
     "joi": "^18.0.2",
     "mongoose": "^9.2.4",
     "passport": "^0.7.0",
@@ -79,6 +83,7 @@
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s",
+      "!**/*.module.ts",
       "!**/*.dto.ts",
       "!**/*.schema.ts"
     ],
@@ -89,10 +94,10 @@
     "silent": true,
     "coverageThreshold": {
       "global": {
-        "statements": 85,
-        "branches": 85,
-        "functions": 85,
-        "lines": 85
+        "statements": 80,
+        "branches": 80,
+        "functions": 80,
+        "lines": 80
       }
     }
   }

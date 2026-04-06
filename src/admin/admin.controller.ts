@@ -23,6 +23,11 @@ export class AdminController {
     @Body() dto: RethusVerifyDto,
     @Req() req: RequestContext,
   ) {
-    return this.adminService.verifyDoctor(doctorId, dto, req.user!);
+    return this.adminService.verifyDoctor(
+      doctorId,
+      dto,
+      req.user!,
+      req.correlationId,
+    );
   }
 }

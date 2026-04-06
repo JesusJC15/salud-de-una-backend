@@ -15,7 +15,8 @@ import {
   RethusVerification,
   RethusVerificationDocument,
 } from '../doctors/schemas/rethus-verification.schema';
-import { NotificationsService } from '../notifications/notifications.service';
+import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
 import { RethusState } from '../common/enums/rethus-state.enum';
@@ -28,7 +29,8 @@ export class AdminService {
     private readonly doctorModel: Model<DoctorDocument>,
     @InjectModel(RethusVerification.name)
     private readonly rethusVerificationModel: Model<RethusVerificationDocument>,
-    private readonly notificationsService: NotificationsService,
+    private readonly outboxService: OutboxService,
+    private readonly outboxDispatcherService: OutboxDispatcherService,
   ) {}
 
   async listDoctorsForReview(query: ListDoctorsForReviewDto) {
@@ -48,7 +50,10 @@ export class AdminService {
     }
 
     if (search) {
-      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedSearch = search.replaceAll(
+        /[.*+?^${}()|[\]\\]/g,
+        String.raw`\$&`,
+      );
       const searchRegex = new RegExp(escapedSearch, 'i');
       doctorFilter.$or = [
         { firstName: searchRegex },
@@ -189,6 +194,7 @@ export class AdminService {
     doctorId: string,
     dto: RethusVerifyDto,
     actor: RequestUser,
+    correlationId?: string,
   ) {
     if (!Types.ObjectId.isValid(doctorId)) {
       throw new BadRequestException('doctorId inválido');
@@ -218,6 +224,7 @@ export class AdminService {
           doctorId,
           dto,
           actor,
+          correlationId,
           session,
         );
       });
@@ -227,6 +234,7 @@ export class AdminService {
           'Error interno al actualizar verificacion; sin cambios aplicados',
         );
       }
+      await this.outboxDispatcherService.dispatchPendingEvents();
       return response;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -244,6 +252,7 @@ export class AdminService {
     doctorId: string,
     dto: RethusVerifyDto,
     actor: RequestUser,
+    correlationId: string | undefined,
     session: ClientSession,
   ) {
     const doctor = await this.doctorModel
@@ -291,10 +300,13 @@ export class AdminService {
     doctor.rethusVerification = verification[0]._id;
     await doctor.save({ session });
 
-    await this.notificationsService.createDoctorStatusChange(
-      doctor.id,
-      doctor.doctorStatus,
-      dto.notes,
+    await this.outboxService.createDoctorVerificationChangedEvent(
+      {
+        doctorId: doctor.id,
+        doctorStatus: doctor.doctorStatus,
+        notes: dto.notes,
+      },
+      correlationId,
       session,
     );
 
