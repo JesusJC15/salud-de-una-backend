@@ -123,7 +123,7 @@ Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
 | `BOOTSTRAP_ADMIN_LAST_NAME` | No | `System` | Apellido del admin inicial. |
 | `REDIS_URL` | No | - | Conexion Redis Cloud para throttling distribuido, metricas tecnicas y outbox/BullMQ. |
 | `REDIS_KEY_PREFIX` | No | `salud-de-una` | Prefijo de llaves Redis/BullMQ. |
-| `OUTBOX_DISPATCH_INTERVAL_MS` | No | `1000` | Intervalo de polling del despachador outbox cuando no hay worker Redis disponible. |
+| `OUTBOX_DISPATCH_INTERVAL_MS` | No | `1000` | Intervalo de polling del despachador outbox; con Redis disponible encola en BullMQ y sin Redis procesa inline. |
 | `AI_ENABLED` | No | `false` | Activa la integracion AI administrativa. |
 | `AI_PROVIDER` | No | `gemini` | Proveedor AI activo. |
 | `GEMINI_API_KEY` | No | - | API key de Google AI Studio para Gemini. |
