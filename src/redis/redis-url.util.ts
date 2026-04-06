@@ -11,9 +11,8 @@ export function parseRedisUrl(
 ): ParsedRedisOptions {
   const parsedUrl = new URL(redisUrl);
   const port = parsedUrl.port ? Number(parsedUrl.port) : 6379;
-  const db = parsedUrl.pathname
-    ? Number(parsedUrl.pathname.replace('/', ''))
-    : undefined;
+  const pathname = parsedUrl.pathname.replace(/^\/+/, '');
+  const db = pathname ? Number(pathname) : undefined;
   const tls = parsedUrl.protocol === 'rediss:' ? {} : undefined;
   const baseConnection: ConnectionOptions = {
     host: parsedUrl.hostname,

@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis, { type RedisOptions } from 'ioredis';
 import { REDIS_CLIENT, REDIS_CONNECTION_OPTIONS } from './redis.constants';
+import { RedisClientLifecycleService } from './redis-client-lifecycle.service';
 import { RedisHealthService } from './redis-health.service';
 import { parseRedisUrl } from './redis-url.util';
 
@@ -39,8 +40,14 @@ import { parseRedisUrl } from './redis-url.util';
         return new Redis(redisUrl, clientOptions as RedisOptions);
       },
     },
+    RedisClientLifecycleService,
     RedisHealthService,
   ],
-  exports: [REDIS_CLIENT, REDIS_CONNECTION_OPTIONS, RedisHealthService],
+  exports: [
+    REDIS_CLIENT,
+    REDIS_CONNECTION_OPTIONS,
+    RedisClientLifecycleService,
+    RedisHealthService,
+  ],
 })
 export class RedisModule {}

@@ -26,7 +26,6 @@ import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
 import { REDIS_CLIENT } from './redis/redis.constants';
 import { RedisModule } from './redis/redis.module';
-import { RedisHealthService } from './redis/redis-health.service';
 import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
 
 @Module({
@@ -43,11 +42,8 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     RedisModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
-      inject: [RedisHealthService, REDIS_CLIENT],
-      useFactory: (
-        redisHealthService: RedisHealthService,
-        redisClient: unknown,
-      ) => ({
+      inject: [REDIS_CLIENT],
+      useFactory: (redisClient: unknown) => ({
         throttlers: [
           {
             ttl: 60_000,
@@ -55,8 +51,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
           },
         ],
         storage: new RedisThrottlerStorage(
-          redisHealthService,
-          redisClient as ConstructorParameters<typeof RedisThrottlerStorage>[1],
+          redisClient as ConstructorParameters<typeof RedisThrottlerStorage>[0],
         ),
       }),
     }),

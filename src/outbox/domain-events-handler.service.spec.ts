@@ -71,10 +71,42 @@ describe('DomainEventsHandlerService', () => {
     await expect(service.processOutboxEventById('event-2')).rejects.toThrow(
       'failed',
     );
-    expect(outboxService.reschedule).toHaveBeenCalledWith(
-      'event-2',
-      2,
-      'failed',
+    expect(outboxService.reschedule).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
+  });
+
+  it('should reject unknown event types without marking them processed', async () => {
+    outboxService.findById.mockResolvedValue({
+      id: 'event-3',
+      eventType: 'doctor.unknown.v1',
+      attempts: 1,
+      payload: {
+        doctorId: 'doctor-3',
+        doctorStatus: 'VERIFIED',
+      },
+    });
+
+    await expect(service.processOutboxEventById('event-3')).rejects.toThrow(
+      'Unhandled outbox event type: doctor.unknown.v1',
     );
+    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
+  });
+
+  it('should reject invalid payloads without marking them processed', async () => {
+    outboxService.findById.mockResolvedValue({
+      id: 'event-4',
+      eventType: 'doctor.verification.changed.v1',
+      attempts: 1,
+      payload: {
+        doctorId: 'doctor-4',
+      },
+    });
+
+    await expect(service.processOutboxEventById('event-4')).rejects.toThrow(
+      'Invalid payload for outbox event event-4',
+    );
+    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
   });
 });
