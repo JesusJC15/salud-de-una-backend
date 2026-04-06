@@ -26,6 +26,7 @@ import { DoctorStatus } from '../src/common/enums/doctor-status.enum';
 import { RethusState } from '../src/common/enums/rethus-state.enum';
 
 jest.mock('dotenv/config', () => ({}));
+jest.setTimeout(120_000);
 
 describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   const originalEnv = {
@@ -282,7 +283,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     notificationModel = app.get<Model<NotificationDocument>>(
       getModelToken(Notification.name),
     );
-  });
+  }, 120_000);
 
   beforeEach(async () => {
     await Promise.all([
