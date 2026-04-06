@@ -26,14 +26,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
       - name: Install dependencies
-        run: yarn install --ignore-scripts
+        run: npm ci --ignore-scripts
 
       - name: Test and coverage
-        run: yarn test:cov
+        run: npm run test:cov
 
       - name: E2E tests
-        run: yarn test:e2e
+        run: npm run test:e2e
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v7

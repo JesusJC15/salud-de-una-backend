@@ -18,7 +18,7 @@ describe('AppService', () => {
 
   beforeAll(() => {
     jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-03-14T12:00:00.000Z'));
+    jest.setSystemTime(new Date('2026-03-14T12:00:00.000Z').getTime());
   });
 
   afterAll(() => {
