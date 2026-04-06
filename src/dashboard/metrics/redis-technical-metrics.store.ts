@@ -1,41 +1,49 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
-import { RedisHealthService } from '../../redis/redis-health.service';
 import {
   RequestMetric,
   TechnicalMetricsSnapshot,
 } from './technical-metrics.types';
 import { TechnicalMetricsStore } from './technical-metrics.store';
 
+const REDIS_METRICS_STORE_DISABLED = 'Redis metrics store disabled';
+const REDIS_METRICS_STORE_UNAVAILABLE = 'Redis metrics store unavailable';
+
 @Injectable()
 export class RedisTechnicalMetricsStore implements TechnicalMetricsStore {
   private readonly logger = new Logger(RedisTechnicalMetricsStore.name);
   private readonly metricsKey = 'technical-metrics';
 
-  constructor(
-    private readonly redisHealthService: RedisHealthService,
-    private readonly redisClient: Redis | null,
-  ) {}
+  constructor(private readonly redisClient: Redis | null) {}
 
   async record(metric: RequestMetric): Promise<void> {
-    if (!this.redisClient || !(await this.redisHealthService.isAvailable())) {
-      throw new Error('Redis metrics store unavailable');
+    if (!this.redisClient) {
+      return;
     }
 
     const serializedMetric = JSON.stringify(metric);
-    await this.redisClient
-      .multi()
-      .lpush(this.metricsKey, serializedMetric)
-      .ltrim(this.metricsKey, 0, 999)
-      .exec();
+    try {
+      await this.redisClient
+        .multi()
+        .lpush(this.metricsKey, serializedMetric)
+        .ltrim(this.metricsKey, 0, 999)
+        .exec();
+    } catch (error: unknown) {
+      throw this.normalizeRedisError(error);
+    }
   }
 
   async getSummary(): Promise<TechnicalMetricsSnapshot> {
-    if (!this.redisClient || !(await this.redisHealthService.isAvailable())) {
-      throw new Error('Redis metrics store unavailable');
+    if (!this.redisClient) {
+      throw new Error(REDIS_METRICS_STORE_DISABLED);
     }
 
-    const rawMetrics = await this.redisClient.lrange(this.metricsKey, 0, 999);
+    let rawMetrics: string[];
+    try {
+      rawMetrics = await this.redisClient.lrange(this.metricsKey, 0, 999);
+    } catch (error: unknown) {
+      throw this.normalizeRedisError(error);
+    }
     const metrics = rawMetrics.flatMap((value) => {
       try {
         return [JSON.parse(value) as RequestMetric];
@@ -68,5 +76,18 @@ export class RedisTechnicalMetricsStore implements TechnicalMetricsStore {
       source: 'redis',
       degraded: false,
     };
+  }
+
+  private normalizeRedisError(error: unknown): Error {
+    if (!this.redisClient) {
+      return new Error(REDIS_METRICS_STORE_DISABLED);
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    if (this.redisClient.status === 'end') {
+      return new Error(REDIS_METRICS_STORE_UNAVAILABLE);
+    }
+
+    return new Error(message);
   }
 }
