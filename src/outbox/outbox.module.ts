@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Queue } from 'bullmq';
+import { ConnectionOptions, Queue } from 'bullmq';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { REDIS_CONNECTION_OPTIONS } from '../redis/redis.constants';
 import {
   DOMAIN_EVENTS_QUEUE,
   DOMAIN_EVENTS_QUEUE_NAME,
@@ -14,34 +14,31 @@ import { OutboxDispatcherService } from './outbox-dispatcher.service';
 import { OutboxService } from './outbox.service';
 import { OutboxEvent, OutboxEventSchema } from './schemas/outbox-event.schema';
 
-const bullQueueImports = process.env.REDIS_URL
-  ? [
-      BullModule.registerQueueAsync({
-        name: DOMAIN_EVENTS_QUEUE_NAME,
-        inject: [ConfigService],
-        useFactory: (configService: ConfigService) => ({
-          name: DOMAIN_EVENTS_QUEUE_NAME,
-          prefix: `${configService.get<string>('redis.keyPrefix') ?? 'salud-de-una'}:bull`,
-        }),
-      }),
-    ]
-  : [];
-
 @Module({
   imports: [
     NotificationsModule,
     MongooseModule.forFeature([
       { name: OutboxEvent.name, schema: OutboxEventSchema },
     ]),
-    ...bullQueueImports,
   ],
   providers: [
     {
       provide: DOMAIN_EVENTS_QUEUE,
-      useFactory: (queue?: Queue) => queue ?? null,
-      inject: process.env.REDIS_URL
-        ? [getQueueToken(DOMAIN_EVENTS_QUEUE_NAME)]
-        : [],
+      useFactory: (
+        configService: ConfigService,
+        connectionOptions: ConnectionOptions | null,
+      ): Queue | null => {
+        const redisUrl = configService.get<string>('redis.url');
+        if (!redisUrl || !connectionOptions) {
+          return null;
+        }
+
+        return new Queue(DOMAIN_EVENTS_QUEUE_NAME, {
+          connection: connectionOptions,
+          prefix: `${configService.get<string>('redis.keyPrefix') ?? 'salud-de-una'}:bull`,
+        });
+      },
+      inject: [ConfigService, REDIS_CONNECTION_OPTIONS],
     },
     OutboxService,
     DomainEventsHandlerService,

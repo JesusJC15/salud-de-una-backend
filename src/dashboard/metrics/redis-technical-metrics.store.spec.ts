@@ -27,11 +27,8 @@ describe('RedisTechnicalMetricsStore', () => {
 
     await expect(
       store.record({
-        method: 'GET',
-        path: '/health',
         statusCode: 200,
         latencyMs: 12,
-        timestamp: new Date().toISOString(),
       }),
     ).rejects.toThrow('Redis metrics store unavailable');
   });
@@ -50,11 +47,8 @@ describe('RedisTechnicalMetricsStore', () => {
     );
 
     await store.record({
-      method: 'GET',
-      path: '/health',
       statusCode: 200,
       latencyMs: 12,
-      timestamp: new Date().toISOString(),
     });
 
     expect(redisClient.multi).toHaveBeenCalled();
@@ -67,19 +61,13 @@ describe('RedisTechnicalMetricsStore', () => {
     redisHealthService.isAvailable.mockResolvedValue(true);
     redisClient.lrange.mockResolvedValue([
       JSON.stringify({
-        method: 'GET',
-        path: '/a',
         statusCode: 200,
         latencyMs: 20,
-        timestamp: new Date().toISOString(),
       }),
       'invalid-json',
       JSON.stringify({
-        method: 'GET',
-        path: '/b',
         statusCode: 503,
         latencyMs: 120,
-        timestamp: new Date().toISOString(),
       }),
     ]);
 

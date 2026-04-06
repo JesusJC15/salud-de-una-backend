@@ -36,10 +36,12 @@ export class OutboxDispatcherService
     }, intervalMs);
   }
 
-  onApplicationShutdown(): void {
+  async onApplicationShutdown(): Promise<void> {
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
     }
+
+    await this.domainEventsQueue?.close();
   }
 
   async dispatchPendingEvents(limit = 20): Promise<void> {

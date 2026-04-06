@@ -1,12 +1,25 @@
 import type { Job } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
 import { DomainEventsProcessor } from './domain-events.processor';
 
 describe('DomainEventsProcessor', () => {
+  let configService: { get: jest.Mock };
   let domainEventsHandler: { processOutboxEventById: jest.Mock };
   let outboxService: { reschedule: jest.Mock };
   let processor: DomainEventsProcessor;
 
   beforeEach(() => {
+    configService = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === 'redis.url') {
+          return undefined;
+        }
+        if (key === 'redis.keyPrefix') {
+          return 'salud-de-una';
+        }
+        return undefined;
+      }),
+    };
     domainEventsHandler = {
       processOutboxEventById: jest.fn().mockResolvedValue(undefined),
     };
@@ -14,6 +27,8 @@ describe('DomainEventsProcessor', () => {
       reschedule: jest.fn().mockResolvedValue(undefined),
     };
     processor = new DomainEventsProcessor(
+      configService as unknown as ConfigService,
+      null,
       domainEventsHandler as never,
       outboxService as never,
     );
