@@ -63,6 +63,12 @@ Registro, login, refresh, logout y sesion JWT.
 { "accessToken": "<jwt>", "refreshToken": "<jwt>" }
 ```
 
+Notas de contrato relacionadas:
+
+- `PUT /v1/patients/me` permite cambiar `email` y/o contrasena del paciente autenticado.
+- Si el paciente cambia la contrasena, `auth` revoca todas sus refresh sessions activas con `revokedReason = password_changed`.
+- Si solo cambia el correo, las refresh sessions existentes permanecen activas.
+
 ## Errores comunes y mitigacion
 
 - Cambiar contrato sin actualizar README y pruebas.
