@@ -108,12 +108,7 @@ export class PatientsService {
             }
 
             if (wantsPasswordChange) {
-              const samePassword = await bcrypt.compare(
-                dto.newPassword!,
-                patientWithPassword.passwordHash,
-              );
-
-              if (samePassword) {
+              if (dto.newPassword === dto.currentPassword) {
                 throw new BadRequestException(
                   'La nueva contraseña debe ser diferente a la actual',
                 );
