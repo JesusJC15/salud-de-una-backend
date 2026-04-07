@@ -350,9 +350,18 @@ Body de update (opcional):
   "firstName": "Laura",
   "lastName": "Suarez",
   "birthDate": "1998-03-10",
-  "gender": "FEMALE"
+  "gender": "FEMALE",
+  "email": "laura@example.com",
+  "currentPassword": "ActualP@ss1",
+  "newPassword": "NuevaP@ss2"
 }
 ```
+
+Notas:
+
+- `currentPassword` es obligatoria cuando el cambio real incluye `email` o `newPassword`.
+- Cambiar `email` no revoca las refresh sessions activas.
+- Cambiar `newPassword` revoca todas las refresh sessions activas del paciente.
 
 ### 6) Bandeja admin de doctores
 
