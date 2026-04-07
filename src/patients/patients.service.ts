@@ -59,12 +59,10 @@ export class PatientsService {
           }
 
           const normalizedEmail =
-            dto.email !== undefined
-              ? this.normalizeEmail(dto.email)
-              : undefined;
+            dto.email != null ? this.normalizeEmail(dto.email) : undefined;
           const wantsEmailChange =
             normalizedEmail !== undefined && normalizedEmail !== patient.email;
-          const wantsPasswordChange = dto.newPassword !== undefined;
+          const wantsPasswordChange = dto.newPassword != null;
           const hasSensitiveChange = wantsEmailChange || wantsPasswordChange;
 
           if (wantsPasswordChange && !dto.currentPassword) {
