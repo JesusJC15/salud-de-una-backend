@@ -661,6 +661,27 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(400);
   });
 
+  it('PUT /v1/patients/me should return 400 when email is null', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-null-email@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'patient-null-email@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ email: null })
+      .expect(400);
+  });
+
   it('PUT /v1/patients/me should change email with current password and keep refresh session usable', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Lina',

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -50,7 +51,6 @@ export class PatientsService {
         await session.withTransaction(async () => {
           const patient = await this.patientModel
             .findById(user.userId)
-            .select('+passwordHash')
             .session(session)
             .exec();
 
@@ -86,9 +86,19 @@ export class PatientsService {
           }
 
           if (hasSensitiveChange) {
+            const patientWithPassword = await this.patientModel
+              .findById(user.userId)
+              .select('+passwordHash')
+              .session(session)
+              .exec();
+
+            if (!patientWithPassword) {
+              throw new NotFoundException('Paciente no encontrado');
+            }
+
             const currentPasswordMatches = await bcrypt.compare(
               dto.currentPassword!,
-              patient.passwordHash,
+              patientWithPassword.passwordHash,
             );
 
             if (!currentPasswordMatches) {
@@ -100,7 +110,7 @@ export class PatientsService {
             if (wantsPasswordChange) {
               const samePassword = await bcrypt.compare(
                 dto.newPassword!,
-                patient.passwordHash,
+                patientWithPassword.passwordHash,
               );
 
               if (samePassword) {
@@ -112,8 +122,9 @@ export class PatientsService {
           }
 
           if (wantsEmailChange) {
-            await this.authService.ensureEmailIsAvailable(normalizedEmail);
-            patient.email = normalizedEmail!;
+            const emailToUpdate = normalizedEmail;
+            await this.authService.ensureEmailIsAvailable(emailToUpdate);
+            patient.email = emailToUpdate;
           }
 
           if (dto.firstName !== undefined) {
@@ -175,8 +186,16 @@ export class PatientsService {
     createdAt?: Date;
     updatedAt?: Date;
   }) {
+    const patientId = patient.id ?? patient._id?.toString();
+
+    if (!patientId) {
+      throw new InternalServerErrorException(
+        'No fue posible construir el perfil del paciente',
+      );
+    }
+
     return {
-      id: patient.id ?? patient._id?.toString() ?? '',
+      id: patientId,
       firstName: patient.firstName,
       lastName: patient.lastName,
       email: patient.email,

@@ -66,6 +66,9 @@ describe('PatientsService', () => {
   };
 
   beforeEach(async () => {
+    (bcrypt.compare as jest.Mock).mockReset();
+    (bcrypt.hash as jest.Mock).mockReset();
+
     patientModel = {
       findById: jest.fn(),
     };
