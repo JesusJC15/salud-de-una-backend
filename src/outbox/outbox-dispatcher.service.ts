@@ -32,14 +32,19 @@ export class OutboxDispatcherService
       this.configService.get<number>('redis.outboxDispatchIntervalMs') ?? 1_000;
 
     this.intervalHandle = setInterval(() => {
-      void this.dispatchPendingEvents();
+      void this.dispatchPendingEvents().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Outbox dispatch loop failed: ${message}`);
+      });
     }, intervalMs);
   }
 
-  onApplicationShutdown(): void {
+  async onApplicationShutdown(): Promise<void> {
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
     }
+
+    await this.domainEventsQueue?.close();
   }
 
   async dispatchPendingEvents(limit = 20): Promise<void> {

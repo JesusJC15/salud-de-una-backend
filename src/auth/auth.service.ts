@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
 import type { StringValue } from 'ms';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { Admin, AdminDocument } from '../admins/schemas/admin.schema';
 import { UserRole } from '../common/enums/user-role.enum';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
@@ -64,7 +64,7 @@ export class AuthService {
   ) {}
 
   async registerPatient(dto: RegisterPatientDto) {
-    await this.assertEmailDoesNotExist(dto.email);
+    await this.ensureEmailIsAvailable(dto.email);
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const patient = await this.patientModel.create({
@@ -87,7 +87,7 @@ export class AuthService {
   }
 
   async registerDoctor(dto: RegisterDoctorDto) {
-    await this.assertEmailDoesNotExist(dto.email);
+    await this.ensureEmailIsAvailable(dto.email);
 
     if (!dto.personalId || !dto.personalId.trim()) {
       throw new BadRequestException('personalId must not be empty');
@@ -214,6 +214,34 @@ export class AuthService {
         isActive: user.isActive,
       },
     };
+  }
+
+  async ensureEmailIsAvailable(email: string): Promise<void> {
+    await this.assertEmailDoesNotExist(email);
+  }
+
+  async revokeAllRefreshSessionsForUser(
+    userId: string,
+    role: UserRole,
+    reason: string,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.refreshSessionModel
+      .updateMany(
+        {
+          userId,
+          role,
+          revokedAt: { $exists: false },
+        },
+        {
+          $set: {
+            revokedAt: new Date(),
+            revokedReason: reason,
+          },
+        },
+        session ? { session } : undefined,
+      )
+      .exec();
   }
 
   private async buildSession(

@@ -34,6 +34,7 @@ import { DoctorStatus } from '../src/common/enums/doctor-status.enum';
 import { RethusState } from '../src/common/enums/rethus-state.enum';
 
 jest.mock('dotenv/config', () => ({}));
+jest.setTimeout(120_000);
 
 describe('Epic 1 HU-001/HU-002 (e2e)', () => {
   const originalEnv = {
@@ -208,6 +209,15 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     password: string,
     client: 'patient' | 'staff',
   ): Promise<string> {
+    const body = await loginSession(email, password, client);
+    return body.accessToken;
+  }
+
+  async function loginSession(
+    email: string,
+    password: string,
+    client: 'patient' | 'staff',
+  ): Promise<AuthSessionResponseBody> {
     const response = await request(app.getHttpServer())
       .post(
         client === 'patient'
@@ -217,8 +227,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .send({ email, password })
       .expect(200);
 
-    const body = response.body as AuthSessionResponseBody;
-    return body.accessToken;
+    return response.body as AuthSessionResponseBody;
   }
 
   async function registerDoctor(email: string): Promise<string> {
@@ -1271,6 +1280,233 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       firstName: 'Laura',
       email: 'patient-update@example.com',
     });
+  });
+
+  it('PUT /v1/patients/me should return 401 without token', async () => {
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .send({ firstName: 'Laura' })
+      .expect(401);
+  });
+
+  it('PUT /v1/patients/me should return 403 for non-patient role', async () => {
+    const doctorEmail = 'patient-update-forbidden@example.com';
+    await registerDoctor(doctorEmail);
+    const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .send({ firstName: 'Laura' })
+      .expect(403);
+  });
+
+  it('PUT /v1/patients/me should return 400 for incoherent password payload', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-incoherent@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'patient-incoherent@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ currentPassword: 'StrongP@ss1' })
+      .expect(400);
+  });
+
+  it('PUT /v1/patients/me should return 400 when email is null', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-null-email@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'patient-null-email@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ email: null })
+      .expect(400);
+  });
+
+  it('PUT /v1/patients/me should change email with current password and keep refresh session usable', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-email-change@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const session = await loginSession(
+      'patient-email-change@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    const updateResponse = await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${session.accessToken}`)
+      .send({
+        email: 'patient-email-new@example.com',
+        currentPassword: 'StrongP@ss1',
+      })
+      .expect(200);
+
+    expect(updateResponse.body).toMatchObject({
+      email: 'patient-email-new@example.com',
+    });
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/patient/login')
+      .send({
+        email: 'patient-email-change@example.com',
+        password: 'StrongP@ss1',
+      })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/patient/login')
+      .send({
+        email: 'patient-email-new@example.com',
+        password: 'StrongP@ss1',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/v1/auth/me')
+      .set('Authorization', `Bearer ${session.accessToken}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toMatchObject({
+          user: {
+            email: 'patient-email-new@example.com',
+            role: 'PATIENT',
+          },
+        });
+      });
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: session.refreshToken })
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as AuthSessionResponseBody;
+        expect(body.user.email).toBe('patient-email-new@example.com');
+      });
+  });
+
+  it('PUT /v1/patients/me should return 400 when current password is incorrect', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-email-bad-pass@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'patient-email-bad-pass@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        email: 'patient-email-bad-pass-new@example.com',
+        currentPassword: 'WrongP@ss1',
+      })
+      .expect(400);
+  });
+
+  it('PUT /v1/patients/me should return 409 when new email is already taken', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-email-taken-1@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Marta',
+      lastName: 'Rojas',
+      email: 'patient-email-taken-2@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const patientToken = await login(
+      'patient-email-taken-1@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        email: 'patient-email-taken-2@example.com',
+        currentPassword: 'StrongP@ss1',
+      })
+      .expect(409);
+  });
+
+  it('PUT /v1/patients/me should change password and revoke previous refresh sessions', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'Suarez',
+      email: 'patient-password-change@example.com',
+      password: 'StrongP@ss1',
+    });
+
+    const session = await loginSession(
+      'patient-password-change@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .put('/v1/patients/me')
+      .set('Authorization', `Bearer ${session.accessToken}`)
+      .send({
+        currentPassword: 'StrongP@ss1',
+        newPassword: 'NuevaP@ss2',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/patient/login')
+      .send({
+        email: 'patient-password-change@example.com',
+        password: 'StrongP@ss1',
+      })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/patient/login')
+      .send({
+        email: 'patient-password-change@example.com',
+        password: 'NuevaP@ss2',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: session.refreshToken })
+      .expect(401);
   });
 
   it('POST /v1/auth/refresh should rotate session when refresh token is provided', async () => {

@@ -41,8 +41,8 @@ export async function waitForDatabaseConnection(
     `Waiting for MongoDB connection. Current readyState: ${readyState} (${describeReadyState(readyState)})`,
   );
 
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(
         () =>
@@ -66,6 +66,10 @@ export async function waitForDatabaseConnection(
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`Failed to establish MongoDB connection: ${message}`);
     process.exit(1);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 }
 

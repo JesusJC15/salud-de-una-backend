@@ -49,9 +49,24 @@ Perfil del paciente y actualizacion de datos permitidos.
 ## Ejemplos de codigo/payload
 
 ```ts
-// ejemplo minimo de referencia
-export class Example {}
+// PUT /v1/patients/me
+{
+  "firstName": "Laura",
+  "lastName": "Suarez",
+  "birthDate": "1998-03-10",
+  "gender": "FEMALE",
+  "email": "laura@example.com",
+  "currentPassword": "ActualP@ss1",
+  "newPassword": "NuevaP@ss2"
+}
 ```
+
+Notas de contrato:
+
+- `email` es editable solo para `PATIENT`.
+- `currentPassword` es obligatoria cuando se cambia `email` o `newPassword`.
+- Cambio de correo: mantiene refresh sessions activas.
+- Cambio de contrasena: revoca refresh sessions activas con `revokedReason = password_changed`.
 
 ## Errores comunes y mitigacion
 

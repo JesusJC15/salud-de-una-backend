@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { InMemoryTechnicalMetricsStore } from './in-memory-technical-metrics.store';
 import { RedisTechnicalMetricsStore } from './redis-technical-metrics.store';
 import { TechnicalMetricsService } from './technical-metrics.service';
@@ -28,6 +29,10 @@ describe('TechnicalMetricsService', () => {
     service = module.get<TechnicalMetricsService>(TechnicalMetricsService);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should use Redis store when available', async () => {
     redisStore.getSummary.mockResolvedValue({
       sampleSize: 1,
@@ -52,6 +57,9 @@ describe('TechnicalMetricsService', () => {
   it('should fall back to memory when Redis fails', async () => {
     redisStore.record.mockRejectedValue(new Error('redis down'));
     redisStore.getSummary.mockRejectedValue(new Error('redis down'));
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     inMemoryStore.getSummary.mockResolvedValue({
       sampleSize: 1,
       p95LatencyMs: 90,
@@ -72,5 +80,37 @@ describe('TechnicalMetricsService', () => {
       source: 'memory',
       degraded: true,
     });
+    expect(loggerSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('should not warn when Redis metrics store is intentionally disabled', async () => {
+    redisStore.record.mockRejectedValue(new Error('Redis metrics store disabled'));
+    redisStore.getSummary.mockRejectedValue(
+      new Error('Redis metrics store disabled'),
+    );
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    inMemoryStore.getSummary.mockResolvedValue({
+      sampleSize: 0,
+      p95LatencyMs: 0,
+      errorRate: 0,
+      timestamp: '2026-03-14T12:00:00.000Z',
+      source: 'memory',
+      degraded: false,
+    });
+
+    await service.record({ latencyMs: 12, statusCode: 200 });
+    const result = await service.getSummary();
+
+    expect(inMemoryStore.record).toHaveBeenCalledWith({
+      latencyMs: 12,
+      statusCode: 200,
+    });
+    expect(result).toMatchObject({
+      source: 'memory',
+      degraded: true,
+    });
+    expect(loggerSpy).not.toHaveBeenCalled();
   });
 });

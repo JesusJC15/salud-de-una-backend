@@ -1,12 +1,55 @@
+jest.mock('bullmq', () => {
+  class WorkerMock {
+    static instances: WorkerMock[] = [];
+    public readonly on = jest.fn();
+    public readonly close = jest.fn().mockResolvedValue(undefined);
+
+    constructor(
+      public readonly name: string,
+      public readonly processor: unknown,
+      public readonly options: unknown,
+    ) {
+      WorkerMock.instances.push(this);
+    }
+  }
+
+  return {
+    Worker: WorkerMock,
+  };
+});
+
 import type { Job } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
 import { DomainEventsProcessor } from './domain-events.processor';
 
 describe('DomainEventsProcessor', () => {
+  let configService: { get: jest.Mock };
   let domainEventsHandler: { processOutboxEventById: jest.Mock };
   let outboxService: { reschedule: jest.Mock };
   let processor: DomainEventsProcessor;
+  let WorkerMock: {
+    instances: Array<{
+      on: jest.Mock;
+      close: jest.Mock;
+      name: string;
+      options: unknown;
+    }>;
+  };
 
   beforeEach(() => {
+    WorkerMock = jest.requireMock('bullmq').Worker as typeof WorkerMock;
+    WorkerMock.instances.length = 0;
+    configService = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === 'redis.url') {
+          return undefined;
+        }
+        if (key === 'redis.keyPrefix') {
+          return 'salud-de-una';
+        }
+        return undefined;
+      }),
+    };
     domainEventsHandler = {
       processOutboxEventById: jest.fn().mockResolvedValue(undefined),
     };
@@ -14,6 +57,8 @@ describe('DomainEventsProcessor', () => {
       reschedule: jest.fn().mockResolvedValue(undefined),
     };
     processor = new DomainEventsProcessor(
+      configService as unknown as ConfigService,
+      null,
       domainEventsHandler as never,
       outboxService as never,
     );
@@ -29,6 +74,46 @@ describe('DomainEventsProcessor', () => {
     );
   });
 
+  it('should not start worker when redis is disabled', () => {
+    processor.onApplicationBootstrap();
+
+    expect(WorkerMock.instances).toHaveLength(0);
+  });
+
+  it('should start worker when redis is configured and close it on shutdown', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'redis.url') {
+        return 'redis://localhost:6379';
+      }
+      if (key === 'redis.keyPrefix') {
+        return 'salud-de-una';
+      }
+      return undefined;
+    });
+    processor = new DomainEventsProcessor(
+      configService as unknown as ConfigService,
+      { host: 'localhost', port: 6379 } as never,
+      domainEventsHandler as never,
+      outboxService as never,
+    );
+
+    processor.onApplicationBootstrap();
+
+    expect(WorkerMock.instances).toHaveLength(1);
+    expect(WorkerMock.instances[0].name).toBe('domain-events');
+    expect(WorkerMock.instances[0].options).toMatchObject({
+      connection: { host: 'localhost', port: 6379 },
+      prefix: 'salud-de-una:bull',
+    });
+    expect(WorkerMock.instances[0].on).toHaveBeenCalledWith(
+      'failed',
+      expect.any(Function),
+    );
+
+    await processor.onApplicationShutdown();
+    expect(WorkerMock.instances[0].close).toHaveBeenCalled();
+  });
+
   it('should reschedule after final failed attempt', async () => {
     await processor.onFailed(
       {
@@ -41,6 +126,20 @@ describe('DomainEventsProcessor', () => {
     );
 
     expect(outboxService.reschedule).toHaveBeenCalledWith('event-2', 5, 'boom');
+  });
+
+  it('should not reschedule before the final failed attempt', async () => {
+    await processor.onFailed(
+      {
+        id: 'job-2',
+        data: { outboxEventId: 'event-3' },
+        attemptsMade: 1,
+        opts: { attempts: 5 },
+      } as Job<{ outboxEventId: string }>,
+      new Error('retry later'),
+    );
+
+    expect(outboxService.reschedule).not.toHaveBeenCalled();
   });
 
   it('should ignore empty failed job payload', async () => {

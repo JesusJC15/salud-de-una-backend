@@ -641,6 +641,62 @@ describe('AuthService', () => {
     expect(refreshSessionModel.updateOne).toHaveBeenCalled();
   });
 
+  it('ensureEmailIsAvailable should throw when email exists in another role', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain({ _id: 'd1' }));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.ensureEmailIsAvailable('doc@example.com'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('revokeAllRefreshSessionsForUser should revoke only active sessions and accept session', async () => {
+    const dbSession: { id: string } = { id: 'mongo-session' };
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 2 }),
+    });
+
+    await expect(
+      service.revokeAllRefreshSessionsForUser(
+        'u1',
+        UserRole.PATIENT,
+        'password_changed',
+        dbSession as never,
+      ),
+    ).resolves.toBeUndefined();
+
+    const [filter, update, options] = refreshSessionModel.updateMany.mock
+      .calls[0] as [
+      { userId: string; role: UserRole; revokedAt: { $exists: boolean } },
+      { $set: { revokedAt: Date; revokedReason: string } },
+      { session: { id: string } },
+    ];
+
+    expect(filter).toEqual({
+      userId: 'u1',
+      role: UserRole.PATIENT,
+      revokedAt: { $exists: false },
+    });
+    expect(update.$set.revokedReason).toBe('password_changed');
+    expect(update.$set.revokedAt).toBeInstanceOf(Date);
+    expect(options).toEqual({ session: dbSession });
+  });
+
+  it('revokeAllRefreshSessionsForUser should not fail when there are no active sessions', async () => {
+    refreshSessionModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+    });
+
+    await expect(
+      service.revokeAllRefreshSessionsForUser(
+        'u1',
+        UserRole.PATIENT,
+        'password_changed',
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('buildSession should revoke previous session and enforce session limit', async () => {
     configService.get.mockImplementation((key: string) => {
       if (key === 'web.refreshMaxActiveSessions') return 1;

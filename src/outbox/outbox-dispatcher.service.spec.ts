@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OutboxDispatcherService } from './outbox-dispatcher.service';
 
@@ -49,6 +50,24 @@ describe('OutboxDispatcherService', () => {
     service.onApplicationShutdown();
 
     expect(dispatchSpy).toHaveBeenCalled();
+  });
+
+  it('should catch and log interval dispatch failures', async () => {
+    const service = createService();
+    jest
+      .spyOn(service, 'dispatchPendingEvents')
+      .mockRejectedValue(new Error('claim failed'));
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    service.onApplicationBootstrap();
+    jest.advanceTimersByTime(10);
+    await Promise.resolve();
+
+    expect(loggerSpy).toHaveBeenCalledWith(
+      'Outbox dispatch loop failed: claim failed',
+    );
   });
 
   it('should process events directly when queue is unavailable', async () => {

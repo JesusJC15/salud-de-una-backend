@@ -1,40 +1,40 @@
-import { RedisHealthService } from './redis-health.service';
 import { RedisThrottlerStorage } from './redis-throttler.storage';
 
 describe('RedisThrottlerStorage', () => {
   const redisClient = {
-    incr: jest.fn(),
-    pttl: jest.fn(),
-    pexpire: jest.fn(),
-    set: jest.fn(),
-  };
-  const redisHealthService = {
-    isAvailable: jest.fn(),
+    eval: jest.fn(),
+    status: 'ready',
   };
 
   let storage: RedisThrottlerStorage;
 
   beforeEach(() => {
+    jest.useFakeTimers();
     jest.clearAllMocks();
-    storage = new RedisThrottlerStorage(
-      redisHealthService as unknown as RedisHealthService,
-      redisClient as never,
-    );
+    redisClient.status = 'ready';
+    storage = new RedisThrottlerStorage(redisClient as never);
+  });
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 
   it('should use Redis when available', async () => {
-    redisHealthService.isAvailable.mockResolvedValue(true);
-    redisClient.incr.mockResolvedValue(1);
-    redisClient.pttl
-      .mockResolvedValueOnce(-1)
-      .mockResolvedValueOnce(-1)
-      .mockResolvedValueOnce(59000);
-    redisClient.pexpire.mockResolvedValue(1);
+    redisClient.eval.mockResolvedValue([1, 59000, 0, 0]);
 
     const result = await storage.increment('key', 60000, 20, 30000, 'default');
 
-    expect(redisClient.incr).toHaveBeenCalled();
-    expect(redisClient.pexpire).toHaveBeenCalled();
+    expect(redisClient.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('INCR', hitsKey)"),
+      2,
+      'throttle:default:key:hits',
+      'throttle:default:key:block',
+      60000,
+      20,
+      30000,
+    );
     expect(result).toMatchObject({
       totalHits: 1,
       isBlocked: false,
@@ -42,27 +42,35 @@ describe('RedisThrottlerStorage', () => {
   });
 
   it('should block when limit is exceeded', async () => {
-    redisHealthService.isAvailable.mockResolvedValue(true);
-    redisClient.incr.mockResolvedValue(21);
-    redisClient.pttl
-      .mockResolvedValueOnce(59000)
-      .mockResolvedValueOnce(-1)
-      .mockResolvedValueOnce(59000);
-    redisClient.set.mockResolvedValue('OK');
+    redisClient.eval.mockResolvedValue([21, 59000, 1, 30000]);
 
     const result = await storage.increment('key', 60000, 20, 30000, 'default');
 
-    expect(redisClient.set).toHaveBeenCalledWith(
-      'throttle:default:key:block',
-      '1',
-      'PX',
-      30000,
-    );
     expect(result.isBlocked).toBe(true);
+    expect(result.timeToBlockExpire).toBe(30000);
   });
 
   it('should fall back when Redis is unavailable', async () => {
-    redisHealthService.isAvailable.mockResolvedValue(false);
+    storage = new RedisThrottlerStorage(null);
+
+    const result = await storage.increment('key', 60000, 20, 30000, 'default');
+
+    expect(result.totalHits).toBe(1);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('should fall back when Redis client has ended', async () => {
+    redisClient.status = 'end';
+
+    const result = await storage.increment('key', 60000, 20, 30000, 'default');
+
+    expect(redisClient.eval).not.toHaveBeenCalled();
+    expect(result.totalHits).toBe(1);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('should fall back when Redis script fails', async () => {
+    redisClient.eval.mockRejectedValue(new Error('boom'));
 
     const result = await storage.increment('key', 60000, 20, 30000, 'default');
 
