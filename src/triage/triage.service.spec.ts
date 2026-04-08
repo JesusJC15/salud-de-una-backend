@@ -31,6 +31,7 @@ describe('TriageService', () => {
 
   const triageSessionModel = {
     findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
   };
 
@@ -103,21 +104,57 @@ describe('TriageService', () => {
   });
 
   it('should throw 409 when there is an active session for patient and specialty', async () => {
+    const existingId = new Types.ObjectId();
     triageSessionModel.findOne.mockReturnValue(
-      createFindOneChain({ _id: new Types.ObjectId() }),
+      createFindOneChain({ _id: existingId }),
     );
 
-    await expect(
-      service.createSession(
-        {
-          userId: new Types.ObjectId().toString(),
-          email: 'patient@example.com',
-          role: UserRole.PATIENT,
-          isActive: true,
-        },
-        { specialty: Specialty.GENERAL_MEDICINE },
-      ),
-    ).rejects.toBeInstanceOf(ConflictException);
+    const promise = service.createSession(
+      {
+        userId: new Types.ObjectId().toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      { specialty: Specialty.GENERAL_MEDICINE },
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(ConflictException);
+    await expect(promise).rejects.toMatchObject({
+      response: expect.objectContaining({
+        errorCode: 'TRIAGE_SESSION_IN_PROGRESS',
+        specialty: Specialty.GENERAL_MEDICINE,
+        existingSessionId: existingId.toString(),
+        status: 'IN_PROGRESS',
+      }),
+    });
+  });
+
+  it('should throw structured 409 when duplicate key race condition happens', async () => {
+    const existingId = new Types.ObjectId();
+
+    triageSessionModel.findOne
+      .mockReturnValueOnce(createFindOneChain(null))
+      .mockReturnValueOnce(createFindOneChain({ _id: existingId }));
+    triageSessionModel.create.mockRejectedValue({ code: 11000 });
+
+    const promise = service.createSession(
+      {
+        userId: new Types.ObjectId().toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      { specialty: Specialty.GENERAL_MEDICINE },
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(ConflictException);
+    await expect(promise).rejects.toMatchObject({
+      response: expect.objectContaining({
+        errorCode: 'TRIAGE_SESSION_IN_PROGRESS',
+        existingSessionId: existingId.toString(),
+      }),
+    });
   });
 
   it('should create a new triage session and return questions', async () => {
@@ -335,6 +372,117 @@ describe('TriageService', () => {
     });
   });
 
+  it('should list active sessions with progress data', async () => {
+    const sessionId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue([
+      'MG-Q1',
+      'MG-Q2',
+    ]);
+    triageSessionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([
+        {
+          _id: sessionId,
+          specialty: Specialty.GENERAL_MEDICINE,
+          status: 'IN_PROGRESS',
+          answers: [{ questionId: 'MG-Q1', answerValue: true }],
+          createdAt: new Date('2026-04-07T18:00:00.000Z'),
+          updatedAt: new Date('2026-04-07T18:01:00.000Z'),
+        },
+      ]),
+    });
+
+    const result = await service.getActiveSessions(
+      {
+        userId: patientId.toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      Specialty.GENERAL_MEDICINE,
+    );
+
+    expect(result).toEqual({
+      items: [
+        {
+          id: sessionId.toString(),
+          specialty: Specialty.GENERAL_MEDICINE,
+          status: 'IN_PROGRESS',
+          currentStep: 2,
+          totalSteps: 2,
+          currentQuestionId: 'MG-Q2',
+          isComplete: false,
+          createdAt: '2026-04-07T18:00:00.000Z',
+          updatedAt: '2026-04-07T18:01:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+  });
+
+  it('should cancel an in-progress session', async () => {
+    const sessionId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    const triageSession = {
+      _id: sessionId,
+      patientId,
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'IN_PROGRESS',
+      answers: [],
+      save: saveMock,
+    };
+
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(triageSession),
+    });
+
+    const result = await service.cancelSession(
+      sessionId.toString(),
+      {
+        userId: patientId.toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      'corr-cancel',
+    );
+
+    expect(saveMock).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      sessionId: sessionId.toString(),
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'CANCELED',
+      message: 'Sesion de triage cancelada correctamente',
+    });
+  });
+
+  it('should reject cancel when session is not IN_PROGRESS', async () => {
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId(),
+        patientId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        status: 'COMPLETED',
+        answers: [],
+        save: jest.fn(),
+      }),
+    });
+
+    await expect(
+      service.cancelSession(
+        new Types.ObjectId().toString(),
+        {
+          userId: new Types.ObjectId().toString(),
+          email: 'patient@example.com',
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('should throw 422 when trying to analyze an incomplete session', async () => {
     triageSessionModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue({
@@ -401,7 +549,7 @@ describe('TriageService', () => {
     });
     guardrailService.check.mockReturnValue({
       safe: false,
-      violations: ['diagnosis:diagnostico\\s+de'],
+      violations: [String.raw`diagnosis:diagnostico\s+de`],
     });
     consultationsService.createFromTriage.mockResolvedValue(undefined);
     const warnSpy = jest
@@ -437,7 +585,9 @@ describe('TriageService', () => {
       violations: string[];
     };
     expect(warnPayload.correlation_id).toBe('corr-guardrail');
-    expect(warnPayload.violations).toContain('diagnosis:diagnostico\\s+de');
+    expect(warnPayload.violations).toContain(
+      String.raw`diagnosis:diagnostico\s+de`,
+    );
   });
 
   it('should override priority to HIGH when any CRITICAL red flag exists', async () => {

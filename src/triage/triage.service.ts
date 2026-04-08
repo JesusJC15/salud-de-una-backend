@@ -22,6 +22,7 @@ import {
   TriagePriority,
   TriageSession,
   TriageSessionDocument,
+  TriageSessionStatus,
 } from './schemas/triage-session.schema';
 import {
   TriageQuestion,
@@ -30,8 +31,8 @@ import {
 
 type CreateTriageSessionResponse = {
   sessionId: string;
-  specialty: string;
-  status: string;
+  specialty: Specialty;
+  status: TriageSessionStatus;
   questions: TriageQuestion[];
   totalQuestions: number;
   answeredCount: number;
@@ -39,6 +40,31 @@ type CreateTriageSessionResponse = {
   progressPercent: number;
   nextQuestionId: string | null;
   isComplete: boolean;
+};
+
+type ActiveTriageSessionResponse = {
+  id: string;
+  specialty: Specialty;
+  status: TriageSessionStatus;
+  currentStep: number;
+  totalSteps: number;
+  currentQuestionId: string | null;
+  isComplete: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type ListActiveTriageSessionsResponse = {
+  items: ActiveTriageSessionResponse[];
+  total: number;
+};
+
+type CancelTriageSessionResponse = {
+  sessionId: string;
+  specialty: Specialty;
+  status: TriageSessionStatus;
+  canceledAt: string;
+  message: string;
 };
 
 type SaveTriageAnswersResponse = {
@@ -83,29 +109,45 @@ export class TriageService {
     }
 
     const patientId = new Types.ObjectId(user.userId);
-    const existingSession = await this.triageSessionModel
-      .findOne({
-        patientId,
-        specialty: dto.specialty,
-        status: 'IN_PROGRESS',
-      })
-      .select('_id')
-      .lean()
-      .exec();
+    const existingSession = await this.findActiveSessionByPatientAndSpecialty(
+      patientId,
+      dto.specialty,
+    );
 
     if (existingSession) {
-      throw new ConflictException(
-        'Ya existe una sesion de triage en progreso para esta especialidad',
+      throw this.buildSessionInProgressConflict(
+        dto.specialty,
+        existingSession._id.toString(),
       );
     }
 
-    const [createdSession] = await this.triageSessionModel.create([
-      {
-        patientId,
-        specialty: dto.specialty,
-        status: 'IN_PROGRESS',
-      },
-    ]);
+    let createdSession: TriageSessionDocument;
+    try {
+      [createdSession] = await this.triageSessionModel.create([
+        {
+          patientId,
+          specialty: dto.specialty,
+          status: 'IN_PROGRESS',
+        },
+      ]);
+    } catch (error: unknown) {
+      if (this.isMongoDuplicateKeyError(error)) {
+        const duplicatedSession =
+          await this.findActiveSessionByPatientAndSpecialty(
+            patientId,
+            dto.specialty,
+          );
+
+        if (duplicatedSession) {
+          throw this.buildSessionInProgressConflict(
+            dto.specialty,
+            duplicatedSession._id.toString(),
+          );
+        }
+      }
+
+      throw error;
+    }
 
     const questions = this.triageQuestionsRepository.getQuestionsBySpecialty(
       dto.specialty,
@@ -137,6 +179,73 @@ export class TriageService {
       progressPercent: progress.progressPercent,
       nextQuestionId: progress.nextQuestionId,
       isComplete: progress.isComplete,
+    };
+  }
+
+  async getActiveSessions(
+    user: RequestUser,
+    specialty?: Specialty,
+  ): Promise<ListActiveTriageSessionsResponse> {
+    if (!Types.ObjectId.isValid(user.userId)) {
+      throw new BadRequestException('patientId invalido');
+    }
+
+    const patientId = new Types.ObjectId(user.userId);
+    const query = {
+      patientId,
+      status: 'IN_PROGRESS',
+      ...(specialty ? { specialty } : {}),
+    };
+
+    const sessions = await this.triageSessionModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .exec();
+
+    const items = sessions.map((session) => this.toActiveSessionSummary(session));
+
+    return {
+      items,
+      total: items.length,
+    };
+  }
+
+  async cancelSession(
+    sessionId: string,
+    user: RequestUser,
+    correlationId?: string,
+  ): Promise<CancelTriageSessionResponse> {
+    const triageSession = await this.getOwnedSession(sessionId, user);
+
+    if (triageSession.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Solo se pueden cancelar sesiones en progreso');
+    }
+
+    const canceledAt = new Date();
+    triageSession.status = 'CANCELED';
+    triageSession.canceledAt = canceledAt;
+    await triageSession.save();
+
+    this.logger.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        service: 'api',
+        endpoint_or_event: 'triage.session.canceled',
+        correlation_id: correlationId,
+        user_id: user.userId,
+        role: user.role,
+        specialty: triageSession.specialty,
+        triage_session_id: triageSession._id.toString(),
+      }),
+    );
+
+    return {
+      sessionId: triageSession._id.toString(),
+      specialty: triageSession.specialty,
+      status: triageSession.status,
+      canceledAt: canceledAt.toISOString(),
+      message: 'Sesion de triage cancelada correctamente',
     };
   }
 
@@ -394,6 +503,19 @@ export class TriageService {
     sessionId: string,
     user: RequestUser,
   ): Promise<TriageSessionDocument> {
+    const triageSession = await this.getOwnedSession(sessionId, user);
+
+    if (triageSession.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('La sesion de triage no esta en progreso');
+    }
+
+    return triageSession;
+  }
+
+  private async getOwnedSession(
+    sessionId: string,
+    user: RequestUser,
+  ): Promise<TriageSessionDocument> {
     if (!Types.ObjectId.isValid(sessionId)) {
       throw new NotFoundException('Sesion de triage no encontrada');
     }
@@ -413,11 +535,77 @@ export class TriageService {
       throw new NotFoundException('Sesion de triage no encontrada');
     }
 
-    if (triageSession.status !== 'IN_PROGRESS') {
-      throw new BadRequestException('La sesion de triage no esta en progreso');
-    }
-
     return triageSession;
+  }
+
+  private toActiveSessionSummary(
+    triageSession: TriageSessionDocument,
+  ): ActiveTriageSessionResponse {
+    const answeredQuestionIds = new Set(
+      triageSession.answers.map((answer) => answer.questionId),
+    );
+    const progress = this.buildProgressState(
+      triageSession.specialty,
+      answeredQuestionIds,
+    );
+    const nextStepIncrement = progress.isComplete ? 0 : 1;
+    const currentStep =
+      progress.totalQuestions === 0
+        ? 0
+        : Math.min(
+            progress.answeredCount + nextStepIncrement,
+            progress.totalQuestions,
+          );
+
+    return {
+      id: triageSession._id.toString(),
+      specialty: triageSession.specialty,
+      status: triageSession.status,
+      currentStep,
+      totalSteps: progress.totalQuestions,
+      currentQuestionId: progress.nextQuestionId,
+      isComplete: progress.isComplete,
+      createdAt: triageSession.createdAt?.toISOString() ?? null,
+      updatedAt: triageSession.updatedAt?.toISOString() ?? null,
+    };
+  }
+
+  private async findActiveSessionByPatientAndSpecialty(
+    patientId: Types.ObjectId,
+    specialty: Specialty,
+  ): Promise<{ _id: Types.ObjectId } | null> {
+    return this.triageSessionModel
+      .findOne({
+        patientId,
+        specialty,
+        status: 'IN_PROGRESS',
+      })
+      .select('_id')
+      .lean()
+      .exec();
+  }
+
+  private buildSessionInProgressConflict(
+    specialty: Specialty,
+    existingSessionId: string,
+  ): ConflictException {
+    return new ConflictException({
+      error: 'TriageSessionInProgress',
+      errorCode: 'TRIAGE_SESSION_IN_PROGRESS',
+      specialty,
+      existingSessionId,
+      status: 'IN_PROGRESS',
+      message: 'Ya existe una sesion de triage en progreso para esta especialidad',
+    });
+  }
+
+  private isMongoDuplicateKeyError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 11000
+    );
   }
 
   private isSessionComplete(triageSession: TriageSessionDocument): boolean {

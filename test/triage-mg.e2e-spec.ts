@@ -23,6 +23,14 @@ import { AiService } from '../src/ai/ai.service';
 
 jest.mock('dotenv/config', () => ({}));
 
+function uniqueEmail(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
+}
+
+function buildStrongPassword(): string {
+  return `Aa1!${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 describe('HU-003 Triage MG (e2e)', () => {
   const originalEnv = {
     NODE_ENV: process.env.NODE_ENV,
@@ -97,13 +105,35 @@ describe('HU-003 Triage MG (e2e)', () => {
     redFlags: Array<{ code: string }>;
   };
 
-  function uniqueEmail(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
-  }
+  type ActiveTriageSessionsResponseBody = {
+    items: Array<{
+      id: string;
+      specialty: string;
+      status: string;
+      currentStep: number;
+      totalSteps: number;
+      currentQuestionId: string | null;
+      isComplete: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    total: number;
+  };
 
-  function buildStrongPassword(): string {
-    return `Aa1!${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  }
+  type CancelTriageSessionResponseBody = {
+    sessionId: string;
+    specialty: string;
+    status: string;
+    canceledAt: string;
+    message: string;
+  };
+
+  type HttpErrorResponseBody = {
+    statusCode: number;
+    message: string | string[];
+    existingSessionId?: string;
+    errorCode?: string;
+  };
 
   async function registerPatientAndLogin(): Promise<string> {
     const email = uniqueEmail('triage-mg');
@@ -258,13 +288,88 @@ describe('HU-003 Triage MG (e2e)', () => {
   it('POST /v1/triage/sessions returns 409 when an IN_PROGRESS session already exists', async () => {
     const token = await registerPatientAndLogin();
 
-    await createMgSession(token);
+    const existingSessionId = await createMgSession(token);
 
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .post('/v1/triage/sessions')
       .set('Authorization', `Bearer ${token}`)
       .send({ specialty: 'GENERAL_MEDICINE' })
       .expect(409);
+
+    const body = response.body as HttpErrorResponseBody;
+    expect(body.errorCode).toBe('TRIAGE_SESSION_IN_PROGRESS');
+    expect(body.existingSessionId).toBe(existingSessionId);
+  });
+
+  it('GET /v1/triage/sessions/active returns active session progress and supports specialty filter', async () => {
+    const token = await registerPatientAndLogin();
+    const sessionId = await createMgSession(token);
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${sessionId}/answers`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ answers: [{ questionId: 'MG-Q1', answerValue: 'cefalea' }] })
+      .expect(200);
+
+    const response = await request(app.getHttpServer())
+      .get('/v1/triage/sessions/active?specialty=GENERAL_MEDICINE')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = response.body as ActiveTriageSessionsResponseBody;
+    expect(body.total).toBe(1);
+    expect(body.items[0]).toMatchObject({
+      id: sessionId,
+      specialty: 'GENERAL_MEDICINE',
+      status: 'IN_PROGRESS',
+      totalSteps: 5,
+      currentQuestionId: 'MG-Q2',
+      isComplete: false,
+    });
+  });
+
+  it('PATCH /v1/triage/sessions/:id/cancel cancels active session and removes it from active list', async () => {
+    const token = await registerPatientAndLogin();
+    const sessionId = await createMgSession(token);
+
+    const cancelResponse = await request(app.getHttpServer())
+      .patch(`/v1/triage/sessions/${sessionId}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const cancelBody = cancelResponse.body as CancelTriageSessionResponseBody;
+    expect(cancelBody).toMatchObject({
+      sessionId,
+      specialty: 'GENERAL_MEDICINE',
+      status: 'CANCELED',
+      message: 'Sesion de triage cancelada correctamente',
+    });
+    expect(typeof cancelBody.canceledAt).toBe('string');
+
+    const activeResponse = await request(app.getHttpServer())
+      .get('/v1/triage/sessions/active?specialty=GENERAL_MEDICINE')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const activeBody = activeResponse.body as ActiveTriageSessionsResponseBody;
+    expect(activeBody.total).toBe(0);
+    expect(activeBody.items).toEqual([]);
+  });
+
+  it('POST /v1/triage/sessions returns 400 for invalid specialty enum', async () => {
+    const token = await registerPatientAndLogin();
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/triage/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ specialty: 'DENTISTRY' })
+      .expect(400);
+
+    const body = response.body as HttpErrorResponseBody;
+    expect(Array.isArray(body.message)).toBe(true);
+    expect(body.message).toContain(
+      'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY',
+    );
   });
 
   it('POST /v1/triage/sessions/:id/answers returns 200 with isComplete for valid payload', async () => {

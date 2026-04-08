@@ -9,15 +9,19 @@ describe('TriageController', () => {
   let controller: TriageController;
   let service: {
     createSession: jest.Mock;
+    getActiveSessions: jest.Mock;
     saveAnswers: jest.Mock;
     analyzeSession: jest.Mock;
+    cancelSession: jest.Mock;
   };
 
   beforeEach(async () => {
     service = {
       createSession: jest.fn(),
+      getActiveSessions: jest.fn(),
       saveAnswers: jest.fn(),
       analyzeSession: jest.fn(),
+      cancelSession: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -87,6 +91,36 @@ describe('TriageController', () => {
     });
   });
 
+  it('getActiveSessions should call service', async () => {
+    service.getActiveSessions.mockResolvedValue({
+      items: [{ id: 's1', specialty: Specialty.GENERAL_MEDICINE }],
+      total: 1,
+    });
+
+    const request = {
+      user: {
+        userId: 'p1',
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      correlationId: 'corr-2.1',
+    } as unknown as RequestContext;
+
+    const result = await controller.getActiveSessions(request, {
+      specialty: Specialty.GENERAL_MEDICINE,
+    });
+
+    expect(service.getActiveSessions).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'p1' }),
+      Specialty.GENERAL_MEDICINE,
+    );
+    expect(result).toEqual({
+      items: [{ id: 's1', specialty: Specialty.GENERAL_MEDICINE }],
+      total: 1,
+    });
+  });
+
   it('analyzeSession should call service', async () => {
     service.analyzeSession.mockResolvedValue({
       sessionId: 's1',
@@ -117,6 +151,37 @@ describe('TriageController', () => {
       priority: 'HIGH',
       redFlags: [],
       message: 'ok',
+    });
+  });
+
+  it('cancelSession should call service', async () => {
+    service.cancelSession.mockResolvedValue({
+      sessionId: 's1',
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'CANCELED',
+    });
+
+    const request = {
+      user: {
+        userId: 'p1',
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      correlationId: 'corr-4',
+    } as unknown as RequestContext;
+
+    const result = await controller.cancelSession(request, 's1');
+
+    expect(service.cancelSession).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ userId: 'p1' }),
+      'corr-4',
+    );
+    expect(result).toEqual({
+      sessionId: 's1',
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'CANCELED',
     });
   });
 });

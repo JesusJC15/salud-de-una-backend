@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { Response } from 'express';
 import { RequestContext } from '../interfaces/request-context.interface';
 
@@ -40,15 +40,26 @@ export class HttpExceptionFilter implements ExceptionFilter {
       randomUUID();
     const role = request.user?.role ?? 'ANON';
     const userId = request.user?.userId ?? 'anonymous';
-    const errorCode =
+    let errorCode = 'UnhandledException';
+    if (
       typeof exceptionResponse === 'object' &&
       exceptionResponse !== null &&
       'error' in exceptionResponse &&
       typeof (exceptionResponse as { error?: unknown }).error === 'string'
-        ? (exceptionResponse as { error: string }).error
-        : exception instanceof Error
-          ? exception.name
-          : 'UnhandledException';
+    ) {
+      errorCode = (exceptionResponse as { error: string }).error;
+    } else if (exception instanceof Error) {
+      errorCode = exception.name;
+    }
+
+    const extraFields =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null
+        ? Object.fromEntries(
+            Object.entries(exceptionResponse).filter(
+              ([key]) => !['statusCode', 'message'].includes(key),
+            ),
+          )
+        : {};
 
     response.setHeader('x-correlation-id', correlationId);
     this.logger.error(
@@ -69,6 +80,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       message,
+      ...extraFields,
       path: endpoint,
       timestamp: new Date().toISOString(),
       correlation_id: correlationId,

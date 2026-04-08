@@ -5,6 +5,8 @@ import { Specialty } from '../../common/enums/specialty.enum';
 export const TRIAGE_SESSION_STATUSES = [
   'IN_PROGRESS',
   'COMPLETED',
+  'CANCELED',
+  'EXPIRED',
   'FAILED',
 ] as const;
 
@@ -102,6 +104,12 @@ export class TriageSession {
   @Prop({ type: Date })
   completedAt?: Date;
 
+  @Prop({ type: Date })
+  canceledAt?: Date;
+
+  @Prop({ type: Date })
+  expiredAt?: Date;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -109,3 +117,11 @@ export class TriageSession {
 export const TriageSessionSchema = SchemaFactory.createForClass(TriageSession);
 
 TriageSessionSchema.index({ patientId: 1, status: 1 });
+TriageSessionSchema.index(
+  { patientId: 1, specialty: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'IN_PROGRESS' },
+    name: 'uniq_active_triage_session_per_patient_specialty',
+  },
+);

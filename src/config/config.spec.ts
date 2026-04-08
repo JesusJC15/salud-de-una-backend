@@ -51,6 +51,16 @@ describe('config factories', () => {
     expect(config.outboxDispatchIntervalMs).toBe(1000);
   });
 
+  it('redisConfig should respect custom prefix and positive dispatch interval', () => {
+    process.env.REDIS_KEY_PREFIX = 'custom-prefix';
+    process.env.OUTBOX_DISPATCH_INTERVAL_MS = '2500';
+
+    const config = redisConfig();
+
+    expect(config.keyPrefix).toBe('custom-prefix');
+    expect(config.outboxDispatchIntervalMs).toBe(2500);
+  });
+
   it('aiConfig should map ai flags and defaults', () => {
     process.env.AI_ENABLED = 'true';
     process.env.AI_PROVIDER = 'gemini';
@@ -62,6 +72,20 @@ describe('config factories', () => {
     expect(config.provider).toBe('gemini');
     expect(config.geminiApiKey).toBe('key');
     expect(config.model).toBe('gemini-2.5-flash');
+  });
+
+  it('aiConfig should apply provider and key defaults for missing values', () => {
+    process.env.AI_ENABLED = 'false';
+    delete process.env.AI_PROVIDER;
+    process.env.GEMINI_API_KEY = '';
+    process.env.GEMINI_MODEL = 'gemini-custom';
+
+    const config = aiConfig();
+
+    expect(config.enabled).toBe(false);
+    expect(config.provider).toBe('gemini');
+    expect(config.geminiApiKey).toBeUndefined();
+    expect(config.model).toBe('gemini-custom');
   });
 
   it('webConfig should parse CORS origins and numeric limits', () => {

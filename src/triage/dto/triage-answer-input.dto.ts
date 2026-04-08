@@ -15,6 +15,10 @@ function IsAllowedAnswerValue(validationOptions?: ValidationOptions) {
       options: validationOptions,
       validator: {
         validate(value: unknown) {
+          if (typeof value === 'string') {
+            return value.trim().length > 0;
+          }
+
           if (typeof value === 'boolean') {
             return true;
           }
@@ -35,7 +39,7 @@ function IsAllowedAnswerValue(validationOptions?: ValidationOptions) {
           return false;
         },
         defaultMessage(args: ValidationArguments) {
-          return `${args.property} must be a boolean, a finite number, or a non-empty array of non-empty strings`;
+          return `${args.property} must be a non-empty string, a boolean, a finite number, or a non-empty array of non-empty strings`;
         },
       },
     });
@@ -48,5 +52,5 @@ export class TriageAnswerInputDto {
 
   @IsDefined()
   @IsAllowedAnswerValue()
-  answerValue!: boolean | number | string[];
+  answerValue!: string | boolean | number | string[];
 }

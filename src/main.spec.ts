@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { getConnectionToken } from '@nestjs/mongoose';
+import { SwaggerModule } from '@nestjs/swagger';
 import type { Connection } from 'mongoose';
 import {
   bootstrap,
@@ -101,6 +102,8 @@ describe('main bootstrap', () => {
   let logSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
+  let swaggerCreateSpy: jest.SpyInstance;
+  let swaggerSetupSpy: jest.SpyInstance;
 
   beforeEach(() => {
     logSpy = jest
@@ -112,12 +115,20 @@ describe('main bootstrap', () => {
     errorSpy = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
+    swaggerCreateSpy = jest
+      .spyOn(SwaggerModule, 'createDocument')
+      .mockReturnValue({} as never);
+    swaggerSetupSpy = jest
+      .spyOn(SwaggerModule, 'setup')
+      .mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     logSpy.mockRestore();
     warnSpy.mockRestore();
     errorSpy.mockRestore();
+    swaggerCreateSpy.mockRestore();
+    swaggerSetupSpy.mockRestore();
     jest.clearAllMocks();
   });
 

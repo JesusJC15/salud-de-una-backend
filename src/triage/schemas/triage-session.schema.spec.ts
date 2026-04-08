@@ -64,12 +64,19 @@ describe('TriageSessionSchema', () => {
     expect(error?.errors['analysis.redFlags.0.specialty']).toBeDefined();
   });
 
-  it('should define a compound index on patientId + status', () => {
+  it('should define indexes for query and active-session uniqueness', () => {
     const indexes = TriageSessionSchema.indexes();
 
     expect(indexes).toEqual(
       expect.arrayContaining([
         expect.arrayContaining([{ patientId: 1, status: 1 }]),
+        expect.arrayContaining([
+          { patientId: 1, specialty: 1 },
+          expect.objectContaining({
+            unique: true,
+            partialFilterExpression: { status: 'IN_PROGRESS' },
+          }),
+        ]),
       ]),
     );
   });

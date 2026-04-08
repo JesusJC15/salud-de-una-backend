@@ -2,6 +2,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { getConnectionToken } from '@nestjs/mongoose';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { Connection } from 'mongoose';
 import { AppModule } from './app.module';
@@ -129,8 +130,7 @@ export async function bootstrap() {
     exposedHeaders: ['x-correlation-id'],
   });
 
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    void req;
+  app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
@@ -146,6 +146,23 @@ export async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('SaludDeUna API')
+    .setDescription('Documentacion OpenAPI de SaludDeUna Backend')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+      'bearer',
+    )
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup(`${globalPrefix}/docs`, app, swaggerDocument);
+
   await app.listen(port);
 
   logger.log(`Server started on http://localhost:${port}/${globalPrefix}`);

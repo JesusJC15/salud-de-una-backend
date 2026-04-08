@@ -64,4 +64,25 @@ describe('HttpExceptionFilter', () => {
       }),
     );
   });
+
+  it('should include custom payload fields from HttpException response', () => {
+    const { host, response } = createHost({ correlationId: 'cid-2' });
+    const exception = new BadRequestException({
+      message: 'invalid payload',
+      errorCode: 'CUSTOM_CODE',
+      detail: 'extra-value',
+    });
+
+    filter.catch(exception, host);
+
+    expect(response.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'invalid payload',
+        errorCode: 'CUSTOM_CODE',
+        detail: 'extra-value',
+      }),
+    );
+  });
 });
