@@ -201,4 +201,68 @@ describe('ConsultationsService', () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0].priority).toBe('LOW');
   });
+
+  it('uses createdAt as tie-breaker when priorities are equal', async () => {
+    const older = new Date('2026-04-07T00:00:00.000Z');
+    const newer = new Date('2026-04-08T00:00:00.000Z');
+    const firstId = new Types.ObjectId();
+    const secondId = new Types.ObjectId();
+
+    findExecMock.mockResolvedValue([
+      {
+        _id: secondId,
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'LOW',
+        status: 'PENDING',
+        createdAt: newer,
+      },
+      {
+        _id: firstId,
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'LOW',
+        status: 'PENDING',
+        createdAt: older,
+      },
+    ]);
+
+    const result = await service.getQueue({ limit: 10, page: 1 });
+
+    expect(result.items[0].id).toBe(firstId.toString());
+    expect(result.items[1].id).toBe(secondId.toString());
+  });
+
+  it('sends unknown priorities to the end using fallback rank', async () => {
+    const knownId = new Types.ObjectId();
+    const unknownId = new Types.ObjectId();
+
+    findExecMock.mockResolvedValue([
+      {
+        _id: unknownId,
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'UNKNOWN' as unknown as 'LOW',
+        status: 'PENDING',
+        createdAt: null,
+      },
+      {
+        _id: knownId,
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'LOW',
+        status: 'PENDING',
+        createdAt: null,
+      },
+    ]);
+
+    const result = await service.getQueue({ limit: 10, page: 1 });
+
+    expect(result.items[0].id).toBe(knownId.toString());
+    expect(result.items[1].id).toBe(unknownId.toString());
+  });
 });
