@@ -15,6 +15,16 @@ type CreateConsultationFromTriageInput = {
   priority: TriagePriority;
 };
 
+type QueueRow = {
+  _id: Types.ObjectId;
+  patientId: Types.ObjectId;
+  triageSessionId: Types.ObjectId;
+  specialty: Specialty;
+  priority: TriagePriority;
+  status: string;
+  createdAt: Date | null;
+};
+
 @Injectable()
 export class ConsultationsService {
   constructor(
@@ -45,64 +55,55 @@ export class ConsultationsService {
     const page = Math.max(options.page ?? 1, 1);
     const skip = (page - 1) * limit;
 
-    const items = await this.consultationModel
-      .aggregate<{
-        id: string;
-        patientId: string;
-        triageSessionId: string;
-        specialty: Specialty;
-        priority: TriagePriority;
-        status: string;
-        createdAt: Date | null;
-      }>([
-        {
-          $match: {
-            status: 'PENDING',
-          },
-        },
-        {
-          $addFields: {
-            priorityRank: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ['$priority', 'HIGH'] }, then: 0 },
-                  { case: { $eq: ['$priority', 'MODERATE'] }, then: 1 },
-                  { case: { $eq: ['$priority', 'LOW'] }, then: 2 },
-                ],
-                default: 99,
-              },
-            },
-          },
-        },
-        {
-          $sort: {
-            priorityRank: 1,
-            createdAt: 1,
-          },
-        },
-        {
-          $skip: skip,
-        },
-        {
-          $limit: limit,
-        },
-        {
-          $project: {
-            _id: 0,
-            priorityRank: 0,
-            id: { $toString: '$_id' },
-            patientId: { $toString: '$patientId' },
-            triageSessionId: { $toString: '$triageSessionId' },
-            specialty: 1,
-            priority: 1,
-            status: 1,
-            createdAt: { $ifNull: ['$createdAt', null] },
-          },
-        },
-      ])
-      .exec();
+    const pendingConsultations = (await this.consultationModel
+      .find({ status: 'PENDING' })
+      .select(
+        '_id patientId triageSessionId specialty priority status createdAt',
+      )
+      .lean()
+      .exec()) as QueueRow[];
+
+    const sortedPendingConsultations = [...pendingConsultations];
+    sortedPendingConsultations.sort((a, b) => {
+      const priorityRankDifference =
+        this.getPriorityRank(a.priority) - this.getPriorityRank(b.priority);
+
+      if (priorityRankDifference !== 0) {
+        return priorityRankDifference;
+      }
+
+      const createdAtA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const createdAtB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return createdAtA - createdAtB;
+    });
+
+    const queueRows = sortedPendingConsultations.slice(skip, skip + limit);
+
+    const items = queueRows.map((row) => ({
+      id: row._id.toString(),
+      patientId: row.patientId.toString(),
+      triageSessionId: row.triageSessionId.toString(),
+      specialty: row.specialty,
+      priority: row.priority,
+      status: row.status,
+      createdAt: row.createdAt,
+    }));
 
     return { items };
+  }
+
+  private getPriorityRank(priority: TriagePriority): number {
+    if (priority === 'HIGH') {
+      return 0;
+    }
+    if (priority === 'MODERATE') {
+      return 1;
+    }
+    if (priority === 'LOW') {
+      return 2;
+    }
+
+    return 99;
   }
 
   private toObjectId(value: string | Types.ObjectId): Types.ObjectId {

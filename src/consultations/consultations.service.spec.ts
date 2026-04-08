@@ -8,17 +8,21 @@ import { Consultation } from './schemas/consultation.schema';
 describe('ConsultationsService', () => {
   let service: ConsultationsService;
 
-  const aggregateExecMock = jest.fn();
+  const findExecMock = jest.fn();
+  const findChain = {
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: findExecMock,
+  };
+
   const consultationModel = {
     create: jest.fn(),
-    aggregate: jest.fn().mockReturnValue({
-      exec: aggregateExecMock,
-    }),
+    find: jest.fn().mockReturnValue(findChain),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    aggregateExecMock.mockResolvedValue([]);
+    findExecMock.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -88,53 +92,113 @@ describe('ConsultationsService', () => {
   });
 
   it('returns paginated queue using clamped defaults', async () => {
-    aggregateExecMock.mockResolvedValue([{ id: 'queue-1' }]);
+    const consultationId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const triageSessionId = new Types.ObjectId();
+    findExecMock.mockResolvedValue([
+      {
+        _id: consultationId,
+        patientId,
+        triageSessionId,
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'MODERATE',
+        status: 'PENDING',
+        createdAt: null,
+      },
+    ]);
 
     const result = await service.getQueue({ limit: 999, page: 0 });
 
-    expect(result).toEqual({ items: [{ id: 'queue-1' }] });
-    expect(consultationModel.aggregate).toHaveBeenCalledTimes(1);
-
-    const [pipeline] = consultationModel.aggregate.mock.calls[0] as [
-      Array<Record<string, unknown>>,
-    ];
-    expect(pipeline[3]).toEqual({ $skip: 0 });
-    expect(pipeline[4]).toEqual({ $limit: 100 });
+    expect(result).toEqual({
+      items: [
+        {
+          id: consultationId.toString(),
+          patientId: patientId.toString(),
+          triageSessionId: triageSessionId.toString(),
+          specialty: Specialty.GENERAL_MEDICINE,
+          priority: 'MODERATE',
+          status: 'PENDING',
+          createdAt: null,
+        },
+      ],
+    });
+    expect(consultationModel.find).toHaveBeenCalledWith({ status: 'PENDING' });
+    expect(findChain.select).toHaveBeenCalledWith(
+      '_id patientId triageSessionId specialty priority status createdAt',
+    );
   });
 
   it('calculates skip using provided page and limit', async () => {
-    aggregateExecMock.mockResolvedValue([]);
+    const baseDate = new Date('2026-04-07T00:00:00.000Z');
+    findExecMock.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'HIGH',
+        status: 'PENDING',
+        createdAt: new Date(baseDate.getTime() + 1000),
+      },
+      {
+        _id: new Types.ObjectId(),
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'MODERATE',
+        status: 'PENDING',
+        createdAt: new Date(baseDate.getTime() + 2000),
+      },
+      {
+        _id: new Types.ObjectId(),
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'LOW',
+        status: 'PENDING',
+        createdAt: new Date(baseDate.getTime() + 3000),
+      },
+    ]);
 
-    await service.getQueue({ limit: 20, page: 3 });
+    const result = await service.getQueue({ limit: 1, page: 2 });
 
-    const [pipeline] = consultationModel.aggregate.mock.calls[0] as [
-      Array<Record<string, unknown>>,
-    ];
-    expect(pipeline[3]).toEqual({ $skip: 40 });
-    expect(pipeline[4]).toEqual({ $limit: 20 });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].priority).toBe('MODERATE');
   });
 
   it('uses default pagination values when options are not provided', async () => {
-    aggregateExecMock.mockResolvedValue([]);
+    findExecMock.mockResolvedValue([]);
 
-    await service.getQueue();
+    const result = await service.getQueue();
 
-    const [pipeline] = consultationModel.aggregate.mock.calls[0] as [
-      Array<Record<string, unknown>>,
-    ];
-    expect(pipeline[3]).toEqual({ $skip: 0 });
-    expect(pipeline[4]).toEqual({ $limit: 100 });
+    expect(result).toEqual({ items: [] });
   });
 
   it('clamps limit to minimum value', async () => {
-    aggregateExecMock.mockResolvedValue([]);
+    findExecMock.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'HIGH',
+        status: 'PENDING',
+        createdAt: null,
+      },
+      {
+        _id: new Types.ObjectId(),
+        patientId: new Types.ObjectId(),
+        triageSessionId: new Types.ObjectId(),
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'LOW',
+        status: 'PENDING',
+        createdAt: null,
+      },
+    ]);
 
-    await service.getQueue({ limit: -3, page: 2 });
+    const result = await service.getQueue({ limit: -3, page: 2 });
 
-    const [pipeline] = consultationModel.aggregate.mock.calls[0] as [
-      Array<Record<string, unknown>>,
-    ];
-    expect(pipeline[3]).toEqual({ $skip: 1 });
-    expect(pipeline[4]).toEqual({ $limit: 1 });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].priority).toBe('LOW');
   });
 });
