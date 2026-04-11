@@ -309,7 +309,7 @@ export class AuthService {
     authUser: AuthUser | null,
     password: string,
   ): Promise<AuthUser> {
-    if (!authUser || !authUser.isActive) {
+    if (!authUser?.isActive) {
       throw new UnauthorizedException('Credenciales invalidas');
     }
 

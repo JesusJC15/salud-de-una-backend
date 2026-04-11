@@ -101,6 +101,120 @@ Copy-Item .env.development.example .env
 npm run start:dev
 ```
 
+## Docker
+
+El `docker-compose.yml` queda listo para levantar el backend y MongoDB con defaults locales funcionales:
+
+```bash
+docker compose up --build -d
+```
+
+En PowerShell:
+
+```powershell
+docker compose up --build -d
+```
+
+Comandos utiles:
+
+- Ver estado y healthchecks: `docker compose ps`
+- Ver logs del backend: `docker compose logs -f app`
+- Apagar servicios: `docker compose down`
+- Apagar y borrar volumen de Mongo: `docker compose down -v`
+
+URLs esperadas al levantar Compose:
+
+- API: `http://localhost:3000/v1`
+- Health: `http://localhost:3000/v1/health`
+- Readiness: `http://localhost:3000/v1/ready`
+
+El compose usa defaults locales para `JWT_SECRET`, `JWT_REFRESH_SECRET` y CORS, asi que arranca sin pasos extra. Para despliegues reales, sobreescribe esas variables desde el shell o un archivo `.env` ubicado junto a `docker-compose.yml` antes de ejecutar `docker compose up`.
+
+## Produccion con Docker
+
+Usa [docker-compose.production.yml](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/docker-compose.production.yml) cuando MongoDB, Redis y Gemini viven fuera del host Docker. Ese archivo levanta solo la API y espera servicios administrados.
+
+1. Crear el archivo de variables de produccion:
+
+```bash
+cp .env.production.docker.example .env.production.docker
+```
+
+En PowerShell:
+
+```powershell
+Copy-Item .env.production.docker.example .env.production.docker
+```
+
+2. Completar en `.env.production.docker`:
+
+- `MONGODB_URI` apuntando a Atlas o tu cluster administrado.
+- `REDIS_URL` apuntando a Redis Cloud o tu instancia administrada.
+- `JWT_SECRET` y `JWT_REFRESH_SECRET` con secretos reales de 32+ caracteres.
+- `CORS_ORIGINS_PATIENT` y `CORS_ORIGINS_STAFF` con tus dominios reales.
+- `GEMINI_API_KEY` y `GEMINI_MODEL` si `AI_ENABLED=true`.
+
+3. Si es el primer deploy y todavia no existe un admin, activar bootstrap solo una vez:
+
+- `ENABLE_BOOTSTRAP_ADMIN=true`
+- `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_FIRST_NAME`, `BOOTSTRAP_ADMIN_LAST_NAME`
+
+Despues del primer arranque exitoso y de poder iniciar sesion, vuelve `ENABLE_BOOTSTRAP_ADMIN=false` y redepliega.
+
+4. Validar la configuracion antes de subir:
+
+```bash
+docker compose -f docker-compose.production.yml --env-file .env.production.docker config
+```
+
+5. Desplegar:
+
+```bash
+docker compose -f docker-compose.production.yml --env-file .env.production.docker up --build -d
+```
+
+6. Revisar estado:
+
+- `docker compose -f docker-compose.production.yml --env-file .env.production.docker ps`
+- `docker compose -f docker-compose.production.yml --env-file .env.production.docker logs -f app`
+
+7. Ejecutar smoke-check post deploy:
+
+```bash
+export PROD_BASE_URL=https://api.example.com
+export VERIFY_AI=true
+export EXPECT_REDIS=true
+export PROD_ADMIN_EMAIL=admin@example.com
+export PROD_ADMIN_PASSWORD='AdminP@ss1'
+node docker/verify-production.js
+```
+
+En PowerShell:
+
+```powershell
+$env:PROD_BASE_URL='https://api.example.com'
+$env:VERIFY_AI='true'
+$env:EXPECT_REDIS='true'
+$env:PROD_ADMIN_EMAIL='admin@example.com'
+$env:PROD_ADMIN_PASSWORD='AdminP@ss1'
+node docker/verify-production.js
+```
+
+Ese smoke-check valida:
+
+- `GET /v1/health`
+- `GET /v1/ready`
+- `checks.redis.status === up` cuando `EXPECT_REDIS=true`
+- login staff admin
+- `POST /v1/admin/ai/health-check` para verificar Gemini
+
+Notas operativas:
+
+- [docker-compose.yml](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/docker-compose.yml) sigue siendo el stack local con Mongo incluido.
+- [docker-compose.production.yml](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/docker-compose.production.yml) es la variante de despliegue con dependencias administradas.
+- El healthcheck del contenedor ahora exige Redis sano cuando `REDIS_URL` esta configurado.
+- La conectividad Gemini no bloquea el arranque automaticamente; se confirma con `POST /v1/admin/ai/health-check`, endpoint ya disponible en [admin-ai.controller.ts](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/src/ai/admin-ai.controller.ts:7).
+
 ## Variables de Entorno
 
 Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
