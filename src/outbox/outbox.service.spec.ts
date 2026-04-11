@@ -47,6 +47,25 @@ describe('OutboxService', () => {
     expect(result).toEqual({ id: 'event-1' });
   });
 
+  it('should create doctor verification event using mongo session when provided', async () => {
+    const session = { id: 'session-1' };
+    outboxEventModel.create.mockResolvedValue([{ id: 'event-session' }]);
+
+    await service.createDoctorVerificationChangedEvent(
+      {
+        doctorId: 'doctor-2',
+        doctorStatus: DoctorStatus.PENDING,
+      },
+      'corr-2',
+      session as never,
+    );
+
+    expect(outboxEventModel.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ aggregateId: 'doctor-2' })],
+      { session },
+    );
+  });
+
   it('should claim next pending event', async () => {
     outboxEventModel.findOneAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ id: 'event-2' }),
@@ -175,5 +194,53 @@ describe('OutboxService', () => {
     );
     expect(updatePayload.$set.status).toBe('failed');
     expect(updatePayload.$set.lastError).toBe('failed-hard');
+  });
+
+  it('should handle zero attempts using immediate backoff baseline', async () => {
+    outboxEventModel.updateOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    await service.reschedule('event-7', 0, 'first-failure');
+    const [, updatePayload] = outboxEventModel.updateOne.mock.calls[0] as [
+      { _id: string },
+      {
+        $set: {
+          status: string;
+          availableAt: Date;
+          lastError: string;
+        };
+      },
+    ];
+
+    expect(updatePayload.$set.status).toBe('pending');
+    expect(updatePayload.$set.availableAt).toBeInstanceOf(Date);
+    expect(updatePayload.$set.lastError).toBe('first-failure');
+  });
+
+  it('should keep failed events at current time even with high attempts', async () => {
+    outboxEventModel.updateOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    const before = Date.now();
+    await service.reschedule('event-8', 10, 'many-failures');
+    const after = Date.now();
+    const [, updatePayload] = outboxEventModel.updateOne.mock.calls[0] as [
+      { _id: string },
+      {
+        $set: {
+          status: string;
+          availableAt: Date;
+          lastError: string;
+        };
+      },
+    ];
+
+    expect(updatePayload.$set.status).toBe('failed');
+    expect(updatePayload.$set.availableAt.getTime()).toBeGreaterThanOrEqual(
+      before,
+    );
+    expect(updatePayload.$set.availableAt.getTime()).toBeLessThanOrEqual(after);
   });
 });
