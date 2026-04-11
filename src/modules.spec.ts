@@ -9,6 +9,7 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
+import { TriageModule } from './triage/triage.module';
 
 describe('Module definitions', () => {
   it('should load feature modules', () => {
@@ -21,6 +22,7 @@ describe('Module definitions', () => {
     expect(NotificationsModule).toBeDefined();
     expect(DashboardModule).toBeDefined();
     expect(ConsultationsModule).toBeDefined();
+    expect(TriageModule).toBeDefined();
     expect(AdminsModule).toBeDefined();
     expect(OutboxModule).toBeDefined();
   });

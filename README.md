@@ -43,6 +43,7 @@ Modulos cargados en `src/app.module.ts`:
 - `NotificationsModule`
 - `DashboardModule`
 - `ConsultationsModule`
+- `TriageModule`
 - `OutboxModule`
 - `RedisModule`
 
@@ -228,6 +229,9 @@ Sesiones autenticadas:
 | `POST /v1/doctors/me/rethus-resubmit`            | No      | Si           | `DOCTOR`                                                                                   |
 | `GET /v1/dashboard/technical`                    | No      | Si           | `ADMIN`                                                                                    |
 | `GET /v1/dashboard/business`                     | No      | Si           | `ADMIN`                                                                                    |
+| `POST /v1/triage/sessions`                       | No      | Si           | `PATIENT`                                                                                  |
+| `POST /v1/triage/sessions/:sessionId/answers`    | No      | Si           | `PATIENT`                                                                                  |
+| `POST /v1/triage/sessions/:sessionId/analyze`    | No      | Si           | `PATIENT`                                                                                  |
 | `POST /v1/admin/ai/health-check`                 | No      | Si           | `ADMIN`                                                                                    |
 | `GET /v1/health`                                 | Si      | No           | -                                                                                          |
 | `GET /v1/ready`                                  | Si      | No           | -                                                                                          |
@@ -364,6 +368,180 @@ Body de update (opcional):
 }
 ```
 
+### 5.1) HU-003 - Triage guiado por IA (Medicina General)
+
+Trazabilidad:
+
+- Historia: HU-003
+- Sprint: backlog T-003-05, T-003-07, T-003-08, T-003-09 y T-003-10
+
+Nota de rutas:
+
+- El backlog usa rutas base tipo `apps/api/src/...`; en este repositorio el equivalente real es `src/...`.
+
+#### POST /v1/triage/sessions
+
+Requiere JWT con rol `PATIENT`.
+
+Request:
+
+```json
+{
+  "specialty": "GENERAL_MEDICINE"
+}
+```
+
+Response (201):
+
+```json
+{
+  "sessionId": "67f123...",
+  "specialty": "GENERAL_MEDICINE",
+  "status": "IN_PROGRESS",
+  "questions": [
+    {
+      "questionId": "MG-Q1",
+      "questionText": "Que sintoma principal presentas hoy?"
+    }
+  ],
+  "totalQuestions": 5,
+  "answeredCount": 0,
+  "remainingQuestions": 5,
+  "progressPercent": 0,
+  "nextQuestionId": "MG-Q1",
+  "isComplete": false
+}
+```
+
+Errores:
+
+- 400: payload invalido.
+- 409: ya existe una sesion `IN_PROGRESS` para el paciente y la especialidad.
+
+#### POST /v1/triage/sessions/:sessionId/answers
+
+Requiere JWT con rol `PATIENT`.
+
+Request:
+
+```json
+{
+  "answers": [
+    { "questionId": "MG-Q1", "answerValue": "cefalea" },
+    { "questionId": "MG-Q2", "answerValue": "2 dias" },
+    { "questionId": "MG-Q3", "answerValue": 4 },
+    { "questionId": "MG-Q4", "answerValue": "no" },
+    { "questionId": "MG-Q5", "answerValue": "no" }
+  ]
+}
+```
+
+Response (200):
+
+```json
+{
+  "sessionId": "67f123...",
+  "answersCount": 5,
+  "isComplete": true,
+  "totalQuestions": 5,
+  "answeredCount": 5,
+  "remainingQuestions": 0,
+  "progressPercent": 100,
+  "nextQuestionId": null
+}
+```
+
+Errores:
+
+- 400: `questionId` invalido o sesion fuera de estado `IN_PROGRESS`.
+- 404: sesion inexistente o no pertenece al paciente autenticado.
+
+#### POST /v1/triage/sessions/:sessionId/analyze
+
+Requiere JWT con rol `PATIENT`.
+
+Response (200):
+
+```json
+{
+  "sessionId": "67f123...",
+  "priority": "HIGH",
+  "redFlags": [
+    {
+      "code": "RF-MG-001",
+      "specialty": "GENERAL_MEDICINE",
+      "severity": "CRITICAL",
+      "evidence": "Combinacion de dolor toracico y dificultad respiratoria reportada"
+    }
+  ],
+  "message": "Se detectaron signos de alarma. Tu caso fue priorizado para atencion medica.",
+  "highPriorityAlert": true
+}
+```
+
+Errores:
+
+- 404: sesion inexistente o no pertenece al paciente autenticado.
+- 422: sesion incompleta (faltan respuestas obligatorias).
+- 503: fallo operativo del proveedor IA durante analisis de Medicina General.
+
+#### Contrato TriageSession (persistencia)
+
+```json
+{
+  "_id": "ObjectId",
+  "patientId": "ObjectId",
+  "specialty": "GENERAL_MEDICINE | ODONTOLOGY",
+  "status": "IN_PROGRESS | COMPLETED | FAILED",
+  "answers": [
+    {
+      "questionId": "MG-Q1",
+      "questionText": "Que sintoma principal presentas hoy?",
+      "answerValue": "valor mixto (string/number/boolean)",
+      "answeredAt": "2026-04-05T14:10:00.000Z"
+    }
+  ],
+  "analysis": {
+    "priority": "LOW | MODERATE | HIGH",
+    "redFlags": [
+      {
+        "code": "RF-MG-001",
+        "specialty": "GENERAL_MEDICINE",
+        "severity": "CRITICAL | WARNING | INFO",
+        "evidence": "texto"
+      }
+    ],
+    "aiSummary": "string opcional",
+    "analysisDurationMs": 1234,
+    "guardrailApplied": true
+  },
+  "completedAt": "2026-04-05T14:10:01.000Z",
+  "createdAt": "2026-04-05T14:09:00.000Z",
+  "updatedAt": "2026-04-05T14:10:01.000Z"
+}
+```
+
+#### Catalogo Red Flags Medicina General v1
+
+Fuente: `src/triage/rules/red-flags-mg.json`
+
+- RF-MG-001: dolor toracico + dificultad respiratoria -> `CRITICAL`
+- RF-MG-002: perdida de consciencia o sincope -> `CRITICAL`
+- RF-MG-003: fiebre > 39C + rigidez de nuca -> `CRITICAL`
+- RF-MG-004: dolor abdominal intenso de inicio subito -> `CRITICAL`
+- RF-MG-005: alteraciones visuales repentinas -> `WARNING`
+
+#### Politica de guardrail
+
+Fuente: `src/triage/rules/guardrail-rules.json`
+
+- Filtro obligatorio de texto IA para categorias: diagnostico, prescripcion y afirmacion clinica.
+- Contrato tecnico del guardrail: `check(text) -> { safe, violations[] }`.
+- Si `safe=false`:
+  - `analysis.aiSummary` no se persiste.
+  - `analysis.guardrailApplied=true`.
+  - Se emite log estructurado `WARN` con `correlation_id`, `triage_session_id` y `violations`.
+- Si `safe=true`, se conserva resumen neutral de urgencia sin diagnostico ni prescripcion.
 Notas:
 
 - `currentPassword` es obligatoria cuando el cambio real incluye `email` o `newPassword`.
