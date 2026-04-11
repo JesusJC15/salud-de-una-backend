@@ -64,26 +64,35 @@ describe('DomainEventsHandlerService', () => {
     expect(outboxService.markProcessed).not.toHaveBeenCalled();
   });
 
-  it('should mark event processed when payload is not dispatchable', async () => {
-    outboxService.findById.mockResolvedValue({
-      id: 'event-3',
-      eventType: 'doctor.verification.changed.v1',
-      attempts: 1,
-      payload: {
-        doctorId: 'doctor-3',
-      },
-    });
-
-    await service.processOutboxEventById('event-3');
-
-    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
-    expect(outboxService.markProcessed).toHaveBeenCalledWith('event-3');
-  });
-
-  it('should reschedule event on processing failure', async () => {
+  it('should reject unknown event types without marking them processed', async () => {
     const warnSpy = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
+    outboxService.findById.mockResolvedValue({
+      id: 'event-3',
+      eventType: 'doctor.unknown.v1',
+      attempts: 1,
+      payload: {
+        doctorId: 'doctor-3',
+        doctorStatus: 'VERIFIED',
+      },
+    });
+
+    await expect(service.processOutboxEventById('event-3')).rejects.toThrow(
+      'Unhandled outbox event type: doctor.unknown.v1',
+    );
+
+    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Outbox event event-3 failed: Unhandled outbox event type: doctor.unknown.v1',
+      ),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('should propagate notification failures without marking processed', async () => {
     outboxService.findById.mockResolvedValue({
       id: 'event-2',
       eventType: 'doctor.verification.changed.v1',
@@ -100,29 +109,15 @@ describe('DomainEventsHandlerService', () => {
     await expect(service.processOutboxEventById('event-2')).rejects.toThrow(
       'failed',
     );
+
     expect(outboxService.reschedule).not.toHaveBeenCalled();
     expect(outboxService.markProcessed).not.toHaveBeenCalled();
   });
 
-  it('should reject unknown event types without marking them processed', async () => {
-    outboxService.findById.mockResolvedValue({
-      id: 'event-3',
-      eventType: 'doctor.unknown.v1',
-      attempts: 1,
-      payload: {
-        doctorId: 'doctor-3',
-        doctorStatus: 'VERIFIED',
-      },
-    });
-
-    await expect(service.processOutboxEventById('event-3')).rejects.toThrow(
-      'Unhandled outbox event type: doctor.unknown.v1',
-    );
-    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
-    expect(outboxService.markProcessed).not.toHaveBeenCalled();
-  });
-
   it('should reject invalid payloads without marking them processed', async () => {
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     outboxService.findById.mockResolvedValue({
       id: 'event-4',
       eventType: 'doctor.verification.changed.v1',
@@ -135,8 +130,14 @@ describe('DomainEventsHandlerService', () => {
     await expect(service.processOutboxEventById('event-4')).rejects.toThrow(
       'Invalid payload for outbox event event-4',
     );
+
+    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
+    expect(outboxService.reschedule).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('event-2 failed: failed'),
+      expect.stringContaining(
+        'Outbox event event-4 failed: Invalid payload for outbox event event-4',
+      ),
     );
     warnSpy.mockRestore();
   });
@@ -157,6 +158,7 @@ describe('DomainEventsHandlerService', () => {
       'timeout',
     );
 
-    expect(outboxService.reschedule).toHaveBeenCalledWith('event-4', 4, 'timeout');
+    expect(outboxService.reschedule).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
   });
 });

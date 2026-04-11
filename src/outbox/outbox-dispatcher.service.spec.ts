@@ -1,6 +1,5 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
 import { OutboxDispatcherService } from './outbox-dispatcher.service';
 
 describe('OutboxDispatcherService', () => {
@@ -70,6 +69,8 @@ describe('OutboxDispatcherService', () => {
   it('should not fail shutdown when interval was never started', () => {
     const service = createService();
     expect(() => service.onApplicationShutdown()).not.toThrow();
+  });
+
   it('should catch and log interval dispatch failures', async () => {
     const service = createService();
     jest
