@@ -18,11 +18,8 @@ describe('InMemoryTechnicalMetricsStore', () => {
 
     for (let index = 1; index <= 1_005; index += 1) {
       await store.record({
-        method: 'GET',
-        path: `/items/${index}`,
         statusCode: index % 10 === 0 ? 500 : 200,
         latencyMs: index,
-        timestamp: new Date().toISOString(),
       });
     }
 

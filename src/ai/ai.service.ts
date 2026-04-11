@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -125,7 +130,7 @@ export class AiService {
     request: AiGenerationRequest,
   ): Promise<AiGenerationResult> {
     if (!this.aiProvider || !this.isEnabled()) {
-      throw new Error('AI provider is disabled');
+      throw new ServiceUnavailableException('AI provider is disabled');
     }
 
     return this.aiProvider.generateText(request);

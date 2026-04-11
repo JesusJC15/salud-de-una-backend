@@ -9,6 +9,7 @@ import {
 @Injectable()
 export class TechnicalMetricsService {
   private readonly logger = new Logger(TechnicalMetricsService.name);
+  private static readonly REDIS_DISABLED_MESSAGE = 'Redis metrics store disabled';
 
   constructor(
     private readonly redisStore: RedisTechnicalMetricsStore,
@@ -21,7 +22,9 @@ export class TechnicalMetricsService {
       return;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Falling back to memory metrics store: ${message}`);
+      if (message !== TechnicalMetricsService.REDIS_DISABLED_MESSAGE) {
+        this.logger.warn(`Falling back to memory metrics store: ${message}`);
+      }
       await this.inMemoryStore.record(metric);
     }
   }
@@ -31,7 +34,9 @@ export class TechnicalMetricsService {
       return await this.redisStore.getSummary();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Reading technical metrics from memory: ${message}`);
+      if (message !== TechnicalMetricsService.REDIS_DISABLED_MESSAGE) {
+        this.logger.warn(`Reading technical metrics from memory: ${message}`);
+      }
       const snapshot = await this.inMemoryStore.getSummary();
       return {
         ...snapshot,

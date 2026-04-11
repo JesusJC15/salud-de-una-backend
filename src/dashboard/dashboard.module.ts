@@ -7,7 +7,6 @@ import {
 } from '../notifications/schemas/notification.schema';
 import { Patient, PatientSchema } from '../patients/schemas/patient.schema';
 import { REDIS_CLIENT } from '../redis/redis.constants';
-import { RedisHealthService } from '../redis/redis-health.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { InMemoryTechnicalMetricsStore } from './metrics/in-memory-technical-metrics.store';
@@ -28,16 +27,10 @@ import { TechnicalMetricsService } from './metrics/technical-metrics.service';
     InMemoryTechnicalMetricsStore,
     {
       provide: RedisTechnicalMetricsStore,
-      inject: [RedisHealthService, REDIS_CLIENT],
-      useFactory: (
-        redisHealthService: RedisHealthService,
-        redisClient: unknown,
-      ) =>
+      inject: [REDIS_CLIENT],
+      useFactory: (redisClient: unknown) =>
         new RedisTechnicalMetricsStore(
-          redisHealthService,
-          redisClient as ConstructorParameters<
-            typeof RedisTechnicalMetricsStore
-          >[1],
+          redisClient as ConstructorParameters<typeof RedisTechnicalMetricsStore>[0],
         ),
     },
     TechnicalMetricsService,

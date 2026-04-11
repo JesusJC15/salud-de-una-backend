@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -176,7 +177,7 @@ describe('AiService', () => {
         inputText: 'hello',
         systemInstruction: 'be brief',
       }),
-    ).rejects.toThrow('AI provider is disabled');
+    ).rejects.toThrow(ServiceUnavailableException);
   });
 
   it('generateText should delegate to provider when enabled', async () => {

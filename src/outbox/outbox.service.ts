@@ -8,6 +8,8 @@ import {
   OutboxEventDocument,
 } from './schemas/outbox-event.schema';
 
+const DISPATCH_VISIBILITY_TIMEOUT_MS = 30_000;
+
 export type DoctorVerificationChangedPayload = {
   doctorId: string;
   doctorStatus: DoctorStatus;
@@ -46,15 +48,29 @@ export class OutboxService {
   }
 
   async claimNextPendingEvent(): Promise<OutboxEventDocument | null> {
+    const now = new Date();
+    const reclaimDispatchedBefore = new Date(
+      now.getTime() - DISPATCH_VISIBILITY_TIMEOUT_MS,
+    );
+
     return this.outboxEventModel
       .findOneAndUpdate(
         {
-          status: 'pending',
-          availableAt: { $lte: new Date() },
+          $or: [
+            {
+              status: 'pending',
+              availableAt: { $lte: now },
+            },
+            {
+              status: 'dispatched',
+              updatedAt: { $lte: reclaimDispatchedBefore },
+            },
+          ],
         },
         {
           $set: {
             status: 'dispatched',
+            availableAt: now,
             lastError: undefined,
           },
           $inc: {

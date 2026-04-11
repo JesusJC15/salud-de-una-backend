@@ -74,6 +74,44 @@ describe('OutboxService', () => {
     await expect(service.claimNextPendingEvent()).resolves.toEqual({
       id: 'event-2',
     });
+
+    const [query, updatePayload, options] =
+      outboxEventModel.findOneAndUpdate.mock.calls[0] as [
+        {
+          $or: Array<Record<string, unknown>>;
+        },
+        {
+          $set: {
+            status: string;
+            availableAt: Date;
+            lastError?: string;
+          };
+          $inc: {
+            attempts: number;
+          };
+        },
+        {
+          sort: {
+            createdAt: 1;
+          };
+          returnDocument: string;
+        },
+      ];
+
+    expect(query.$or).toHaveLength(2);
+    expect(query.$or).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'pending' }),
+        expect.objectContaining({ status: 'dispatched' }),
+      ]),
+    );
+    expect(updatePayload.$set.status).toBe('dispatched');
+    expect(updatePayload.$set.availableAt).toBeInstanceOf(Date);
+    expect(updatePayload.$inc.attempts).toBe(1);
+    expect(options).toEqual({
+      sort: { createdAt: 1 },
+      returnDocument: 'after',
+    });
   });
 
   it('should find event by id', async () => {

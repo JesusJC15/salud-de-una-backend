@@ -1,8 +1,6 @@
-import 'dotenv/config';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { BullModule } from '@nestjs/bullmq';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
@@ -26,12 +24,8 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
-import {
-  REDIS_CLIENT,
-  REDIS_CONNECTION_OPTIONS,
-} from './redis/redis.constants';
+import { REDIS_CLIENT } from './redis/redis.constants';
 import { RedisModule } from './redis/redis.module';
-import { RedisHealthService } from './redis/redis-health.service';
 import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
 
 @Module({
@@ -48,11 +42,8 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     RedisModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
-      inject: [RedisHealthService, REDIS_CLIENT],
-      useFactory: (
-        redisHealthService: RedisHealthService,
-        redisClient: unknown,
-      ) => ({
+      inject: [REDIS_CLIENT],
+      useFactory: (redisClient: unknown) => ({
         throttlers: [
           {
             ttl: 60_000,
@@ -60,26 +51,10 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
           },
         ],
         storage: new RedisThrottlerStorage(
-          redisHealthService,
-          redisClient as ConstructorParameters<typeof RedisThrottlerStorage>[1],
+          redisClient as ConstructorParameters<typeof RedisThrottlerStorage>[0],
         ),
       }),
     }),
-    ...(process.env.REDIS_URL
-      ? [
-          BullModule.forRootAsync({
-            imports: [RedisModule],
-            inject: [ConfigService, REDIS_CONNECTION_OPTIONS],
-            useFactory: (
-              configService: ConfigService,
-              connectionOptions: unknown,
-            ) => ({
-              connection: connectionOptions as Record<string, unknown>,
-              prefix: `${configService.get<string>('redis.keyPrefix') ?? 'salud-de-una'}:bull`,
-            }),
-          }),
-        ]
-      : []),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
