@@ -90,6 +90,19 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     }>;
   };
 
+  type AdminUsersListResponseBody = {
+    items: Array<{ id: string }>;
+  };
+
+  type AdminUserDetailResponseBody = {
+    id: string;
+    role: string;
+  };
+
+  type AdminUserActiveResponseBody = {
+    isActive: boolean;
+  };
+
   type NotificationsListResponseBody = {
     unreadCount: number;
     items: Array<{
@@ -515,6 +528,147 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       })
       .exec();
     expect(notificationCount).toBe(1);
+  });
+
+  it('POST /v1/admin/doctors/:doctorId/rethus-verify should verify doctor using compact decision payload', async () => {
+    const doctorEmail = 'doctor-verify-compact@example.com';
+    const doctorId = await registerDoctor(doctorEmail);
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    const response = await request(app.getHttpServer())
+      .post(`/v1/admin/doctors/${doctorId}/rethus-verify`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        action: 'APPROVE',
+        notes: 'Aprobado por endpoint canonico',
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      doctorId,
+      doctorStatus: 'VERIFIED',
+    });
+  });
+
+  it('GET /v1/admin/doctors/review should return review list alias', async () => {
+    const doctorId = await registerDoctor('doctor-review-alias@example.com');
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    await request(app.getHttpServer())
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(buildRethusVerifyPayload())
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .get('/v1/admin/doctors/review')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const body = response.body as AdminDoctorsListResponseBody;
+    expect(Array.isArray(body.items)).toBe(true);
+    expect(body.items.length).toBeGreaterThan(0);
+  });
+
+  it('POST /v1/doctors/me/rethus-resubmit should set rejected doctor back to pending', async () => {
+    const doctorEmail = 'doctor-resubmit@example.com';
+    const doctorId = await registerDoctor(doctorEmail);
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    await request(app.getHttpServer())
+      .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(buildRethusVerifyPayload(DoctorStatus.REJECTED))
+      .expect(201);
+
+    const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
+    const response = await request(app.getHttpServer())
+      .post('/v1/doctors/me/rethus-resubmit')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .send({
+        evidenceUrl: 'https://example.com/new-rethus.pdf',
+        notes: 'Reenvio de soportes',
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      doctorId,
+      doctorStatus: 'PENDING',
+    });
+  });
+
+  it('POST /v1/doctors/me/rethus-resubmit should fail when doctor is not REJECTED', async () => {
+    const doctorEmail = 'doctor-resubmit-invalid@example.com';
+    await registerDoctor(doctorEmail);
+    const doctorToken = await login(doctorEmail, 'StrongP@ss1', 'staff');
+
+    await request(app.getHttpServer())
+      .post('/v1/doctors/me/rethus-resubmit')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .send({
+        evidenceUrl: 'https://example.com/new-rethus.pdf',
+      })
+      .expect(400);
+  });
+
+  it('GET /v1/admin/users should return 403 for non-admin', async () => {
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Ana',
+      lastName: 'Lopez',
+      email: 'users-rbac-patient@example.com',
+      password: 'StrongP@ss1',
+    });
+    const patientToken = await login(
+      'users-rbac-patient@example.com',
+      'StrongP@ss1',
+      'patient',
+    );
+
+    await request(app.getHttpServer())
+      .get('/v1/admin/users')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .expect(403);
+  });
+
+  it('Admin users CRUD should list, get detail and update active state', async () => {
+    const adminToken = await login(adminEmail, adminPassword, 'staff');
+
+    await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
+      firstName: 'Lina',
+      lastName: 'UserCrud',
+      email: 'patient-user-crud@example.com',
+      password: 'StrongP@ss1',
+    });
+    const doctorId = await registerDoctor('doctor-user-crud@example.com');
+
+    const listResponse = await request(app.getHttpServer())
+      .get('/v1/admin/users/DOCTOR?page=1&limit=10')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const listBody = listResponse.body as AdminUsersListResponseBody;
+
+    expect(Array.isArray(listBody.items)).toBe(true);
+    expect(listBody.items.some((item) => item.id === doctorId)).toBe(true);
+
+    await request(app.getHttpServer())
+      .get(`/v1/admin/users/DOCTOR/${doctorId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as AdminUserDetailResponseBody;
+        expect(body.id).toBe(doctorId);
+        expect(body.role).toBe('DOCTOR');
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/v1/admin/users/DOCTOR/${doctorId}/active`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ isActive: false })
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as AdminUserActiveResponseBody;
+        expect(body.isActive).toBe(false);
+      });
   });
 
   it('GET /v1/consultations/queue should block doctor with pending REThUS', async () => {

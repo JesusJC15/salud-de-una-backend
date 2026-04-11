@@ -43,10 +43,16 @@ Revision y verificacion de medicos por administradores (flujo REThUS).
 
 ## Matriz de endpoints (si aplica)
 
-| Metodo | Ruta | Auth | Rol | Proposito |
-| --- | --- | --- | --- | --- |
-| GET | /v1/admin/doctors | JWT | ADMIN | Listar medicos (incluye pendientes) |
-| POST | /v1/admin/doctors/:doctorId/doctor-verify | JWT | ADMIN | Aprobar/rechazar verificacion REThUS |
+| Metodo | Ruta                                      | Auth | Rol   | Proposito                                                    |
+| ------ | ----------------------------------------- | ---- | ----- | ------------------------------------------------------------ |
+| GET    | /v1/admin/doctors                         | JWT  | ADMIN | Listar medicos (incluye pendientes)                          |
+| GET    | /v1/admin/doctors/review                  | JWT  | ADMIN | Alias de listado de revision para compatibilidad front       |
+| POST   | /v1/admin/doctors/:doctorId/doctor-verify | JWT  | ADMIN | Endpoint canonical para aprobar/rechazar verificacion REThUS |
+| POST   | /v1/admin/doctors/:doctorId/rethus-verify | JWT  | ADMIN | Alias de compatibilidad para el flujo REThUS                 |
+| GET    | /v1/admin/users                           | JWT  | ADMIN | Listar usuarios por rol/search/paginacion                    |
+| GET    | /v1/admin/users/:role                     | JWT  | ADMIN | Listar usuarios de un rol especifico                         |
+| GET    | /v1/admin/users/:role/:userId             | JWT  | ADMIN | Obtener detalle de usuario por rol                           |
+| PATCH  | /v1/admin/users/:role/:userId/active      | JWT  | ADMIN | Activar o desactivar usuario                                 |
 
 ## Ejemplos de codigo/payload
 

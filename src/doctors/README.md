@@ -45,6 +45,7 @@ Perfil y estado de doctor dentro de plataforma.
 | Metodo | Ruta | Auth | Rol | Proposito |
 | --- | --- | --- | --- | --- |
 | GET | /v1/doctors/me | JWT | DOCTOR | Perfil doctor |
+| POST | /v1/doctors/me/rethus-resubmit | JWT | DOCTOR | Reenviar evidencia REThUS tras rechazo |
 
 ## Ejemplos de codigo/payload
 

@@ -7,6 +7,7 @@ Contratos DTO de request/response del modulo.
 ## Archivos actuales
 
 - doctor-me.response.dto.ts
+- rethus-resubmit.dto.ts
 
 ## Dependencias relacionadas
 

@@ -2,5 +2,7 @@
     "sonarlint.connectedMode.project": {
         "connectionId": "salud-de-una-backend",
         "projectKey": "JesusJC15_salud-de-una-backend"
-    }
+    },
+    "snyk.advanced.organization": "83d7cedc-b744-4fcf-a4a5-a60f20c2637a",
+    "snyk.advanced.autoSelectOrganization": true
 }

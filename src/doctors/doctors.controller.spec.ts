@@ -4,10 +4,10 @@ import { DoctorsService } from './doctors.service';
 
 describe('DoctorsController', () => {
   let controller: DoctorsController;
-  let service: { getMe: jest.Mock };
+  let service: { getMe: jest.Mock; rethusResubmit: jest.Mock };
 
   beforeEach(async () => {
-    service = { getMe: jest.fn() };
+    service = { getMe: jest.fn(), rethusResubmit: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DoctorsController],
       providers: [{ provide: DoctorsService, useValue: service }],
@@ -32,5 +32,28 @@ describe('DoctorsController', () => {
       expect.objectContaining({ userId: 'd1' }),
     );
     expect(result).toEqual({ id: 'd1' });
+  });
+
+  it('rethusResubmit should call service', async () => {
+    service.rethusResubmit.mockResolvedValue({ doctorId: 'd1' });
+
+    const result = await controller.rethusResubmit(
+      { notes: 'nueva evidencia' },
+      {
+        user: {
+          userId: 'd1',
+          email: 'doc@example.com',
+          role: 'DOCTOR',
+          isActive: true,
+        },
+      },
+    );
+
+    expect(service.rethusResubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'd1' }),
+      { notes: 'nueva evidencia' },
+      undefined,
+    );
+    expect(result).toEqual({ doctorId: 'd1' });
   });
 });
