@@ -51,6 +51,27 @@ describe('config factories', () => {
     expect(config.outboxDispatchIntervalMs).toBe(1000);
   });
 
+  it('redisConfig should keep explicit prefix and valid interval', () => {
+    process.env.REDIS_KEY_PREFIX = '';
+    process.env.OUTBOX_DISPATCH_INTERVAL_MS = '2500';
+
+    const config = redisConfig();
+
+    expect(config.keyPrefix).toBe('');
+    expect(config.outboxDispatchIntervalMs).toBe(2500);
+  });
+
+  it('redisConfig should fallback interval for invalid values', () => {
+    process.env.OUTBOX_DISPATCH_INTERVAL_MS = '-10';
+
+    let config = redisConfig();
+    expect(config.outboxDispatchIntervalMs).toBe(1000);
+
+    process.env.OUTBOX_DISPATCH_INTERVAL_MS = 'abc';
+    config = redisConfig();
+    expect(config.outboxDispatchIntervalMs).toBe(1000);
+  });
+
   it('aiConfig should map ai flags and defaults', () => {
     process.env.AI_ENABLED = 'true';
     process.env.AI_PROVIDER = 'gemini';
@@ -62,6 +83,32 @@ describe('config factories', () => {
     expect(config.provider).toBe('gemini');
     expect(config.geminiApiKey).toBe('key');
     expect(config.model).toBe('gemini-2.5-flash');
+  });
+
+  it('aiConfig should use defaults when ai env vars are missing', () => {
+    delete process.env.AI_ENABLED;
+    delete process.env.AI_PROVIDER;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_MODEL;
+
+    const config = aiConfig();
+
+    expect(config.enabled).toBe(false);
+    expect(config.provider).toBe('gemini');
+    expect(config.geminiApiKey).toBeUndefined();
+    expect(config.model).toBe('gemini-2.5-flash');
+  });
+
+  it('aiConfig should map custom model and treat empty api key as undefined', () => {
+    process.env.AI_ENABLED = 'true';
+    process.env.GEMINI_API_KEY = '';
+    process.env.GEMINI_MODEL = 'gemini-custom-model';
+
+    const config = aiConfig();
+
+    expect(config.enabled).toBe(true);
+    expect(config.geminiApiKey).toBeUndefined();
+    expect(config.model).toBe('gemini-custom-model');
   });
 
   it('webConfig should parse CORS origins and numeric limits', () => {

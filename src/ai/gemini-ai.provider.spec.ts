@@ -70,4 +70,61 @@ describe('GeminiAiProvider', () => {
       error: 'provider down',
     });
   });
+
+  it('healthCheck should return up when generation succeeds', async () => {
+    client.models.generateContent.mockResolvedValue({
+      text: 'HEALTHY',
+    });
+
+    const result = await provider.healthCheck({
+      promptKey: 'gemini.connectivity.check',
+      promptVersion: 1,
+      model: 'gemini-2.5-flash',
+      inputText: 'Return HEALTHY',
+      systemInstruction: 'Reply shortly',
+      correlationId: 'corr-3',
+    });
+
+    expect(result).toMatchObject({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      status: 'up',
+      degraded: false,
+      requestId: 'corr-3',
+    });
+  });
+
+  it('generateText should fallback to empty text and generated request id', async () => {
+    client.models.generateContent.mockResolvedValue({});
+
+    const result = await provider.generateText({
+      promptKey: 'gemini.connectivity.check',
+      promptVersion: 1,
+      model: 'gemini-2.5-flash',
+      inputText: 'Return HEALTHY',
+      systemInstruction: 'Reply shortly',
+    });
+
+    expect(result.text).toBe('');
+    expect(result.requestId).toBeDefined();
+    expect(result.tokenUsage).toBeUndefined();
+  });
+
+  it('healthCheck should stringify non-Error failures', async () => {
+    client.models.generateContent.mockRejectedValue('timeout');
+
+    const result = await provider.healthCheck({
+      promptKey: 'gemini.connectivity.check',
+      promptVersion: 1,
+      model: 'gemini-2.5-flash',
+      inputText: 'Return HEALTHY',
+      systemInstruction: 'Reply shortly',
+    });
+
+    expect(result).toMatchObject({
+      provider: 'gemini',
+      status: 'down',
+      error: 'timeout',
+    });
+  });
 });

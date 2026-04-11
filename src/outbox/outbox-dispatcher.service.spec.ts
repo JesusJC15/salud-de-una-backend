@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { OutboxDispatcherService } from './outbox-dispatcher.service';
 
 describe('OutboxDispatcherService', () => {
@@ -49,6 +50,25 @@ describe('OutboxDispatcherService', () => {
     service.onApplicationShutdown();
 
     expect(dispatchSpy).toHaveBeenCalled();
+  });
+
+  it('should use default dispatch interval when config is missing', () => {
+    configService.get.mockReturnValue(undefined);
+    const service = createService();
+    const dispatchSpy = jest
+      .spyOn(service, 'dispatchPendingEvents')
+      .mockResolvedValue(undefined);
+
+    service.onApplicationBootstrap();
+    jest.advanceTimersByTime(1000);
+    service.onApplicationShutdown();
+
+    expect(dispatchSpy).toHaveBeenCalled();
+  });
+
+  it('should not fail shutdown when interval was never started', () => {
+    const service = createService();
+    expect(() => service.onApplicationShutdown()).not.toThrow();
   });
 
   it('should process events directly when queue is unavailable', async () => {
@@ -113,6 +133,35 @@ describe('OutboxDispatcherService', () => {
       2,
       'queue down',
     );
+  });
+
+  it('should stringify non-Error dispatch failures', async () => {
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    domainEventsQueue = {
+      add: jest.fn().mockRejectedValue('queue unavailable'),
+    };
+    outboxService.claimNextPendingEvent
+      .mockResolvedValueOnce({
+        id: 'event-4',
+        eventType: 'doctor.verification.changed.v1',
+        attempts: 3,
+      })
+      .mockResolvedValueOnce(null);
+    const service = createService();
+
+    await service.dispatchPendingEvents();
+
+    expect(outboxService.reschedule).toHaveBeenCalledWith(
+      'event-4',
+      3,
+      'queue unavailable',
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('queue unavailable'),
+    );
+    warnSpy.mockRestore();
   });
 
   it('should skip when dispatcher is already running', async () => {

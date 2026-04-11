@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { UserRole } from '../common/enums/user-role.enum';
 import { AiService } from './ai.service';
 import type { AiProvider } from './interfaces/ai-provider.interface';
@@ -218,5 +219,113 @@ describe('AiService', () => {
       degraded: true,
       error: 'AI provider configuration is incomplete',
     });
+  });
+
+  it('healthCheck should set fallback degraded detail when provider reports down without error', async () => {
+    promptDefinitionModel.findOne.mockReturnValue(
+      createPromptQuery({
+        key: 'gemini.connectivity.check',
+        version: 1,
+        model: 'gemini-2.5-flash',
+        systemInstruction: 'Probe',
+      }),
+    );
+    aiProvider.healthCheck.mockResolvedValue({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      status: 'down',
+      latencyMs: 40,
+      checkedAt: new Date().toISOString(),
+      degraded: true,
+      requestId: 'corr-5',
+    });
+    const service = createService();
+
+    await service.healthCheck(actor, 'corr-5');
+
+    expect(service.getReadiness()).toMatchObject({
+      status: 'degraded',
+      detail: 'Last AI health-check failed',
+    });
+  });
+
+  it('getReadiness should report unknown connectivity before first health check', () => {
+    const service = createService();
+
+    expect(service.getReadiness()).toMatchObject({
+      status: 'degraded',
+      detail: 'AI enabled but connectivity has not been verified yet',
+      degraded: true,
+    });
+  });
+
+  it('generateText should throw when provider is null even if AI is enabled', async () => {
+    const service = createService(null);
+
+    await expect(
+      service.generateText({
+        promptKey: 'key',
+        promptVersion: 1,
+        model: 'gemini-2.5-flash',
+        inputText: 'hello',
+        systemInstruction: 'be brief',
+      }),
+    ).rejects.toThrow('AI provider is disabled');
+  });
+
+  it('healthCheck should still succeed when actor is omitted', async () => {
+    promptDefinitionModel.findOne.mockReturnValue(
+      createPromptQuery({
+        key: 'gemini.connectivity.check',
+        version: 1,
+        model: 'gemini-2.5-flash',
+        systemInstruction: 'Probe',
+      }),
+    );
+    aiProvider.healthCheck.mockResolvedValue({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      status: 'up',
+      latencyMs: 12,
+      checkedAt: new Date().toISOString(),
+      degraded: false,
+      requestId: 'corr-6',
+    });
+    const service = createService();
+
+    await service.healthCheck(undefined, 'corr-6');
+
+    const [callArg] = aiProvider.healthCheck.mock.calls[0] as [
+      { actor?: unknown },
+    ];
+    expect(callArg.actor).toBeUndefined();
+  });
+
+  it('healthCheck should swallow audit-log persistence failures', async () => {
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'ai.enabled') {
+        return false;
+      }
+      if (key === 'ai.provider') {
+        return 'gemini';
+      }
+      if (key === 'ai.model') {
+        return 'gemini-2.5-flash';
+      }
+      return undefined;
+    });
+    auditLogModel.create.mockRejectedValue('store unavailable');
+    const service = createService(null);
+
+    await expect(service.healthCheck(actor, 'corr-7')).resolves.toMatchObject({
+      status: 'disabled',
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('store unavailable'),
+    );
+    warnSpy.mockRestore();
   });
 });
