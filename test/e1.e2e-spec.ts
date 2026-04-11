@@ -202,6 +202,10 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
     redFlags: unknown[];
     message: string;
     highPriorityAlert: boolean;
+    analysisMode?: 'AI_ASSISTED' | 'RULE_BASED';
+    noticeCode?:
+      | 'IA_TEMPORARILY_UNAVAILABLE_RULE_BASED_FALLBACK'
+      | 'IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK';
   };
 
   async function login(
@@ -1060,7 +1064,7 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .expect(422);
   });
 
-  it('POST /v1/triage/sessions/:sessionId/analyze should mark FAILED and return 503 when AI fails', async () => {
+  it('POST /v1/triage/sessions/:sessionId/analyze should fallback to RULE_BASED when AI is disabled in environment', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Laura',
       lastName: 'Saenz',
@@ -1095,24 +1099,31 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       })
       .expect(200);
 
-    await request(app.getHttpServer())
+    const analyzeResponse = await request(app.getHttpServer())
       .post(`/v1/triage/sessions/${createBody.sessionId}/analyze`)
       .set('Authorization', `Bearer ${patientToken}`)
-      .expect(503);
+      .expect(200);
+
+    const analyzeBody =
+      analyzeResponse.body as AnalyzeTriageSessionResponseBody;
+    expect(analyzeBody.analysisMode).toBe('RULE_BASED');
+    expect(analyzeBody.noticeCode).toBe(
+      'IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK',
+    );
 
     const triageSession = await triageSessionModel
       .findById(createBody.sessionId)
       .lean()
       .exec();
 
-    expect(triageSession?.status).toBe('FAILED');
+    expect(triageSession?.status).toBe('COMPLETED');
 
     const consultation = await consultationModel
       .findOne({ triageSessionId: new Types.ObjectId(createBody.sessionId) })
       .lean()
       .exec();
 
-    expect(consultation).toBeNull();
+    expect(consultation).toBeDefined();
   });
 
   it('POST /v1/triage/sessions/:sessionId/analyze should complete session and create consultation', async () => {

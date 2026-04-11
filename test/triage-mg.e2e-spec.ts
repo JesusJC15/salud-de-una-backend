@@ -120,6 +120,37 @@ describe('HU-003 Triage MG (e2e)', () => {
     total: number;
   };
 
+  type TriageSessionDetailResponseBody = {
+    id: string;
+    sessionId: string;
+    specialty: string;
+    status: string;
+    isComplete: boolean;
+    currentQuestionId: string | null;
+    currentStep: number;
+    totalSteps: number;
+    totalQuestions: number;
+    nextQuestionId: string | null;
+    questions: Array<{
+      id: string;
+      questionId: string;
+      title: string;
+      questionText: string;
+      description?: string;
+      type: 'SINGLE_CHOICE' | 'MULTI_CHOICE' | 'NUMERIC_SCALE';
+      options?: Array<{
+        id: string;
+        label: string;
+        description?: string;
+      }>;
+      minValue?: number;
+      maxValue?: number;
+      step?: number;
+    }>;
+    createdAt: string;
+    updatedAt: string;
+  };
+
   type CancelTriageSessionResponseBody = {
     sessionId: string;
     specialty: string;
@@ -156,10 +187,17 @@ describe('HU-003 Triage MG (e2e)', () => {
   }
 
   async function createMgSession(token: string): Promise<string> {
+    return createSession(token, 'GENERAL_MEDICINE');
+  }
+
+  async function createSession(
+    token: string,
+    specialty: 'GENERAL_MEDICINE' | 'ODONTOLOGY',
+  ): Promise<string> {
     const response = await request(app.getHttpServer())
       .post('/v1/triage/sessions')
       .set('Authorization', `Bearer ${token}`)
-      .send({ specialty: 'GENERAL_MEDICINE' })
+      .send({ specialty })
       .expect(201);
 
     const body = response.body as CreateTriageSessionResponseBody;
@@ -180,6 +218,25 @@ describe('HU-003 Triage MG (e2e)', () => {
           { questionId: 'MG-Q3', answerValue: 4 },
           { questionId: 'MG-Q4', answerValue: 'no' },
           { questionId: 'MG-Q5', answerValue: 'no' },
+        ],
+      })
+      .expect(200);
+  }
+
+  async function completeOdAnswers(
+    token: string,
+    sessionId: string,
+  ): Promise<void> {
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${sessionId}/answers`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        answers: [
+          { questionId: 'OD-Q1', answerValue: 'parte superior' },
+          { questionId: 'OD-Q2', answerValue: '1 dia' },
+          { questionId: 'OD-Q3', answerValue: 6 },
+          { questionId: 'OD-Q4', answerValue: 'no' },
+          { questionId: 'OD-Q5', answerValue: 'si' },
         ],
       })
       .expect(200);
@@ -328,6 +385,74 @@ describe('HU-003 Triage MG (e2e)', () => {
     });
   });
 
+  it('GET /v1/triage/sessions/:id returns 200 for owner with full questionnaire metadata', async () => {
+    const token = await registerPatientAndLogin();
+    const sessionId = await createMgSession(token);
+
+    await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${sessionId}/answers`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ answers: [{ questionId: 'MG-Q1', answerValue: 'cefalea' }] })
+      .expect(200);
+
+    const response = await request(app.getHttpServer())
+      .get(`/v1/triage/sessions/${sessionId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = response.body as TriageSessionDetailResponseBody;
+    expect(body.id).toBe(sessionId);
+    expect(body.sessionId).toBe(sessionId);
+    expect(body.specialty).toBe('GENERAL_MEDICINE');
+    expect(body.status).toBe('IN_PROGRESS');
+    expect(body.isComplete).toBe(false);
+    expect(body.currentStep).toBe(2);
+    expect(body.totalSteps).toBe(5);
+    expect(body.totalQuestions).toBe(5);
+    expect(body.currentQuestionId).toBe('MG-Q2');
+    expect(body.nextQuestionId).toBe('MG-Q2');
+    expect(Array.isArray(body.questions)).toBe(true);
+    expect(body.questions.length).toBeGreaterThan(0);
+
+    const numericScaleQuestion = body.questions.find(
+      (question) => question.type === 'NUMERIC_SCALE',
+    );
+    expect(numericScaleQuestion).toBeDefined();
+    expect(numericScaleQuestion?.minValue).toBe(0);
+    expect(numericScaleQuestion?.maxValue).toBe(10);
+    expect(numericScaleQuestion?.step).toBe(1);
+
+    const choiceQuestion = body.questions.find(
+      (question) => question.type === 'SINGLE_CHOICE',
+    );
+    expect(choiceQuestion).toBeDefined();
+    expect(Array.isArray(choiceQuestion?.options)).toBe(true);
+    expect(choiceQuestion?.options?.[0]).toMatchObject({
+      id: expect.any(String),
+      label: expect.any(String),
+    });
+  });
+
+  it('GET /v1/triage/sessions/:id returns 404 for a different patient', async () => {
+    const ownerToken = await registerPatientAndLogin();
+    const outsiderToken = await registerPatientAndLogin();
+    const sessionId = await createMgSession(ownerToken);
+
+    await request(app.getHttpServer())
+      .get(`/v1/triage/sessions/${sessionId}`)
+      .set('Authorization', `Bearer ${outsiderToken}`)
+      .expect(404);
+  });
+
+  it('GET /v1/triage/sessions/:id returns 404 when session does not exist', async () => {
+    const token = await registerPatientAndLogin();
+
+    await request(app.getHttpServer())
+      .get(`/v1/triage/sessions/${new Types.ObjectId().toString()}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
   it('PATCH /v1/triage/sessions/:id/cancel cancels active session and removes it from active list', async () => {
     const token = await registerPatientAndLogin();
     const sessionId = await createMgSession(token);
@@ -408,6 +533,21 @@ describe('HU-003 Triage MG (e2e)', () => {
     const token = await registerPatientAndLogin();
     const sessionId = await createMgSession(token);
     await completeMgAnswers(token, sessionId);
+
+    const analyzeResponse = await request(app.getHttpServer())
+      .post(`/v1/triage/sessions/${sessionId}/analyze`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = analyzeResponse.body as AnalyzeTriageSessionResponseBody;
+    expect(['LOW', 'MODERATE', 'HIGH']).toContain(body.priority);
+    expect(Array.isArray(body.redFlags)).toBe(true);
+  });
+
+  it('POST /v1/triage/sessions/:id/analyze returns 200 for ODONTOLOGY sessions', async () => {
+    const token = await registerPatientAndLogin();
+    const sessionId = await createSession(token, 'ODONTOLOGY');
+    await completeOdAnswers(token, sessionId);
 
     const analyzeResponse = await request(app.getHttpServer())
       .post(`/v1/triage/sessions/${sessionId}/analyze`)

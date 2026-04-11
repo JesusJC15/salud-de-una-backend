@@ -26,6 +26,10 @@ export const validationSchema = Joi.object({
   OUTBOX_DISPATCH_INTERVAL_MS: Joi.number().integer().min(1).optional(),
   AI_ENABLED: Joi.boolean().default(false),
   AI_PROVIDER: Joi.string().valid('gemini').default('gemini'),
-  GEMINI_API_KEY: Joi.string().allow('').optional(),
+  GEMINI_API_KEY: Joi.when('AI_ENABLED', {
+    is: true,
+    then: Joi.string().trim().min(1).required(),
+    otherwise: Joi.string().allow('').optional(),
+  }),
   GEMINI_MODEL: Joi.string().allow('').optional(),
 });

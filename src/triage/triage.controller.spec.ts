@@ -10,6 +10,7 @@ describe('TriageController', () => {
   let service: {
     createSession: jest.Mock;
     getActiveSessions: jest.Mock;
+    getSessionDetail: jest.Mock;
     saveAnswers: jest.Mock;
     analyzeSession: jest.Mock;
     cancelSession: jest.Mock;
@@ -19,6 +20,7 @@ describe('TriageController', () => {
     service = {
       createSession: jest.fn(),
       getActiveSessions: jest.fn(),
+      getSessionDetail: jest.fn(),
       saveAnswers: jest.fn(),
       analyzeSession: jest.fn(),
       cancelSession: jest.fn(),
@@ -151,6 +153,34 @@ describe('TriageController', () => {
       priority: 'HIGH',
       redFlags: [],
       message: 'ok',
+    });
+  });
+
+  it('getSessionDetail should call service', async () => {
+    service.getSessionDetail.mockResolvedValue({
+      sessionId: 's1',
+      status: 'IN_PROGRESS',
+    });
+
+    const request = {
+      user: {
+        userId: 'p1',
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      correlationId: 'corr-detail',
+    } as unknown as RequestContext;
+
+    const result = await controller.getSessionDetail(request, 's1');
+
+    expect(service.getSessionDetail).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ userId: 'p1' }),
+    );
+    expect(result).toEqual({
+      sessionId: 's1',
+      status: 'IN_PROGRESS',
     });
   });
 

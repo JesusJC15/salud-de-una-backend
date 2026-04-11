@@ -2,7 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
-  ServiceUnavailableException,
+  NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
@@ -421,6 +421,104 @@ describe('TriageService', () => {
     });
   });
 
+  it('should return session detail with full question metadata for owner', async () => {
+    const sessionId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: sessionId,
+        specialty: Specialty.GENERAL_MEDICINE,
+        status: 'IN_PROGRESS',
+        answers: [{ questionId: 'MG-Q1', answerValue: true }],
+        createdAt: new Date('2026-04-07T18:00:00.000Z'),
+        updatedAt: new Date('2026-04-07T18:01:00.000Z'),
+      }),
+    });
+    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue([
+      'MG-Q1',
+      'MG-Q2',
+      'MG-Q3',
+    ]);
+    triageQuestionsRepository.getQuestionsBySpecialty.mockReturnValue([
+      {
+        id: 'MG-Q1',
+        questionId: 'MG-Q1',
+        title: 'Sintoma principal',
+        questionText: 'Que sintoma principal presentas hoy?',
+        type: 'SINGLE_CHOICE',
+        options: [{ id: 'MG-Q1-HEADACHE', label: 'Dolor de cabeza' }],
+      },
+      {
+        id: 'MG-Q3',
+        questionId: 'MG-Q3',
+        title: 'Intensidad de sintomas',
+        questionText: 'En una escala de 0 a 10, cual es la intensidad?',
+        type: 'NUMERIC_SCALE',
+        minValue: 0,
+        maxValue: 10,
+        step: 1,
+      },
+    ]);
+
+    const result = await service.getSessionDetail(sessionId.toString(), {
+      userId: patientId.toString(),
+      email: 'patient@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    });
+
+    expect(result).toEqual({
+      id: sessionId.toString(),
+      sessionId: sessionId.toString(),
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'IN_PROGRESS',
+      isComplete: false,
+      currentQuestionId: 'MG-Q2',
+      currentStep: 2,
+      totalSteps: 3,
+      totalQuestions: 3,
+      nextQuestionId: 'MG-Q2',
+      questions: [
+        {
+          id: 'MG-Q1',
+          questionId: 'MG-Q1',
+          title: 'Sintoma principal',
+          questionText: 'Que sintoma principal presentas hoy?',
+          type: 'SINGLE_CHOICE',
+          options: [{ id: 'MG-Q1-HEADACHE', label: 'Dolor de cabeza' }],
+        },
+        {
+          id: 'MG-Q3',
+          questionId: 'MG-Q3',
+          title: 'Intensidad de sintomas',
+          questionText: 'En una escala de 0 a 10, cual es la intensidad?',
+          type: 'NUMERIC_SCALE',
+          minValue: 0,
+          maxValue: 10,
+          step: 1,
+        },
+      ],
+      createdAt: '2026-04-07T18:00:00.000Z',
+      updatedAt: '2026-04-07T18:01:00.000Z',
+    });
+  });
+
+  it('should throw 404 when session detail is requested for non-owner or missing session', async () => {
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.getSessionDetail(new Types.ObjectId().toString(), {
+        userId: new Types.ObjectId().toString(),
+        email: 'other@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('should cancel an in-progress session', async () => {
     const sessionId = new Types.ObjectId();
     const patientId = new Types.ObjectId();
@@ -555,6 +653,9 @@ describe('TriageService', () => {
     const warnSpy = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
+    const logSpy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
 
     const result = await service.analyzeSession(
       sessionId.toString(),
@@ -588,6 +689,16 @@ describe('TriageService', () => {
     expect(warnPayload.violations).toContain(
       String.raw`diagnosis:diagnostico\s+de`,
     );
+    const completedLog = logSpy.mock.calls
+      .map((call) => call[0] as string)
+      .find((payload) => payload.includes('triage.analyze.completed'));
+    expect(completedLog).toBeDefined();
+    const completedPayload = JSON.parse(completedLog!) as {
+      specialty: Specialty;
+      session_id: string;
+    };
+    expect(completedPayload.specialty).toBe(Specialty.GENERAL_MEDICINE);
+    expect(completedPayload.session_id).toBe(sessionId.toString());
   });
 
   it('should override priority to HIGH when any CRITICAL red flag exists', async () => {
@@ -618,6 +729,9 @@ describe('TriageService', () => {
     ]);
     guardrailService.check.mockReturnValue({ safe: true, violations: [] });
     consultationsService.createFromTriage.mockResolvedValue(undefined);
+    const logSpy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
 
     const result = await service.analyzeSession(sessionId.toString(), {
       userId: patientId.toString(),
@@ -628,6 +742,16 @@ describe('TriageService', () => {
 
     expect(result.priority).toBe('HIGH');
     expect(result.highPriorityAlert).toBe(true);
+    const completedLog = logSpy.mock.calls
+      .map((call) => call[0] as string)
+      .find((payload) => payload.includes('triage.analyze.completed'));
+    expect(completedLog).toBeDefined();
+    const completedPayload = JSON.parse(completedLog!) as {
+      specialty: Specialty;
+      session_id: string;
+    };
+    expect(completedPayload.specialty).toBe(Specialty.ODONTOLOGY);
+    expect(completedPayload.session_id).toBe(sessionId.toString());
   });
 
   it('should raise LOW base priority to MODERATE when WARNING red flags exist', async () => {
@@ -694,7 +818,7 @@ describe('TriageService', () => {
     triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
     geminiTriageService.analyzeTriage.mockRejectedValue(
-      new Error('provider down'),
+      new Error('invalid provider response schema'),
     );
 
     await expect(
@@ -708,8 +832,104 @@ describe('TriageService', () => {
         },
         'corr-ai-failure',
       ),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        errorCode: 'TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE',
+        specialty: Specialty.GENERAL_MEDICINE,
+        sessionId: sessionId.toString(),
+      }),
+    });
 
     expect(triageSession.status).toBe('FAILED');
+  });
+
+  it('should retry and fallback to rules when transient Gemini failures persist', async () => {
+    const sessionId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const triageSession = {
+      _id: sessionId,
+      patientId,
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'IN_PROGRESS',
+      answers: [{ questionId: 'MG-Q1', answerValue: 'dolor' }],
+      save: jest.fn().mockResolvedValue(undefined),
+      analysis: undefined,
+      completedAt: undefined,
+    };
+
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(triageSession),
+    });
+    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
+    jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
+    geminiTriageService.analyzeTriage.mockRejectedValue(
+      new Error('ETIMEDOUT while calling provider'),
+    );
+    guardrailService.check.mockReturnValue({ safe: true, violations: [] });
+    consultationsService.createFromTriage.mockResolvedValue(undefined);
+
+    const result = await service.analyzeSession(
+      sessionId.toString(),
+      {
+        userId: patientId.toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      'corr-ai-fallback',
+    );
+
+    expect(geminiTriageService.analyzeTriage).toHaveBeenCalledTimes(3);
+    expect(triageSession.status).toBe('COMPLETED');
+    expect(result.priority).toBe('LOW');
+    expect(result.highPriorityAlert).toBe(false);
+    expect(result.analysisMode).toBe('RULE_BASED');
+    expect(result.noticeCode).toBe(
+      'IA_TEMPORARILY_UNAVAILABLE_RULE_BASED_FALLBACK',
+    );
+  });
+
+  it('should fallback to rules with explicit no-AI message when provider is disabled', async () => {
+    const sessionId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const triageSession = {
+      _id: sessionId,
+      patientId,
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'IN_PROGRESS',
+      answers: [{ questionId: 'MG-Q1', answerValue: 'dolor' }],
+      save: jest.fn().mockResolvedValue(undefined),
+      analysis: undefined,
+      completedAt: undefined,
+    };
+
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(triageSession),
+    });
+    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
+    jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
+    geminiTriageService.analyzeTriage.mockRejectedValue(
+      new Error('AI provider is disabled'),
+    );
+    guardrailService.check.mockReturnValue({ safe: true, violations: [] });
+    consultationsService.createFromTriage.mockResolvedValue(undefined);
+
+    const result = await service.analyzeSession(
+      sessionId.toString(),
+      {
+        userId: patientId.toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      'corr-ai-not-implemented',
+    );
+
+    expect(result.analysisMode).toBe('RULE_BASED');
+    expect(result.noticeCode).toBe('IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK');
+    expect(result.message).toContain(
+      'la IA no esta implementada en este entorno',
+    );
+    expect(result.priority).toBe('LOW');
   });
 });

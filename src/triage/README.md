@@ -43,6 +43,8 @@ Success `201`:
 }
 ```
 
+Nota: si el cliente requiere metadatos completos de preguntas (type, options, min/max/step), usar `GET /v1/triage/sessions/{sessionId}` como fuente oficial.
+
 Conflict `409` (resume hint):
 
 ```json
@@ -88,7 +90,65 @@ Success `200`:
 }
 ```
 
-### 3) Save answers (advance flow)
+### 3) Get session detail (resume/hydrate questionnaire)
+
+`GET /v1/triage/sessions/{sessionId}`
+
+Success `200`:
+
+```json
+{
+  "id": "680f0493bba79f530f7486f1",
+  "sessionId": "680f0493bba79f530f7486f1",
+  "specialty": "GENERAL_MEDICINE",
+  "status": "IN_PROGRESS",
+  "isComplete": false,
+  "currentQuestionId": "MG-Q2",
+  "currentStep": 2,
+  "totalSteps": 5,
+  "totalQuestions": 5,
+  "nextQuestionId": "MG-Q2",
+  "questions": [
+    {
+      "id": "MG-Q1",
+      "questionId": "MG-Q1",
+      "title": "Sintoma principal",
+      "questionText": "Que sintoma principal presentas hoy?",
+      "description": "Selecciona el sintoma que describe mejor tu situacion.",
+      "type": "SINGLE_CHOICE",
+      "options": [
+        {
+          "id": "MG-Q1-HEADACHE",
+          "label": "Dolor de cabeza"
+        }
+      ]
+    },
+    {
+      "id": "MG-Q3",
+      "questionId": "MG-Q3",
+      "title": "Intensidad de sintomas",
+      "questionText": "En una escala de 0 a 10, cual es la intensidad?",
+      "type": "NUMERIC_SCALE",
+      "minValue": 0,
+      "maxValue": 10,
+      "step": 1
+    }
+  ],
+  "createdAt": "2026-04-07T18:18:00.000Z",
+  "updatedAt": "2026-04-07T18:19:10.000Z"
+}
+```
+
+Not found `404` (sesion inexistente o sin ownership):
+
+```json
+{
+  "statusCode": 404,
+  "message": "Sesion de triage no encontrada"
+}
+```
+
+### 4) Save answers (advance flow)
 
 `POST /v1/triage/sessions/{sessionId}/answers`
 
@@ -118,7 +178,7 @@ Success `200`:
 }
 ```
 
-### 4) Cancel active session
+### 5) Cancel active session
 
 `PATCH /v1/triage/sessions/{sessionId}/cancel`
 
@@ -134,7 +194,7 @@ Success `200`:
 }
 ```
 
-### 5) Analyze completed answers
+### 6) Analyze completed answers
 
 `POST /v1/triage/sessions/{sessionId}/analyze`
 
@@ -149,6 +209,41 @@ Success `200`:
   "highPriorityAlert": false
 }
 ```
+
+Service unavailable `503` (error tecnico estable):
+
+```json
+{
+  "statusCode": 503,
+  "errorCode": "TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE",
+  "specialty": "GENERAL_MEDICINE",
+  "sessionId": "680f0493bba79f530f7486f1",
+  "message": "No fue posible completar el analisis de triage en este momento"
+}
+```
+
+Codigos tecnicos de analisis:
+
+- `TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE`: dependencia externa de IA no disponible en analisis de Medicina General.
+- `TRIAGE_ANALYSIS_RULESET_MISSING`: no existe ruleset de preguntas para la especialidad solicitada.
+
+Resiliencia en Medicina General:
+
+- Retry interno con backoff para errores transitorios del proveedor IA.
+- Fallback a priorizacion por reglas si el error transitorio persiste tras reintentos.
+- Si el fallo no es transitorio, la sesion pasa a `FAILED` y retorna `503`.
+
+Campos adicionales para frontend en `200` de analyze:
+
+- `analysisMode`: `AI_ASSISTED` o `RULE_BASED`.
+- `noticeCode` opcional:
+  - `IA_TEMPORARILY_UNAVAILABLE_RULE_BASED_FALLBACK`
+  - `IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK`
+
+Recomendacion UI:
+
+- Si `analysisMode=RULE_BASED`, mostrar banner informativo no bloqueante:
+  - "Tu analisis fue realizado con reglas clinicas. Puede variar cuando la IA este disponible."
 
 ## Session statuses
 

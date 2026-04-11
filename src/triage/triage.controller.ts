@@ -18,6 +18,8 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -160,6 +162,84 @@ export class TriageController {
     return this.triageService.getActiveSessions(req.user!, query.specialty);
   }
 
+  @Get('sessions/:sessionId')
+  @Roles(UserRole.PATIENT)
+  @ApiOperation({
+    summary: 'Obtener detalle de sesion de triage',
+    description:
+      'Retorna la sesion de triage del paciente autenticado con metadatos completos de preguntas para hidratar y reanudar el cuestionario en cliente movil.',
+  })
+  @ApiParam({
+    name: 'sessionId',
+    description: 'Id de la sesion de triage',
+    example: '680f0493bba79f530f7486f1',
+  })
+  @ApiOkResponse({
+    description: 'Detalle de sesion retornado correctamente',
+    schema: {
+      example: {
+        id: '680f0493bba79f530f7486f1',
+        sessionId: '680f0493bba79f530f7486f1',
+        specialty: 'GENERAL_MEDICINE',
+        status: 'IN_PROGRESS',
+        isComplete: false,
+        currentQuestionId: 'MG-Q2',
+        currentStep: 2,
+        totalSteps: 5,
+        totalQuestions: 5,
+        nextQuestionId: 'MG-Q2',
+        questions: [
+          {
+            id: 'MG-Q1',
+            questionId: 'MG-Q1',
+            title: 'Sintoma principal',
+            questionText: 'Que sintoma principal presentas hoy?',
+            description:
+              'Selecciona el sintoma que describe mejor tu situacion.',
+            type: 'SINGLE_CHOICE',
+            options: [
+              {
+                id: 'MG-Q1-HEADACHE',
+                label: 'Dolor de cabeza',
+              },
+            ],
+          },
+          {
+            id: 'MG-Q3',
+            questionId: 'MG-Q3',
+            title: 'Intensidad de sintomas',
+            questionText: 'En una escala de 0 a 10, cual es la intensidad?',
+            type: 'NUMERIC_SCALE',
+            minValue: 0,
+            maxValue: 10,
+            step: 1,
+          },
+        ],
+        createdAt: '2026-04-07T18:18:00.000Z',
+        updatedAt: '2026-04-07T18:19:10.000Z',
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'JWT ausente o invalido' })
+  @ApiForbiddenResponse({
+    description: 'El usuario autenticado no tiene rol PATIENT',
+  })
+  @ApiNotFoundResponse({
+    description: 'Sesion no encontrada o no pertenece al paciente',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'Sesion de triage no encontrada',
+        path: '/v1/triage/sessions/680f0493bba79f530f7486f1',
+        timestamp: '2026-04-07T18:20:00.000Z',
+        correlation_id: '434e43f6-c73f-4b0f-a2da-07cd6b1dc148',
+      },
+    },
+  })
+  getSessionDetail(@Req() req: RequestContext, @Param('sessionId') sessionId: string) {
+    return this.triageService.getSessionDetail(sessionId, req.user!);
+  }
+
   @Post('sessions/:sessionId/answers')
   @HttpCode(200)
   @Roles(UserRole.PATIENT)
@@ -217,6 +297,21 @@ export class TriageController {
   @ApiForbiddenResponse({ description: 'El usuario autenticado no tiene rol PATIENT' })
   @ApiNotFoundResponse({ description: 'Sesion no encontrada o no pertenece al paciente' })
   @ApiUnprocessableEntityResponse({ description: 'La sesion no tiene todas las respuestas requeridas' })
+  @ApiServiceUnavailableResponse({
+    description: 'Dependencia de analisis no disponible o ruleset ausente',
+    schema: {
+      example: {
+        statusCode: 503,
+        errorCode: 'TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE',
+        specialty: 'GENERAL_MEDICINE',
+        sessionId: '680f0493bba79f530f7486f1',
+        message: 'No fue posible completar el analisis de triage en este momento',
+        path: '/v1/triage/sessions/680f0493bba79f530f7486f1/analyze',
+        timestamp: '2026-04-11T10:00:00.000Z',
+        correlation_id: 'mobile-mntx90rg-gpe1oido',
+      },
+    },
+  })
   analyzeSession(
     @Req() req: RequestContext,
     @Param('sessionId') sessionId: string,

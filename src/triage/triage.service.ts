@@ -54,6 +54,22 @@ type ActiveTriageSessionResponse = {
   updatedAt: string | null;
 };
 
+type TriageSessionDetailResponse = {
+  id: string;
+  sessionId: string;
+  specialty: Specialty;
+  status: TriageSessionStatus;
+  isComplete: boolean;
+  currentQuestionId: string | null;
+  currentStep: number;
+  totalSteps: number;
+  totalQuestions: number;
+  nextQuestionId: string | null;
+  questions: TriageQuestion[];
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 type ListActiveTriageSessionsResponse = {
   items: ActiveTriageSessionResponse[];
   total: number;
@@ -84,7 +100,18 @@ type AnalyzeTriageSessionResponse = {
   redFlags: RedFlag[];
   message: string;
   highPriorityAlert: boolean;
+  analysisMode?: 'AI_ASSISTED' | 'RULE_BASED';
+  noticeCode?:
+    | 'IA_TEMPORARILY_UNAVAILABLE_RULE_BASED_FALLBACK'
+    | 'IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK';
 };
+
+const TRIAGE_ANALYSIS_ERROR_CODES = {
+  DEPENDENCY_UNAVAILABLE: 'TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE',
+  RULESET_MISSING: 'TRIAGE_ANALYSIS_RULESET_MISSING',
+} as const;
+
+const TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS = [150, 400] as const;
 
 @Injectable()
 export class TriageService {
@@ -208,6 +235,15 @@ export class TriageService {
       items,
       total: items.length,
     };
+  }
+
+  async getSessionDetail(
+    sessionId: string,
+    user: RequestUser,
+  ): Promise<TriageSessionDetailResponse> {
+    const triageSession = await this.getOwnedSession(sessionId, user);
+
+    return this.toSessionDetailResponse(triageSession);
   }
 
   async cancelSession(
@@ -368,6 +404,42 @@ export class TriageService {
   ): Promise<AnalyzeTriageSessionResponse> {
     const triageSession = await this.getOwnedInProgressSession(sessionId, user);
 
+    const requiredQuestionIds =
+      this.triageQuestionsRepository.getRequiredQuestionIds(
+        triageSession.specialty,
+      );
+
+    if (requiredQuestionIds.length === 0) {
+      const analysisDurationMs = 0;
+      triageSession.status = 'FAILED';
+      await triageSession.save();
+
+      this.logger.error(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          service: 'api',
+          endpoint_or_event: 'triage.analyze.ruleset_missing',
+          correlation_id: correlationId,
+          user_id: user.userId,
+          role: user.role,
+          specialty: triageSession.specialty,
+          session_id: triageSession._id.toString(),
+          triage_session_id: triageSession._id.toString(),
+          latency_ms: analysisDurationMs,
+          error_code: TRIAGE_ANALYSIS_ERROR_CODES.RULESET_MISSING,
+        }),
+      );
+
+      throw new ServiceUnavailableException({
+        error: 'TriageAnalysisRulesetMissing',
+        errorCode: TRIAGE_ANALYSIS_ERROR_CODES.RULESET_MISSING,
+        specialty: triageSession.specialty,
+        sessionId: triageSession._id.toString(),
+        message: 'No fue posible completar el analisis de triage en este momento',
+      });
+    }
+
     if (!this.isSessionComplete(triageSession)) {
       throw new UnprocessableEntityException(
         'La sesion de triage no esta completa',
@@ -382,22 +454,33 @@ export class TriageService {
 
     let basePriority = this.getRuleBasedBasePriority(redFlags);
     let aiSummary: string | undefined;
+    let aiStrategy:
+      | 'provider'
+      | 'fallback_rule_based'
+      | 'fallback_rule_based_no_ai'
+      | 'not_applicable' = 'not_applicable';
+    let aiAttempts = 0;
 
     if (triageSession.specialty === Specialty.GENERAL_MEDICINE) {
       try {
-        const aiResult = await this.geminiTriageService.analyzeTriage(
+        const aiResult = await this.analyzeGeneralMedicineWithResilience(
           triageSession.answers,
           redFlags,
           user,
           correlationId,
+          triageSession._id.toString(),
         );
 
         basePriority = aiResult.basePriority;
         aiSummary = aiResult.aiSummary;
+        aiStrategy = aiResult.strategy;
+        aiAttempts = aiResult.attempts;
       } catch (error: unknown) {
         const analysisDurationMs = Date.now() - startedAt;
         triageSession.status = 'FAILED';
         await triageSession.save();
+
+        const normalizedError = this.normalizeError(error);
 
         this.logger.error(
           JSON.stringify({
@@ -409,16 +492,23 @@ export class TriageService {
             user_id: user.userId,
             role: user.role,
             specialty: triageSession.specialty,
+            session_id: triageSession._id.toString(),
             triage_session_id: triageSession._id.toString(),
             latency_ms: analysisDurationMs,
-            error_message:
-              error instanceof Error ? error.message : String(error),
+            error_code: TRIAGE_ANALYSIS_ERROR_CODES.DEPENDENCY_UNAVAILABLE,
+            error_name: normalizedError.name,
+            error_message: normalizedError.message,
+            error_stack: normalizedError.stack,
           }),
         );
 
-        throw new ServiceUnavailableException(
-          'No fue posible completar el analisis de triage en este momento',
-        );
+        throw new ServiceUnavailableException({
+          error: 'TriageAnalysisDependencyUnavailable',
+          errorCode: TRIAGE_ANALYSIS_ERROR_CODES.DEPENDENCY_UNAVAILABLE,
+          specialty: triageSession.specialty,
+          sessionId: triageSession._id.toString(),
+          message: 'No fue posible completar el analisis de triage en este momento',
+        });
       }
     }
 
@@ -479,24 +569,215 @@ export class TriageService {
         user_id: user.userId,
         role: user.role,
         specialty: triageSession.specialty,
+        session_id: triageSession._id.toString(),
         triage_session_id: triageSession._id.toString(),
         priority,
         red_flags_count: redFlags.length,
+        ai_strategy: aiStrategy,
+        ai_attempts: aiAttempts,
         guardrail_applied: guardrailApplied,
         latency_ms: analysisDurationMs,
       }),
     );
 
+    let message =
+      priority === 'HIGH'
+        ? 'Se detectaron signos de alarma. Tu caso fue priorizado para atencion medica.'
+        : 'Analisis de triage completado. Tu caso fue enviado a la cola medica.';
+    let noticeCode: AnalyzeTriageSessionResponse['noticeCode'];
+
+    if (aiStrategy === 'fallback_rule_based') {
+      message =
+        priority === 'HIGH'
+          ? 'Se detectaron signos de alarma. Tu caso fue priorizado para atencion medica. Se aplico analisis por reglas clinicas por indisponibilidad temporal de IA.'
+          : 'Analisis de triage completado con reglas clinicas por indisponibilidad temporal de IA. Tu caso fue enviado a la cola medica.';
+      noticeCode = 'IA_TEMPORARILY_UNAVAILABLE_RULE_BASED_FALLBACK';
+    }
+
+    if (aiStrategy === 'fallback_rule_based_no_ai') {
+      message =
+        priority === 'HIGH'
+          ? 'Se detectaron signos de alarma. Tu caso fue priorizado para atencion medica. Analisis realizado con reglas clinicas porque la IA no esta implementada en este entorno.'
+          : 'Analisis de triage completado con reglas clinicas porque la IA no esta implementada en este entorno. Tu caso fue enviado a la cola medica.';
+      noticeCode = 'IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK';
+    }
+
     return {
       sessionId: triageSession._id.toString(),
       priority,
       redFlags,
-      message:
-        priority === 'HIGH'
-          ? 'Se detectaron signos de alarma. Tu caso fue priorizado para atencion medica.'
-          : 'Analisis de triage completado. Tu caso fue enviado a la cola medica.',
+      message,
       highPriorityAlert: priority === 'HIGH',
+      analysisMode: aiStrategy === 'provider' ? 'AI_ASSISTED' : 'RULE_BASED',
+      noticeCode,
     };
+  }
+
+  private async analyzeGeneralMedicineWithResilience(
+    answers: { questionId: string; questionText: string; answerValue: unknown }[],
+    redFlags: RedFlag[],
+    user: RequestUser,
+    correlationId: string | undefined,
+    sessionId: string,
+  ): Promise<{
+    basePriority: TriagePriority;
+    aiSummary?: string;
+    strategy: 'provider' | 'fallback_rule_based' | 'fallback_rule_based_no_ai';
+    attempts: number;
+  }> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS.length + 1; attempt += 1) {
+      try {
+        const aiResult = await this.geminiTriageService.analyzeTriage(
+          answers,
+          redFlags,
+          user,
+          correlationId,
+        );
+
+        return {
+          basePriority: aiResult.basePriority,
+          aiSummary: aiResult.aiSummary,
+          strategy: 'provider',
+          attempts: attempt,
+        };
+      } catch (error: unknown) {
+        lastError = error;
+
+        const shouldRetry =
+          attempt <= TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS.length &&
+          this.isTransientAiError(error);
+
+        if (shouldRetry) {
+          const backoffMs = TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS[attempt - 1];
+          const normalizedError = this.normalizeError(error);
+
+          this.logger.warn(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'warn',
+              service: 'api',
+              endpoint_or_event: 'triage.analyze.retry',
+              correlation_id: correlationId,
+              user_id: user.userId,
+              role: user.role,
+              specialty: Specialty.GENERAL_MEDICINE,
+              session_id: sessionId,
+              triage_session_id: sessionId,
+              attempt,
+              backoff_ms: backoffMs,
+              error_name: normalizedError.name,
+              error_message: normalizedError.message,
+            }),
+          );
+
+          await this.wait(backoffMs);
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    if (
+      lastError &&
+      (this.isTransientAiError(lastError) ||
+        this.isAiUnavailableByDesign(lastError))
+    ) {
+      const fallbackPriority = this.getRuleBasedBasePriority(redFlags);
+      const normalizedError = this.normalizeError(lastError);
+      const fallbackForNoAi = this.isAiUnavailableByDesign(lastError);
+
+      this.logger.warn(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'warn',
+          service: 'api',
+          endpoint_or_event: 'triage.analyze.fallback_applied',
+          correlation_id: correlationId,
+          user_id: user.userId,
+          role: user.role,
+          specialty: Specialty.GENERAL_MEDICINE,
+          session_id: sessionId,
+          triage_session_id: sessionId,
+          attempts: TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS.length + 1,
+          fallback_mode: fallbackForNoAi
+            ? 'IA_NOT_IMPLEMENTED'
+            : 'TEMPORARY_UNAVAILABLE',
+          fallback_priority: fallbackPriority,
+          reason: normalizedError.message,
+        }),
+      );
+
+      return {
+        basePriority: fallbackPriority,
+        aiSummary: undefined,
+        strategy: fallbackForNoAi
+          ? 'fallback_rule_based_no_ai'
+          : 'fallback_rule_based',
+        attempts: TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS.length + 1,
+      };
+    }
+
+    throw lastError;
+  }
+
+  private isTransientAiError(error: unknown): boolean {
+    const normalizedError = this.normalizeError(error);
+    const signal = `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
+
+    return [
+      'timeout',
+      'timed out',
+      'etimedout',
+      'econnreset',
+      'econnrefused',
+      'network',
+      'socket hang up',
+      '429',
+      'rate limit',
+      'unavailable',
+      'temporarily',
+      'gateway',
+    ].some((keyword) => signal.includes(keyword));
+  }
+
+  private isAiUnavailableByDesign(error: unknown): boolean {
+    const normalizedError = this.normalizeError(error);
+    const signal = `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
+
+    return [
+      'ai provider is disabled',
+      'provider configuration is incomplete',
+      'gemini_api_key',
+      'api key',
+      'ai is disabled',
+      'not implemented',
+    ].some((keyword) => signal.includes(keyword));
+  }
+
+  private normalizeError(error: unknown): {
+    name: string;
+    message: string;
+    stack?: string;
+  } {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+
+    return {
+      name: 'UnknownError',
+      message: String(error),
+    };
+  }
+
+  private async wait(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async getOwnedInProgressSession(
@@ -548,14 +829,7 @@ export class TriageService {
       triageSession.specialty,
       answeredQuestionIds,
     );
-    const nextStepIncrement = progress.isComplete ? 0 : 1;
-    const currentStep =
-      progress.totalQuestions === 0
-        ? 0
-        : Math.min(
-            progress.answeredCount + nextStepIncrement,
-            progress.totalQuestions,
-          );
+    const currentStep = this.buildCurrentStep(progress);
 
     return {
       id: triageSession._id.toString(),
@@ -568,6 +842,52 @@ export class TriageService {
       createdAt: triageSession.createdAt?.toISOString() ?? null,
       updatedAt: triageSession.updatedAt?.toISOString() ?? null,
     };
+  }
+
+  private toSessionDetailResponse(
+    triageSession: TriageSessionDocument,
+  ): TriageSessionDetailResponse {
+    const answeredQuestionIds = new Set(
+      triageSession.answers.map((answer) => answer.questionId),
+    );
+    const progress = this.buildProgressState(
+      triageSession.specialty,
+      answeredQuestionIds,
+    );
+    const sessionId = triageSession._id.toString();
+
+    return {
+      id: sessionId,
+      sessionId,
+      specialty: triageSession.specialty,
+      status: triageSession.status,
+      isComplete: progress.isComplete,
+      currentQuestionId: progress.nextQuestionId,
+      currentStep: this.buildCurrentStep(progress),
+      totalSteps: progress.totalQuestions,
+      totalQuestions: progress.totalQuestions,
+      nextQuestionId: progress.nextQuestionId,
+      questions: this.triageQuestionsRepository.getQuestionsBySpecialty(
+        triageSession.specialty,
+      ),
+      createdAt: triageSession.createdAt?.toISOString() ?? null,
+      updatedAt: triageSession.updatedAt?.toISOString() ?? null,
+    };
+  }
+
+  private buildCurrentStep(progress: {
+    totalQuestions: number;
+    answeredCount: number;
+    isComplete: boolean;
+  }): number {
+    const nextStepIncrement = progress.isComplete ? 0 : 1;
+
+    return progress.totalQuestions === 0
+      ? 0
+      : Math.min(
+          progress.answeredCount + nextStepIncrement,
+          progress.totalQuestions,
+        );
   }
 
   private async findActiveSessionByPatientAndSpecialty(
