@@ -29,6 +29,7 @@ type AuthUser = {
   email: string;
   role: UserRole;
   passwordHash: string;
+  isActive: boolean;
 };
 
 type AuthSession = {
@@ -308,7 +309,7 @@ export class AuthService {
     authUser: AuthUser | null,
     password: string,
   ): Promise<AuthUser> {
-    if (!authUser) {
+    if (!authUser || !authUser.isActive) {
       throw new UnauthorizedException('Credenciales invalidas');
     }
 
@@ -540,6 +541,7 @@ export class AuthService {
         email: patient.email,
         role: UserRole.PATIENT,
         passwordHash: patient.passwordHash,
+        isActive: patient.isActive,
       };
     }
 
@@ -559,6 +561,7 @@ export class AuthService {
         email: doctor.email,
         role: UserRole.DOCTOR,
         passwordHash: doctor.passwordHash,
+        isActive: doctor.isActive,
       };
     }
 
@@ -572,6 +575,7 @@ export class AuthService {
         email: admin.email,
         role: UserRole.ADMIN,
         passwordHash: admin.passwordHash,
+        isActive: admin.isActive,
       };
     }
 

@@ -13,6 +13,11 @@ type GeminiTriageResult = {
   aiSummary?: string;
 };
 
+type TriageAnswerInput = Pick<
+  TriageAnswer,
+  'questionId' | 'questionText' | 'answerValue'
+>;
+
 @Injectable()
 export class GeminiTriageService {
   private static readonly promptKey = 'triage.general_medicine.analyze';
@@ -23,7 +28,7 @@ export class GeminiTriageService {
   ) {}
 
   async analyzeTriage(
-    answers: TriageAnswer[],
+    answers: TriageAnswerInput[],
     redFlags: RedFlag[],
     user: RequestUser,
     correlationId?: string,

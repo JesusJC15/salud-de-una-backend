@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, PipelineStage, Types } from 'mongoose';
 import { Admin, AdminDocument } from '../admins/schemas/admin.schema';
 import {
   RefreshSession,
@@ -90,6 +90,22 @@ type DoctorProjection = BaseUserProjection & {
 };
 
 type AdminProjection = BaseUserProjection;
+
+type AggregatedUserProjection = BaseUserProjection & {
+  role: UserRole;
+  specialty?: string;
+  doctorStatus?: string;
+  personalId?: string;
+  professionalLicense?: string;
+  phoneNumber?: string;
+  birthDate?: Date | null;
+  gender?: string;
+};
+
+type UnionPipelineStage = Exclude<
+  PipelineStage,
+  PipelineStage.Merge | PipelineStage.Out | PipelineStage.UnionWith
+>;
 
 const DEFAULT_VERIFICATION_PAYLOAD = {
   programType: ProgramType.UNDEFINED,
@@ -356,25 +372,11 @@ export class AdminService {
       };
     }
 
-    const [patients, doctors, admins] = await Promise.all([
-      this.patientModel.find(searchFilter).lean<PatientProjection[]>().exec(),
-      this.doctorModel.find(searchFilter).lean<DoctorProjection[]>().exec(),
-      this.adminModel.find(searchFilter).lean<AdminProjection[]>().exec(),
-    ]);
-
-    const allUsers = [
-      ...patients.map((item) => this.mapPatientUser(item)),
-      ...doctors.map((item) => this.mapDoctorUser(item)),
-      ...admins.map((item) => this.mapAdminUser(item)),
-    ].sort(
-      (a, b) =>
-        (b.createdAt ? b.createdAt.getTime() : 0) -
-        (a.createdAt ? a.createdAt.getTime() : 0),
+    const [items, total] = await this.listUsersAcrossRoles(
+      searchFilter,
+      page,
+      limit,
     );
-
-    const total = allUsers.length;
-    const start = (page - 1) * limit;
-    const end = start + limit;
 
     return {
       pagination: {
@@ -383,7 +385,7 @@ export class AdminService {
         total,
         totalPages: Math.ceil(total / limit),
       },
-      items: allUsers.slice(start, end),
+      items,
     };
   }
 
@@ -611,6 +613,107 @@ export class AdminService {
         { email: searchRegex },
       ],
     };
+  }
+
+  private async listUsersAcrossRoles(
+    searchFilter: Record<string, unknown>,
+    page: number,
+    limit: number,
+  ): Promise<[UserListItem[], number]> {
+    const skip = (page - 1) * limit;
+    const basePipeline = this.buildGlobalUsersPipeline(searchFilter);
+
+    const [items, totalResult] = await Promise.all([
+      this.patientModel
+        .aggregate<AggregatedUserProjection>([
+          ...basePipeline,
+          { $sort: { createdAt: -1, _id: 1 } },
+          { $skip: skip },
+          { $limit: limit },
+        ])
+        .exec(),
+      this.patientModel
+        .aggregate<{ total?: number }>([...basePipeline, { $count: 'total' }])
+        .exec(),
+    ]);
+
+    return [
+      items.map((item) => this.mapUserByRole(item.role, item)),
+      totalResult[0]?.total ?? 0,
+    ];
+  }
+
+  private buildGlobalUsersPipeline(
+    searchFilter: Record<string, unknown>,
+  ): PipelineStage[] {
+    const matchStage: UnionPipelineStage[] = Object.keys(searchFilter).length
+      ? [{ $match: searchFilter }]
+      : [];
+    const doctorUnionPipeline: UnionPipelineStage[] = [
+      ...matchStage,
+      {
+        $project: {
+          _id: 1,
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          isActive: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          specialty: 1,
+          doctorStatus: 1,
+          personalId: 1,
+          professionalLicense: 1,
+          phoneNumber: 1,
+          role: { $literal: UserRole.DOCTOR },
+        },
+      },
+    ];
+    const adminUnionPipeline: UnionPipelineStage[] = [
+      ...matchStage,
+      {
+        $project: {
+          _id: 1,
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          isActive: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          role: { $literal: UserRole.ADMIN },
+        },
+      },
+    ];
+
+    return [
+      ...matchStage,
+      {
+        $project: {
+          _id: 1,
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          isActive: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          birthDate: 1,
+          gender: 1,
+          role: { $literal: UserRole.PATIENT },
+        },
+      },
+      {
+        $unionWith: {
+          coll: this.doctorModel.collection.name,
+          pipeline: doctorUnionPipeline,
+        },
+      },
+      {
+        $unionWith: {
+          coll: this.adminModel.collection.name,
+          pipeline: adminUnionPipeline,
+        },
+      },
+    ];
   }
 
   private async listUsersByRole(

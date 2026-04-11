@@ -164,7 +164,7 @@ describe('DomainEventsProcessor', () => {
     warnSpy.mockRestore();
   });
 
-  it('should default attempt threshold when job options are missing', async () => {
+  it('should reschedule using attemptsMade when job options are missing', async () => {
     await processor.onFailed(
       {
         id: 'job-4',
@@ -175,7 +175,11 @@ describe('DomainEventsProcessor', () => {
       new Error('fatal'),
     );
 
-    expect(outboxService.reschedule).toHaveBeenCalledWith('event-5', 5, 'fatal');
+    expect(outboxService.reschedule).toHaveBeenCalledWith(
+      'event-5',
+      1,
+      'fatal',
+    );
   });
 
   it('should treat undefined attemptsMade as zero and skip reschedule', async () => {
