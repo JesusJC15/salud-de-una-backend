@@ -40,6 +40,7 @@ describe('AdminService', () => {
     find: jest.fn(),
     countDocuments: jest.fn(),
     aggregate: jest.fn(),
+    collection: { name: 'doctors' },
   };
 
   const rethusVerificationModelMock = {
@@ -52,12 +53,15 @@ describe('AdminService', () => {
     find: jest.fn(),
     countDocuments: jest.fn(),
     findById: jest.fn(),
+    aggregate: jest.fn(),
+    collection: { name: 'patients' },
   };
 
   const adminModelMock = {
     find: jest.fn(),
     countDocuments: jest.fn(),
     findById: jest.fn(),
+    collection: { name: 'admins' },
   };
 
   const refreshSessionModelMock = {
@@ -578,38 +582,35 @@ it('should map unexpected errors to InternalServerErrorException', async () => {
   });
 
   it('listUsers should paginate across roles when role filter is absent', async () => {
-    patientModelMock.find.mockReturnValue({
-      lean: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([
-        {
-          _id: new Types.ObjectId(),
-          firstName: 'Ana',
-          lastName: 'Patient',
-          email: 'ana@patient.com',
-          isActive: true,
-          createdAt: new Date('2026-03-02'),
-        },
-      ]),
-    });
-    doctorModelMock.find.mockReturnValue({
-      lean: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([
-        {
-          _id: new Types.ObjectId(),
-          firstName: 'Doc',
-          lastName: 'One',
-          email: 'doc@hospital.com',
-          isActive: true,
-          specialty: 'GENERAL_MEDICINE',
-          doctorStatus: 'PENDING',
-          createdAt: new Date('2026-03-03'),
-        },
-      ]),
-    });
-    adminModelMock.find.mockReturnValue({
-      lean: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([]),
-    });
+    patientModelMock.aggregate
+      .mockReturnValueOnce({
+        exec: jest.fn().mockResolvedValue([
+          {
+            _id: new Types.ObjectId(),
+            role: UserRole.DOCTOR,
+            firstName: 'Doc',
+            lastName: 'One',
+            email: 'doc@hospital.com',
+            isActive: true,
+            specialty: 'GENERAL_MEDICINE',
+            doctorStatus: 'PENDING',
+            createdAt: new Date('2026-03-03'),
+          },
+          {
+            _id: new Types.ObjectId(),
+            role: UserRole.PATIENT,
+            firstName: 'Ana',
+            lastName: 'Patient',
+            email: 'ana@patient.com',
+            isActive: true,
+            birthDate: null,
+            createdAt: new Date('2026-03-02'),
+          },
+        ]),
+      })
+      .mockReturnValueOnce({
+        exec: jest.fn().mockResolvedValue([{ total: 2 }]),
+      });
 
     const result = (await service.listUsers({ page: 1, limit: 10 })) as {
       pagination: { total: number };
@@ -618,6 +619,9 @@ it('should map unexpected errors to InternalServerErrorException', async () => {
 
     expect(result.pagination.total).toBe(2);
     expect(result.items[0].role).toBe(UserRole.DOCTOR);
+    expect(patientModelMock.aggregate).toHaveBeenCalledTimes(2);
+    expect(doctorModelMock.find).not.toHaveBeenCalled();
+    expect(adminModelMock.find).not.toHaveBeenCalled();
   });
 
   it('listUsers should query patient collection when role is patient', async () => {
@@ -824,7 +828,7 @@ it('getUserByRole should map admin payload', async () => {
   });
 });
 
-it('getUserByRole should throw when user does not exist', async () => {
+  it('getUserByRole should throw when user does not exist', async () => {
   doctorModelMock.findById.mockReturnValue({
     lean: jest.fn().mockReturnThis(),
     exec: jest.fn().mockResolvedValue(null),
@@ -832,4 +836,6 @@ it('getUserByRole should throw when user does not exist', async () => {
   await expect(
     service.getUserByRole(UserRole.DOCTOR, new Types.ObjectId().toString()),
   ).rejects.toBeInstanceOf(NotFoundException);
+});
+
 });

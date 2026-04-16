@@ -255,6 +255,7 @@ describe('AuthService', () => {
         id: 'p1',
         email: 'ana@example.com',
         passwordHash: 'hashed-pass',
+        isActive: true,
       }),
     );
 
@@ -319,12 +320,28 @@ describe('AuthService', () => {
         id: 'p1',
         email: 'ana@example.com',
         passwordHash: 'hashed-pass',
+        isActive: true,
       }),
     );
     (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
     await expect(
       service.loginPatient('ana@example.com', 'wrong-pass'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('loginPatient should fail when user is inactive', async () => {
+    patientModel.findOne.mockReturnValueOnce(
+      createFindOneChain({
+        id: 'p1',
+        email: 'ana@example.com',
+        passwordHash: 'hashed-pass',
+        isActive: false,
+      }),
+    );
+
+    await expect(
+      service.loginPatient('ana@example.com', 'StrongP@ss1'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
@@ -809,6 +826,7 @@ describe('AuthService', () => {
         id: 'd1',
         email: 'doc@example.com',
         passwordHash: 'hash',
+        isActive: true,
       }),
     );
 
@@ -833,6 +851,21 @@ describe('AuthService', () => {
       email: 'doc@example.com',
       role: UserRole.DOCTOR,
     });
+  });
+
+  it('loginStaff should fail when doctor user is inactive', async () => {
+    doctorModel.findOne.mockReturnValue(
+      createFindOneChain({
+        id: 'd1',
+        email: 'doc@example.com',
+        passwordHash: 'hash',
+        isActive: false,
+      }),
+    );
+
+    await expect(
+      service.loginStaff('doc@example.com', 'StrongP@ss1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('registerDoctor should create doctor successfully', async () => {
