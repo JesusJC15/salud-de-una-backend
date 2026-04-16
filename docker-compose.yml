@@ -27,11 +27,11 @@ services:
       target: runner
     init: true
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: ${PORT:-3000}
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/salud-de-una}
-      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret-for-local-docker-123456}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-this-refresh-secret-for-local-docker-123456}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set for docker-compose.yml}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set for docker-compose.yml}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       REFRESH_MAX_ACTIVE_SESSIONS: ${REFRESH_MAX_ACTIVE_SESSIONS:-3}

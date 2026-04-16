@@ -5,6 +5,8 @@ services:
       target: runner
     env_file:
       - .env.production.docker
+    environment:
+      NODE_ENV: production
     init: true
     restart: unless-stopped
     ports:

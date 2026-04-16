@@ -132,7 +132,7 @@ El compose usa defaults locales para `JWT_SECRET`, `JWT_REFRESH_SECRET` y CORS, 
 
 ## Produccion con Docker
 
-Usa [docker-compose.production.yml](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/docker-compose.production.yml) cuando MongoDB, Redis y Gemini viven fuera del host Docker. Ese archivo levanta solo la API y espera servicios administrados.
+Usa [docker-compose.production.yml](./docker-compose.production.yml) cuando MongoDB, Redis y Gemini viven fuera del host Docker. Ese archivo levanta solo la API y espera servicios administrados.
 
 1. Crear el archivo de variables de produccion:
 
@@ -210,10 +210,10 @@ Ese smoke-check valida:
 
 Notas operativas:
 
-- [docker-compose.yml](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/docker-compose.yml) sigue siendo el stack local con Mongo incluido.
-- [docker-compose.production.yml](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/docker-compose.production.yml) es la variante de despliegue con dependencias administradas.
+- [docker-compose.yml](./docker-compose.yml) sigue siendo el stack local con Mongo incluido.
+- [docker-compose.production.yml](./docker-compose.production.yml) es la variante de despliegue con dependencias administradas.
 - El healthcheck del contenedor ahora exige Redis sano cuando `REDIS_URL` esta configurado.
-- La conectividad Gemini no bloquea el arranque automaticamente; se confirma con `POST /v1/admin/ai/health-check`, endpoint ya disponible en [admin-ai.controller.ts](C:/Users/jesjc/OneDrive/Documentos/SaludDeUna/salud-de-una-backend/src/ai/admin-ai.controller.ts:7).
+- La conectividad Gemini no bloquea el arranque automaticamente; se confirma con `POST /v1/admin/ai/health-check`, endpoint ya disponible en [src/ai/admin-ai.controller.ts](./src/ai/admin-ai.controller.ts).
 
 ## Variables de Entorno
 
