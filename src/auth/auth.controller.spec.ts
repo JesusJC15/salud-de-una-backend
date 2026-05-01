@@ -1,4 +1,8 @@
+import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Doctor } from '../doctors/schemas/doctor.schema';
+import { Patient } from '../patients/schemas/patient.schema';
+import { UserRole } from '../common/enums/user-role.enum';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -6,6 +10,7 @@ import { LogoutDto } from './dto/logout.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
+import { ProvisioningService } from './provisioning.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -17,7 +22,11 @@ describe('AuthController', () => {
     refreshTokens: jest.Mock;
     revokeRefreshSession: jest.Mock;
     me: jest.Mock;
+    ensureEmailIsAvailable: jest.Mock;
   };
+  let provisioningService: { setUserDbId: jest.Mock };
+  let patientModel: { findOne: jest.Mock; create: jest.Mock };
+  let doctorModel: { findOne: jest.Mock; create: jest.Mock };
 
   beforeEach(async () => {
     authService = {
@@ -28,15 +37,29 @@ describe('AuthController', () => {
       refreshTokens: jest.fn(),
       revokeRefreshSession: jest.fn(),
       me: jest.fn(),
+      ensureEmailIsAvailable: jest.fn(),
     };
+
+    provisioningService = {
+      setUserDbId: jest.fn().mockResolvedValue(undefined),
+    };
+    patientModel = { findOne: jest.fn(), create: jest.fn() };
+    doctorModel = { findOne: jest.fn(), create: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: authService }],
+      providers: [
+        { provide: AuthService, useValue: authService },
+        { provide: ProvisioningService, useValue: provisioningService },
+        { provide: getModelToken(Patient.name), useValue: patientModel },
+        { provide: getModelToken(Doctor.name), useValue: doctorModel },
+      ],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
   });
+
+  // ── Legacy endpoints ────────────────────────────────────────────────────────
 
   it('registerPatient should call service', async () => {
     const dto = {
@@ -157,13 +180,81 @@ describe('AuthController', () => {
       user: {
         userId: 'p1',
         email: 'ana@example.com',
-        role: 'PATIENT',
+        role: UserRole.PATIENT,
         isActive: true,
       },
-    });
+    } as never);
 
     expect(result).toEqual({
       user: { id: 'p1', email: 'ana@example.com', role: 'PATIENT' },
     });
+  });
+
+  // ── Provisioning endpoints ─────────────────────────────────────────────────
+
+  it('provisionPatient should create patient and call provisioning service', async () => {
+    const auth0UserId = 'auth0|abc123';
+    const email = 'ana@example.com';
+    const mockPatient = {
+      id: 'mongo-id-1',
+      _id: { toString: () => 'mongo-id-1' },
+      email,
+      firstName: 'Ana',
+      lastName: 'Lopez',
+      role: UserRole.PATIENT,
+    };
+
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    authService.ensureEmailIsAvailable.mockResolvedValue(undefined);
+    patientModel.create.mockResolvedValue(mockPatient);
+
+    const result = await controller.provisionPatient(
+      { user: { auth0UserId, email } } as never,
+      { firstName: 'Ana', lastName: 'Lopez' },
+    );
+
+    expect(patientModel.create).toHaveBeenCalled();
+    expect(provisioningService.setUserDbId).toHaveBeenCalledWith(
+      auth0UserId,
+      'mongo-id-1',
+      UserRole.PATIENT,
+    );
+    expect(result).toMatchObject({
+      id: 'mongo-id-1',
+      email,
+      role: UserRole.PATIENT,
+    });
+  });
+
+  it('provisionPatient should return existing patient if already provisioned (idempotent)', async () => {
+    const auth0UserId = 'auth0|abc123';
+    const email = 'ana@example.com';
+    const existing = {
+      id: 'existing-id',
+      _id: { toString: () => 'existing-id' },
+      email,
+      firstName: 'Ana',
+      lastName: 'Lopez',
+      role: UserRole.PATIENT,
+    };
+
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(existing),
+    });
+
+    const result = await controller.provisionPatient(
+      { user: { auth0UserId, email } } as never,
+      { firstName: 'Ana', lastName: 'Lopez' },
+    );
+
+    expect(patientModel.create).not.toHaveBeenCalled();
+    expect(provisioningService.setUserDbId).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ id: 'existing-id' });
   });
 });

@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { Model, Types } from 'mongoose';
+import * as jwksRsa from 'jwks-rsa';
+import { Model } from 'mongoose';
 import { Admin, AdminDocument } from '../../admins/schemas/admin.schema';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import { Doctor, DoctorDocument } from '../../doctors/schemas/doctor.schema';
 import {
@@ -14,8 +14,20 @@ import {
   PatientDocument,
 } from '../../patients/schemas/patient.schema';
 
+export const AUTH0_CLAIM_NS = 'https://salud-de-una.com/';
+
+export interface Auth0JwtPayload {
+  sub: string;
+  iss: string;
+  aud: string | string[];
+  exp: number;
+  iat: number;
+  email?: string;
+  [key: string]: unknown;
+}
+
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     configService: ConfigService,
     @InjectModel(Patient.name)
@@ -25,44 +37,62 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectModel(Admin.name)
     private readonly adminModel: Model<AdminDocument>,
   ) {
+    const domain =
+      configService.get<string>('auth.auth0Domain') ?? 'placeholder.auth0.com';
+    const audience = configService.get<string>('auth.auth0Audience') ?? '';
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: configService.getOrThrow<string>('auth.jwtSecret'),
+      secretOrKeyProvider: jwksRsa.passportJwtSecret({
+        cache: true,
+        rateLimit: true,
+        jwksRequestsPerMinute: 5,
+        jwksUri: `https://${domain}/.well-known/jwks.json`,
+      }),
+      audience: audience || undefined,
+      issuer: `https://${domain}/`,
+      algorithms: ['RS256'],
     });
   }
 
-  async validate(payload: JwtPayload): Promise<RequestUser> {
-    if (payload.tokenType !== 'access') {
-      throw new UnauthorizedException(
-        'Token invalido o tipo de token no permitido',
-      );
+  async validate(payload: Auth0JwtPayload): Promise<RequestUser> {
+    const dbId = payload[`${AUTH0_CLAIM_NS}db_id`] as string | undefined;
+    const role = payload[`${AUTH0_CLAIM_NS}role`] as UserRole | undefined;
+    const isActiveFromToken =
+      (payload[`${AUTH0_CLAIM_NS}is_active`] as boolean | undefined) ?? true;
+
+    if (!dbId) {
+      throw new UnauthorizedException('Usuario no aprovisionado');
     }
 
-    if (!Types.ObjectId.isValid(payload.sub)) {
-      throw new UnauthorizedException('Token invalido');
+    if (!role || !Object.values(UserRole).includes(role)) {
+      throw new UnauthorizedException('Rol invalido en token');
     }
 
-    const baseProjection = 'email role isActive';
+    if (!isActiveFromToken) {
+      throw new UnauthorizedException('Usuario inactivo');
+    }
+
+    const projection = 'email role isActive';
     let user: { email: string; role: UserRole; isActive: boolean } | null =
       null;
 
-    if (payload.role === UserRole.PATIENT) {
+    if (role === UserRole.PATIENT) {
       user = await this.patientModel
-        .findById(payload.sub)
-        .select(baseProjection)
+        .findById(dbId)
+        .select(projection)
         .lean()
         .exec();
-    } else if (payload.role === UserRole.DOCTOR) {
+    } else if (role === UserRole.DOCTOR) {
       user = await this.doctorModel
-        .findById(payload.sub)
-        .select(baseProjection)
+        .findById(dbId)
+        .select(projection)
         .lean()
         .exec();
-    } else if (payload.role === UserRole.ADMIN) {
+    } else if (role === UserRole.ADMIN) {
       user = await this.adminModel
-        .findById(payload.sub)
-        .select(baseProjection)
+        .findById(dbId)
+        .select(projection)
         .lean()
         .exec();
     }
@@ -72,7 +102,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     return {
-      userId: payload.sub,
+      userId: dbId,
       email: user.email,
       role: user.role,
       isActive: user.isActive,
