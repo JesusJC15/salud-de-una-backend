@@ -70,8 +70,6 @@ export class AuthController {
       );
     }
 
-    await this.authService.ensureEmailIsAvailable(email);
-
     const existing = await this.patientModel
       .findOne({ email: email.toLowerCase().trim() })
       .select('_id email firstName lastName role')
@@ -81,6 +79,8 @@ export class AuthController {
     if (existing) {
       return this.toPatientProvisionResponse(existing);
     }
+
+    await this.authService.ensureEmailIsAvailable(email);
 
     const patient = await this.patientModel.create({
       firstName: dto.firstName,
