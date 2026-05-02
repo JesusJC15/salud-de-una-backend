@@ -43,6 +43,12 @@ export class Consultation {
   @Prop({ type: Types.ObjectId, ref: 'Doctor' })
   assignedDoctorId?: Types.ObjectId;
 
+  @Prop({ type: String })
+  clinicalSummary?: string;
+
+  @Prop({ type: Date })
+  closedAt?: Date;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
