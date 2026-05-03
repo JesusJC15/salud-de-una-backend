@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface ManagementTokenResponse {
@@ -8,6 +12,7 @@ interface ManagementTokenResponse {
 
 @Injectable()
 export class ProvisioningService {
+  private readonly logger = new Logger(ProvisioningService.name);
   private managementToken: string | null = null;
   private tokenExpiry = 0;
 
@@ -78,9 +83,14 @@ export class ProvisioningService {
         'auth.auth0RoleIds',
       );
     const roleId = roleIds?.[role];
-    if (!roleId) return;
+    if (!roleId) {
+      this.logger.warn(
+        `AUTH0_ROLE_ID_${role} no configurado — el usuario ${auth0UserId} no recibirá rol en Auth0`,
+      );
+      return;
+    }
 
-    await fetch(
+    const res = await fetch(
       `https://${domain}/api/v2/users/${encodeURIComponent(auth0UserId)}/roles`,
       {
         method: 'POST',
@@ -91,6 +101,19 @@ export class ProvisioningService {
         body: JSON.stringify({ roles: [roleId] }),
       },
     );
+
+    // 204 = assigned; 409 would mean already assigned (idempotent) — both are OK.
+    // Auth0 returns 204 No Content on success and 400/404 on error.
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new InternalServerErrorException(
+        `Error al asignar rol ${role} en Auth0: ${res.status} ${body}`,
+      );
+    }
+  }
+
+  async getManagementTokenPublic(): Promise<string> {
+    return this.getManagementToken();
   }
 
   private async getManagementToken(): Promise<string> {
