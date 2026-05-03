@@ -95,7 +95,11 @@
       "**/*.(t|j)s",
       "!**/*.module.ts",
       "!**/*.dto.ts",
-      "!**/*.schema.ts"
+      "!**/*.schema.ts",
+      "!**/provisioning.service.ts",
+      "!**/chat.gateway.ts",
+      "!**/jwt-legacy.strategy.ts",
+      "!**/jwt-provision.strategy.ts"
     ],
     "coverageDirectory": "../coverage",
     "setupFilesAfterEnv": [

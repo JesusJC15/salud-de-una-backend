@@ -302,6 +302,42 @@ describe('NotificationsService', () => {
     expect(result.readAt).toBeInstanceOf(Date);
   });
 
+  describe('sendExpoPush', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('fires a POST to the Expo push endpoint', async () => {
+      globalThis.fetch = jest.fn().mockResolvedValue({ ok: true } as Response);
+
+      service.sendExpoPush('ExponentPushToken[abc]', 'Title', 'Body');
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'https://exp.host/push/send',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('logs a warning when the fetch fails', async () => {
+      globalThis.fetch = jest
+        .fn()
+        .mockRejectedValue(new Error('network error'));
+      const warnSpy = jest
+        .spyOn(service['logger'], 'warn')
+        .mockImplementation(() => undefined);
+
+      service.sendExpoPush('ExponentPushToken[abc]', 'Title', 'Body');
+      await new Promise((r) => setImmediate(r));
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Expo push failed'),
+      );
+      warnSpy.mockRestore();
+    });
+  });
+
   it('markAllAsRead should return 0 if nothing updated', async () => {
     notificationModel.updateMany.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),

@@ -98,6 +98,7 @@ describe('AdminSeederService', () => {
       BOOTSTRAP_ADMIN_FIRST_NAME: 'System',
       BOOTSTRAP_ADMIN_LAST_NAME: 'Admin',
     });
+    adminModel.create.mockResolvedValue({ id: 'new-admin-id' });
     adminModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(null),
     });
