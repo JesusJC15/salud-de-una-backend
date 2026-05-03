@@ -146,6 +146,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         consultationId,
         user.userId,
         user.role,
+        'send',
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sin acceso';

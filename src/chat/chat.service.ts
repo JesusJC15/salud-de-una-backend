@@ -32,6 +32,8 @@ export class ChatService {
   private readonly domain: string;
   private readonly audience: string;
 
+  private readonly legacySecret: string | undefined;
+
   constructor(
     configService: ConfigService,
     @InjectModel(ConsultationMessage.name)
@@ -42,6 +44,7 @@ export class ChatService {
     this.domain =
       configService.get<string>('auth.auth0Domain') ?? 'placeholder.auth0.com';
     this.audience = configService.get<string>('auth.auth0Audience') ?? '';
+    this.legacySecret = configService.get<string>('auth.jwtSecret');
     this.jwksClient = new jwksRsa.JwksClient({
       cache: true,
       rateLimit: true,
@@ -57,33 +60,55 @@ export class ChatService {
         payload: JwtPayload & Record<string, unknown>;
       } | null;
 
-      if (!decoded?.header?.kid) {
+      if (!decoded) {
         throw new UnauthorizedException('Token inválido');
       }
 
-      const signingKey = await this.jwksClient.getSigningKey(
-        decoded.header.kid,
-      );
-      const publicKey = signingKey.getPublicKey();
+      // Auth0 token — RS256 with kid in header
+      if (decoded.header.kid) {
+        const signingKey = await this.jwksClient.getSigningKey(
+          decoded.header.kid,
+        );
+        const publicKey = signingKey.getPublicKey();
 
-      const payload = jwt.verify(token, publicKey, {
-        algorithms: ['RS256'],
-        issuer: `https://${this.domain}/`,
-        audience: this.audience || undefined,
-      }) as JwtPayload & Record<string, unknown>;
+        const payload = jwt.verify(token, publicKey, {
+          algorithms: ['RS256'],
+          issuer: `https://${this.domain}/`,
+          audience: this.audience || undefined,
+        }) as JwtPayload & Record<string, unknown>;
 
-      const dbId = payload[`${NS}db_id`] as string | undefined;
-      const role = (payload[`${NS}role`] as string | undefined) ?? 'PATIENT';
-      const email =
-        (payload[`${NS}email`] as string | undefined) ??
-        (payload.email as string | undefined) ??
-        '';
+        const dbId = payload[`${NS}db_id`] as string | undefined;
+        const role = (payload[`${NS}role`] as string | undefined) ?? 'PATIENT';
+        const email =
+          (payload[`${NS}email`] as string | undefined) ??
+          (payload.email as string | undefined) ??
+          '';
 
-      if (!dbId) {
-        throw new UnauthorizedException('Usuario no aprovisionado');
+        if (!dbId) {
+          throw new UnauthorizedException('Usuario no aprovisionado');
+        }
+
+        return { userId: dbId, role, email };
       }
 
-      return { userId: dbId, role, email };
+      // Legacy token — HS256 signed with jwtSecret
+      if (!this.legacySecret) {
+        throw new UnauthorizedException('Token inválido');
+      }
+
+      const payload = jwt.verify(token, this.legacySecret, {
+        algorithms: ['HS256'],
+      }) as JwtPayload & Record<string, unknown>;
+
+      const userId = payload.sub;
+      const role = (payload.role as string | undefined) ?? 'PATIENT';
+      const email = (payload.email as string | undefined) ?? '';
+
+      if (!userId) {
+        throw new UnauthorizedException('Token inválido');
+      }
+
+      return { userId, role, email };
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       this.logger.warn(`WS token validation failed: ${String(error)}`);
@@ -95,6 +120,7 @@ export class ChatService {
     consultationId: string,
     userId: string,
     role: string,
+    mode: 'join' | 'send' = 'join',
   ): Promise<ConsultationDocument> {
     const consultation = await this.consultationModel
       .findById(consultationId)
@@ -104,7 +130,9 @@ export class ChatService {
       throw new ForbiddenException('Consulta no encontrada');
     }
 
-    if (consultation.status === 'CLOSED') {
+    // Sending messages is not allowed in closed consultations; joining for
+    // history is fine so patients can review past conversations.
+    if (mode === 'send' && consultation.status === 'CLOSED') {
       throw new ForbiddenException('La consulta está cerrada');
     }
 
