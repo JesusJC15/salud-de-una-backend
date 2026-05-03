@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -10,6 +11,8 @@ import { ClientSession, Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
 import { Specialty } from '../common/enums/specialty.enum';
 import { AiService } from '../ai/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { TriagePriority } from '../triage/schemas/triage-session.schema';
 import {
   TriageSession,
@@ -23,6 +26,7 @@ import {
   Consultation,
   ConsultationDocument,
 } from './schemas/consultation.schema';
+import { RateConsultationDto } from './dto/rate-consultation.dto';
 
 type CreateConsultationFromTriageInput = {
   patientId: string | Types.ObjectId;
@@ -57,7 +61,10 @@ export class ConsultationsService {
     private readonly triageSessionModel: Model<TriageSessionDocument>,
     @InjectModel(ConsultationMessage.name)
     private readonly messageModel: Model<ConsultationMessageDocument>,
+    @InjectModel(Patient.name)
+    private readonly patientModel: Model<PatientDocument>,
     private readonly aiService: AiService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createFromTriage(
@@ -179,6 +186,12 @@ export class ConsultationsService {
     consultation.assignedDoctorId = new Types.ObjectId(doctorId);
     await consultation.save();
 
+    this.notifyPatient(
+      consultation.patientId.toString(),
+      'Consulta aceptada',
+      'Un médico está atendiendo tu consulta ahora.',
+    );
+
     return {
       id: consultation._id.toString(),
       status: consultation.status,
@@ -282,10 +295,56 @@ export class ConsultationsService {
     consultation.closedAt = new Date();
     await consultation.save();
 
+    this.notifyPatient(
+      consultation.patientId.toString(),
+      'Consulta finalizada',
+      '¿Cómo fue tu atención? Califica tu experiencia.',
+    );
+
     return {
       id: consultation._id.toString(),
       status: consultation.status,
       closedAt: consultation.closedAt,
+    };
+  }
+
+  async rateConsultation(
+    consultationId: string,
+    patientId: string,
+    dto: RateConsultationDto,
+  ) {
+    const consultation = await this.consultationModel
+      .findById(consultationId)
+      .exec();
+
+    if (!consultation) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
+    if (consultation.patientId.toString() !== patientId) {
+      throw new ForbiddenException('No tienes acceso a esta consulta');
+    }
+
+    if (consultation.status !== 'CLOSED') {
+      throw new BadRequestException(
+        'Solo se pueden calificar consultas cerradas',
+      );
+    }
+
+    if (consultation.rating !== undefined) {
+      throw new ConflictException('Esta consulta ya fue calificada');
+    }
+
+    consultation.rating = dto.rating;
+    if (dto.ratingComment) {
+      consultation.ratingComment = dto.ratingComment;
+    }
+    await consultation.save();
+
+    return {
+      id: consultation._id.toString(),
+      rating: consultation.rating,
+      ratingComment: consultation.ratingComment,
     };
   }
 
@@ -325,6 +384,113 @@ export class ConsultationsService {
       })),
       total: messages.length,
     };
+  }
+
+  async getPatientHistory(
+    patientId: string,
+    options: { limit?: number; page?: number; status?: string } = {},
+  ) {
+    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+    const page = Math.max(options.page ?? 1, 1);
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {
+      patientId: this.toObjectId(patientId),
+    };
+    if (options.status) filter.status = options.status;
+
+    const [items, total] = await Promise.all([
+      this.consultationModel
+        .find(filter)
+        .select(
+          '_id specialty priority status clinicalSummary rating ratingComment createdAt closedAt updatedAt',
+        )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.consultationModel.countDocuments(filter).exec(),
+    ]);
+
+    return {
+      items: items.map((c) => ({
+        id: c._id.toString(),
+        specialty: c.specialty,
+        priority: c.priority,
+        status: c.status,
+        clinicalSummary: c.clinicalSummary,
+        rating: c.rating,
+        ratingComment: c.ratingComment,
+        createdAt: c.createdAt,
+        closedAt: c.closedAt,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async getDoctorHistory(
+    doctorId: string,
+    options: { limit?: number; page?: number; status?: string } = {},
+  ) {
+    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+    const page = Math.max(options.page ?? 1, 1);
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {
+      assignedDoctorId: this.toObjectId(doctorId),
+    };
+    if (options.status) filter.status = options.status;
+
+    const [items, total] = await Promise.all([
+      this.consultationModel
+        .find(filter)
+        .select(
+          '_id patientId specialty priority status clinicalSummary createdAt closedAt',
+        )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.consultationModel.countDocuments(filter).exec(),
+    ]);
+
+    return {
+      items: items.map((c) => ({
+        id: c._id.toString(),
+        patientId: c.patientId.toString(),
+        specialty: c.specialty,
+        priority: c.priority,
+        status: c.status,
+        clinicalSummary: c.clinicalSummary,
+        createdAt: c.createdAt,
+        closedAt: c.closedAt,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  private notifyPatient(patientId: string, title: string, body: string): void {
+    this.patientModel
+      .findById(patientId)
+      .select('expoPushToken')
+      .lean()
+      .exec()
+      .then((patient) => {
+        if (patient?.expoPushToken) {
+          this.notificationsService.sendExpoPush(
+            patient.expoPushToken,
+            title,
+            body,
+          );
+        }
+      })
+      .catch(() => undefined);
   }
 
   private getPriorityRank(priority: TriagePriority): number {

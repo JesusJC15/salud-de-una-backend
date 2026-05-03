@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
+import { DoctorAvailability } from '../common/enums/doctor-availability.enum';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { ProgramType } from '../common/enums/program-type.enum';
 import { RethusState } from '../common/enums/rethus-state.enum';
@@ -46,7 +47,9 @@ export class DoctorsService {
   async getMe(user: RequestUser): Promise<DoctorMeResponseDto> {
     const doctor = await this.doctorModel
       .findById(user.userId)
-      .select('firstName lastName email role specialty doctorStatus')
+      .select(
+        'firstName lastName email role specialty doctorStatus availabilityStatus',
+      )
       .lean()
       .exec();
 
@@ -71,6 +74,8 @@ export class DoctorsService {
       role: doctor.role,
       specialty: doctor.specialty,
       doctorStatus: doctor.doctorStatus,
+      availabilityStatus:
+        doctor.availabilityStatus ?? DoctorAvailability.AVAILABLE,
       verification: verification
         ? {
             programType: verification.programType,
@@ -139,6 +144,33 @@ export class DoctorsService {
     } finally {
       await session.endSession();
     }
+  }
+
+  async updatePushToken(doctorId: string, token: string): Promise<void> {
+    await this.doctorModel
+      .findByIdAndUpdate(doctorId, { expoPushToken: token })
+      .lean()
+      .exec();
+  }
+
+  async updateAvailability(
+    doctorId: string,
+    status: DoctorAvailability,
+  ): Promise<{ availabilityStatus: DoctorAvailability }> {
+    const doctor = await this.doctorModel
+      .findByIdAndUpdate(
+        doctorId,
+        { availabilityStatus: status },
+        { new: true, select: 'availabilityStatus' },
+      )
+      .lean()
+      .exec();
+
+    if (!doctor) {
+      throw new NotFoundException('Médico no encontrado');
+    }
+
+    return { availabilityStatus: doctor.availabilityStatus ?? status };
   }
 
   private async executeRethusResubmit(

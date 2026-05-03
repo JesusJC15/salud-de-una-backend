@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import {
+  Consultation,
+  ConsultationSchema,
+} from '../consultations/schemas/consultation.schema';
 import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 import {
   Notification,
@@ -19,6 +23,7 @@ import { TechnicalMetricsService } from './metrics/technical-metrics.service';
       { name: Patient.name, schema: PatientSchema },
       { name: Doctor.name, schema: DoctorSchema },
       { name: Notification.name, schema: NotificationSchema },
+      { name: Consultation.name, schema: ConsultationSchema },
     ]),
   ],
   controllers: [DashboardController],
@@ -30,7 +35,9 @@ import { TechnicalMetricsService } from './metrics/technical-metrics.service';
       inject: [REDIS_CLIENT],
       useFactory: (redisClient: unknown) =>
         new RedisTechnicalMetricsStore(
-          redisClient as ConstructorParameters<typeof RedisTechnicalMetricsStore>[0],
+          redisClient as ConstructorParameters<
+            typeof RedisTechnicalMetricsStore
+          >[0],
         ),
     },
     TechnicalMetricsService,

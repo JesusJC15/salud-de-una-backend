@@ -49,6 +49,12 @@ export class Consultation {
   @Prop({ type: Date })
   closedAt?: Date;
 
+  @Prop({ type: Number, min: 1, max: 5 })
+  rating?: number;
+
+  @Prop({ type: String, maxlength: 500 })
+  ratingComment?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

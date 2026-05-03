@@ -2,6 +2,11 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClientSession, Types } from 'mongoose';
 import { Specialty } from '../common/enums/specialty.enum';
+import { AiService } from '../ai/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Patient } from '../patients/schemas/patient.schema';
+import { ConsultationMessage } from '../chat/schemas/consultation-message.schema';
+import { TriageSession } from '../triage/schemas/triage-session.schema';
 import { ConsultationsService } from './consultations.service';
 import { Consultation } from './schemas/consultation.schema';
 
@@ -18,11 +23,13 @@ describe('ConsultationsService', () => {
   const consultationModel = {
     create: jest.fn(),
     find: jest.fn().mockReturnValue(findChain),
+    countDocuments: jest.fn().mockResolvedValue(0),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     findExecMock.mockResolvedValue([]);
+    consultationModel.countDocuments.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -31,6 +38,32 @@ describe('ConsultationsService', () => {
           provide: getModelToken(Consultation.name),
           useValue: consultationModel,
         },
+        {
+          provide: getModelToken(TriageSession.name),
+          useValue: { findById: jest.fn() },
+        },
+        {
+          provide: getModelToken(ConsultationMessage.name),
+          useValue: { find: jest.fn() },
+        },
+        {
+          provide: getModelToken(Patient.name),
+          useValue: {
+            findById: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnThis(),
+              lean: jest.fn().mockReturnThis(),
+              exec: jest.fn().mockResolvedValue(null),
+            }),
+          },
+        },
+        {
+          provide: AiService,
+          useValue: { generateText: jest.fn() },
+        },
+        {
+          provide: NotificationsService,
+          useValue: { sendExpoPush: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -38,7 +71,8 @@ describe('ConsultationsService', () => {
   });
 
   it('creates consultation using string ids without session', async () => {
-    consultationModel.create.mockResolvedValue([]);
+    const newId = new Types.ObjectId();
+    consultationModel.create.mockResolvedValue([{ _id: newId }]);
 
     await service.createFromTriage({
       patientId: new Types.ObjectId().toString(),
@@ -62,7 +96,7 @@ describe('ConsultationsService', () => {
   });
 
   it('creates consultation using object ids with session', async () => {
-    consultationModel.create.mockResolvedValue([]);
+    consultationModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
     const patientId = new Types.ObjectId();
     const triageSessionId = new Types.ObjectId();
     const session = { id: 'tx-1' } as unknown as ClientSession;
