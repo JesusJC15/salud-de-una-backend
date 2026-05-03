@@ -51,6 +51,62 @@ export class ProvisioningService {
     await this.assignRole(auth0UserId, role, token, domain);
   }
 
+  /**
+   * Called after manual (email/password) patient registration.
+   * Creates the user in Auth0's database connection and sets app_metadata
+   * so they can log in via Auth0 immediately after registering manually.
+   * Best-effort — logs but never throws, so MongoDB registration always succeeds.
+   */
+  async createAuth0UserFromManualRegistration(
+    email: string,
+    password: string,
+    dbId: string,
+  ): Promise<void> {
+    const domain = this.configService.get<string>('auth.auth0Domain');
+    if (!domain) return;
+
+    try {
+      const token = await this.getManagementToken();
+
+      const createRes = await fetch(`https://${domain}/api/v2/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          connection: 'Username-Password-Authentication',
+          app_metadata: { db_id: dbId, role: 'PATIENT', is_active: true },
+        }),
+      });
+
+      if (!createRes.ok) {
+        if (createRes.status === 409) {
+          // User already exists in Auth0 (e.g. social login before manual register)
+          this.logger.warn(
+            `${email} ya existe en Auth0 — se omite creación, se intenta asignar db_id`,
+          );
+          return;
+        }
+        const body = await createRes.text().catch(() => '');
+        this.logger.error(
+          `No se pudo crear ${email} en Auth0: ${createRes.status} ${body}`,
+        );
+        return;
+      }
+
+      const auth0User = (await createRes.json()) as { user_id: string };
+      await this.assignRole(auth0User.user_id, 'PATIENT', token, domain);
+    } catch (err) {
+      this.logger.error(
+        'Error inesperado al crear paciente en Auth0 tras registro manual',
+        err,
+      );
+    }
+  }
+
   async deactivateUser(auth0UserId: string): Promise<void> {
     const domain = this.configService.get<string>('auth.auth0Domain');
     if (!domain) return;
