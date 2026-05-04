@@ -13,14 +13,20 @@ import {
 } from './schemas/refresh-session.schema';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { JwtLegacyStrategy } from './strategies/jwt-legacy.strategy';
+import { JwtProvisionStrategy } from './strategies/jwt-provision.strategy';
+import { ProvisioningService } from './provisioning.service';
 
 @Module({
   imports: [
     PassportModule,
+    // JwtModule kept for legacy token issuance during cutover window.
+    // Remove after all clients migrate to Auth0.
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('auth.jwtSecret'),
+        secret:
+          configService.get<string>('auth.jwtSecret') ?? 'legacy-disabled',
       }),
     }),
     MongooseModule.forFeature([
@@ -31,7 +37,13 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtLegacyStrategy,
+    JwtProvisionStrategy,
+    ProvisioningService,
+  ],
+  exports: [AuthService, ProvisioningService],
 })
 export class AuthModule {}
