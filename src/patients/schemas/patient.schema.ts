@@ -31,6 +31,9 @@ export class Patient {
   @Prop({ default: true })
   isActive!: boolean;
 
+  @Prop({ type: String })
+  expoPushToken?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

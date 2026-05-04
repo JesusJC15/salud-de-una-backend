@@ -8,5 +8,8 @@
   "silent": true,
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^jwks-rsa$": "<rootDir>/mocks/jwks-rsa.js"
   }
 }

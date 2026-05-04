@@ -276,6 +276,92 @@ describe('DoctorsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rethusResubmit should throw BadRequestException for invalid userId', async () => {
+    await expect(
+      service.rethusResubmit(
+        {
+          userId: 'not-valid',
+          email: 'doc@example.com',
+          role: 'DOCTOR',
+          isActive: true,
+        },
+        { notes: 'test' },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rethusResubmit should throw NotFoundException when doctor not found inside transaction', async () => {
+    const doctorId = new Types.ObjectId().toString();
+    doctorModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    await expect(
+      service.rethusResubmit(
+        {
+          userId: doctorId,
+          email: 'doc@example.com',
+          role: 'DOCTOR',
+          isActive: true,
+        },
+        { notes: 'test' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('updatePushToken should call findByIdAndUpdate with the token', async () => {
+    const findByIdAndUpdate = jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(undefined),
+    });
+    (doctorModel as Record<string, unknown>).findByIdAndUpdate =
+      findByIdAndUpdate;
+
+    await service.updatePushToken('doctor-id', 'ExponentPushToken[test]');
+
+    expect(findByIdAndUpdate).toHaveBeenCalledWith('doctor-id', {
+      expoPushToken: 'ExponentPushToken[test]',
+    });
+  });
+
+  it('updateAvailability should return updated status', async () => {
+    const findByIdAndUpdate = jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({ availabilityStatus: 'PAUSED' }),
+    });
+    (doctorModel as Record<string, unknown>).findByIdAndUpdate =
+      findByIdAndUpdate;
+
+    const result = await service.updateAvailability('doctor-id', 'PAUSED');
+
+    expect(result.availabilityStatus).toBe('PAUSED');
+  });
+
+  it('updateAvailability should use passed status when availabilityStatus is null', async () => {
+    (doctorModel as Record<string, unknown>).findByIdAndUpdate = jest
+      .fn()
+      .mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue({ availabilityStatus: null }),
+      });
+
+    const result = await service.updateAvailability('doctor-id', 'AVAILABLE');
+    expect(result.availabilityStatus).toBe('AVAILABLE');
+  });
+
+  it('updateAvailability should throw NotFoundException when doctor not found', async () => {
+    (doctorModel as Record<string, unknown>).findByIdAndUpdate = jest
+      .fn()
+      .mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+    await expect(
+      service.updateAvailability('missing-id', 'AVAILABLE'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('rethusResubmit should map unexpected errors', async () => {
     const doctorId = new Types.ObjectId().toString();
     doctorModel.findById.mockReturnValue({

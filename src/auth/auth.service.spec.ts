@@ -17,6 +17,7 @@ import { Patient } from '../patients/schemas/patient.schema';
 import { AuthService } from './auth.service';
 import { UserGender } from '../common/enums/user-gender.enum';
 import { RefreshSession } from './schemas/refresh-session.schema';
+import { ProvisioningService } from './provisioning.service';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -186,6 +187,14 @@ describe('AuthService', () => {
         {
           provide: ConfigService,
           useValue: configService,
+        },
+        {
+          provide: ProvisioningService,
+          useValue: {
+            createAuth0UserFromManualRegistration: jest
+              .fn()
+              .mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

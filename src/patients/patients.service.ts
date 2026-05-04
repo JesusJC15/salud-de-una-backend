@@ -90,6 +90,13 @@ export class PatientsService {
     }
   }
 
+  async updatePushToken(userId: string, token: string): Promise<void> {
+    await this.patientModel
+      .findByIdAndUpdate(userId, { expoPushToken: token })
+      .lean()
+      .exec();
+  }
+
   private toProfileResponse(patient: {
     _id?: { toString(): string };
     id?: string;

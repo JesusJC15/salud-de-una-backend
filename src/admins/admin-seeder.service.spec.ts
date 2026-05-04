@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import type { Model } from 'mongoose';
+import type { ProvisioningService } from '../auth/provisioning.service';
 import { AdminSeederService } from './admin-seeder.service';
 import type { AdminDocument } from './schemas/admin.schema';
 
@@ -34,6 +35,11 @@ describe('AdminSeederService', () => {
     logSpy.mockRestore();
   });
 
+  const provisioningService = {
+    getManagementTokenPublic: jest.fn().mockResolvedValue('token'),
+    setUserDbId: jest.fn().mockResolvedValue(undefined),
+  } as unknown as ProvisioningService;
+
   function createService(values: Record<string, unknown>) {
     configService = {
       get: jest.fn((key: string) => values[key]),
@@ -41,6 +47,7 @@ describe('AdminSeederService', () => {
     return new AdminSeederService(
       adminModel as unknown as Model<AdminDocument>,
       configService,
+      provisioningService,
     );
   }
 
@@ -64,14 +71,14 @@ describe('AdminSeederService', () => {
     expect(adminModel.create).not.toHaveBeenCalled();
   });
 
-  it('should skip when admin already exists', async () => {
+  it('should skip create when admin already exists and sync to Auth0', async () => {
     const service = createService({
       ENABLE_BOOTSTRAP_ADMIN: true,
       BOOTSTRAP_ADMIN_EMAIL: 'Admin@Example.com',
       BOOTSTRAP_ADMIN_PASSWORD: 'AdminP@ss1',
     });
     adminModel.findOne.mockReturnValue({
-      exec: jest.fn().mockResolvedValue({ _id: 'admin1' }),
+      exec: jest.fn().mockResolvedValue({ _id: 'admin1', id: 'admin1' }),
     });
 
     await service.onApplicationBootstrap();
@@ -91,6 +98,7 @@ describe('AdminSeederService', () => {
       BOOTSTRAP_ADMIN_FIRST_NAME: 'System',
       BOOTSTRAP_ADMIN_LAST_NAME: 'Admin',
     });
+    adminModel.create.mockResolvedValue({ id: 'new-admin-id' });
     adminModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(null),
     });
