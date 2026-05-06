@@ -21,7 +21,9 @@ describe('E2E Notifications / Inbox', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('lets doctors read a notification and consume their unread inbox', async () => {

@@ -4,11 +4,20 @@ import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import * as bcrypt from 'bcrypt';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
-import { Connection, Model, type HydratedDocument, Types } from 'mongoose';
+import {
+  Connection,
+  ConnectionStates,
+  Model,
+  type HydratedDocument,
+  Types,
+} from 'mongoose';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AiService } from '../../../src/ai/ai.service';
-import { Admin } from '../../../src/admins/schemas/admin.schema';
+import {
+  Admin,
+  type AdminDocument,
+} from '../../../src/admins/schemas/admin.schema';
 import { HttpExceptionFilter } from '../../../src/common/filters/http-exception.filter';
 import { Notification } from '../../../src/notifications/schemas/notification.schema';
 import { buildAdminSeed, uniqueValue } from './builders';
@@ -21,6 +30,11 @@ type E2eEnvironmentOptions = {
   aiOverride?: Partial<AiService>;
   env?: Record<string, string>;
 };
+
+const AUTH_LOGIN_PATH_BY_CLIENT = {
+  patient: '/v1/auth/patient/login',
+  staff: '/v1/auth/staff/login',
+} as const;
 
 const hashCache = new Map<string, Promise<string>>();
 
@@ -53,9 +67,10 @@ export class E2eTestContext {
     DOTENV_CONFIG_PATH: process.env.DOTENV_CONFIG_PATH,
   };
 
-  private app!: import('@nestjs/common').INestApplication<App>;
-  private connection!: Connection;
-  private mongoServer!: MongoMemoryReplSet;
+  private app?: import('@nestjs/common').INestApplication<App>;
+  private connection?: Connection;
+  private mongoServer?: MongoMemoryReplSet;
+  private isClosing = false;
 
   static async create(options: E2eEnvironmentOptions = {}) {
     const context = new E2eTestContext();
@@ -64,18 +79,26 @@ export class E2eTestContext {
   }
 
   getApp() {
+    if (!this.app) {
+      throw new Error('E2E app is not initialized');
+    }
+
     return this.app;
   }
 
   request() {
-    return request(this.app.getHttpServer());
+    return request(this.getApp().getHttpServer());
   }
 
   getModel<T extends HydratedDocument<unknown>>(modelName: string) {
-    return this.app.get<Model<T>>(getModelToken(modelName));
+    return this.getApp().get<Model<T>>(getModelToken(modelName));
   }
 
   async resetDatabase() {
+    if (!this.connection) {
+      return;
+    }
+
     const collections = Object.values(this.connection.collections);
     await Promise.all(
       collections.map((collection) => collection.deleteMany({})),
@@ -92,7 +115,7 @@ export class E2eTestContext {
 
   async seedAdmin(overrides: Partial<ReturnType<typeof buildAdminSeed>> = {}) {
     const admin = buildAdminSeed(overrides);
-    const adminModel = this.getModel<HydratedDocument<unknown>>(Admin.name);
+    const adminModel = this.getModel<AdminDocument>(Admin.name);
 
     await adminModel.create({
       firstName: admin.firstName,
@@ -110,11 +133,7 @@ export class E2eTestContext {
     client: 'patient' | 'staff',
   ): Promise<AuthSessionResponseBody> {
     const response = await this.request()
-      .post(
-        client === 'patient'
-          ? '/v1/auth/patient/login'
-          : '/v1/auth/staff/login',
-      )
+      .post(AUTH_LOGIN_PATH_BY_CLIENT[client])
       .send({ email, password })
       .expect(200);
 
@@ -159,12 +178,38 @@ export class E2eTestContext {
   }
 
   async close() {
-    if (this.app) {
-      await this.app.close();
+    if (this.isClosing) {
+      return;
     }
 
-    if (this.mongoServer) {
-      await this.mongoServer.stop();
+    this.isClosing = true;
+    const errors: unknown[] = [];
+
+    try {
+      if (this.app) {
+        await this.app.close();
+      }
+    } catch (error) {
+      errors.push(error);
+    }
+
+    try {
+      if (
+        this.connection &&
+        this.connection.readyState !== ConnectionStates.disconnected
+      ) {
+        await this.connection.close(true);
+      }
+    } catch (error) {
+      errors.push(error);
+    }
+
+    try {
+      if (this.mongoServer) {
+        await this.mongoServer.stop({ doCleanup: true, force: true });
+      }
+    } catch (error) {
+      errors.push(error);
     }
 
     for (const [key, value] of Object.entries(this.originalEnv)) {
@@ -176,54 +221,70 @@ export class E2eTestContext {
     }
 
     jest.restoreAllMocks();
+
+    this.app = undefined;
+    this.connection = undefined;
+    this.mongoServer = undefined;
+    this.isClosing = false;
+
+    if (errors.length > 0) {
+      throw errors[0];
+    }
   }
 
   private async bootstrap(options: E2eEnvironmentOptions) {
-    jest.spyOn(ThrottlerGuard.prototype, 'canActivate').mockResolvedValue(true);
-    this.mongoServer = await MongoMemoryReplSet.create({
-      replSet: { count: 1 },
-    });
+    try {
+      jest
+        .spyOn(ThrottlerGuard.prototype, 'canActivate')
+        .mockResolvedValue(true);
+      this.mongoServer = await MongoMemoryReplSet.create({
+        replSet: { count: 1 },
+      });
 
-    this.applyEnvironment(options);
+      this.applyEnvironment(options);
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { AppModule } = require('../../../src/app.module') as {
-      AppModule: typeof import('../../../src/app.module').AppModule;
-    };
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { AppModule } = require('../../../src/app.module') as {
+        AppModule: typeof import('../../../src/app.module').AppModule;
+      };
 
-    let builder: TestingModuleBuilder = Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideGuard(ThrottlerGuard)
-      .useValue({ canActivate: jest.fn().mockResolvedValue(true) });
+      let builder: TestingModuleBuilder = Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideGuard(ThrottlerGuard)
+        .useValue({ canActivate: jest.fn().mockResolvedValue(true) });
 
-    if (options.aiOverride) {
-      builder = builder
-        .overrideProvider(AiService)
-        .useValue(options.aiOverride);
+      if (options.aiOverride) {
+        builder = builder
+          .overrideProvider(AiService)
+          .useValue(options.aiOverride);
+      }
+
+      const moduleFixture = await builder.compile();
+      this.app = moduleFixture.createNestApplication();
+      this.app.setGlobalPrefix('v1');
+      this.app.useGlobalPipes(
+        new ValidationPipe({
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          transform: true,
+          transformOptions: { enableImplicitConversion: true },
+        }),
+      );
+      this.app.useGlobalFilters(new HttpExceptionFilter());
+      await this.app.init();
+
+      this.connection = this.app.get<Connection>(getConnectionToken());
+    } catch (error) {
+      await this.close().catch(() => undefined);
+      throw error;
     }
-
-    const moduleFixture = await builder.compile();
-    this.app = moduleFixture.createNestApplication();
-    this.app.setGlobalPrefix('v1');
-    this.app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-        transformOptions: { enableImplicitConversion: true },
-      }),
-    );
-    this.app.useGlobalFilters(new HttpExceptionFilter());
-    await this.app.init();
-
-    this.connection = this.app.get<Connection>(getConnectionToken());
   }
 
   private applyEnvironment(options: E2eEnvironmentOptions) {
     process.env.NODE_ENV = 'test';
     process.env.DOTENV_CONFIG_PATH = 'test/.env.does-not-exist';
-    process.env.MONGODB_URI = this.mongoServer.getUri();
+    process.env.MONGODB_URI = this.mongoServer!.getUri();
     process.env.JWT_SECRET = `test-secret-${uniqueValue('jwt')}-12345678901234567890`;
     process.env.JWT_ACCESS_EXPIRES_IN = '1h';
     process.env.JWT_REFRESH_EXPIRES_IN = '7d';

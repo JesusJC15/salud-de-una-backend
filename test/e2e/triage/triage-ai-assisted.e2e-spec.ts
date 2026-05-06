@@ -61,7 +61,9 @@ describe('E2E Triage / AI Assisted Analysis', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('analyzes complete general medicine sessions with AI enabled', async () => {

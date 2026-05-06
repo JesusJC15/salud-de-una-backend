@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { UserRole } from '../common/enums/user-role.enum';
+import { buildRequestUser } from '../common/testing/request-test-helpers';
 import { Consultation } from '../consultations/schemas/consultation.schema';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Followup } from '../followups/schemas/followup.schema';
@@ -62,11 +63,11 @@ describe('PatientTimelineService', () => {
   it('rejects invalid patient ids', async () => {
     await expect(
       service.getTimeline(
-        {
+        buildRequestUser({
           userId: patientId.toString(),
           role: UserRole.ADMIN,
           email: 'admin@test.com',
-        },
+        }),
         'invalid',
         {},
       ),
@@ -76,11 +77,11 @@ describe('PatientTimelineService', () => {
   it('prevents patients from reading another patients timeline', async () => {
     await expect(
       service.getTimeline(
-        {
+        buildRequestUser({
           userId: new Types.ObjectId().toString(),
           role: UserRole.PATIENT,
           email: 'patient@test.com',
-        },
+        }),
         patientId.toString(),
         {},
       ),
@@ -99,11 +100,11 @@ describe('PatientTimelineService', () => {
 
     await expect(
       service.getTimeline(
-        {
+        buildRequestUser({
           userId: doctorId.toString(),
           role: UserRole.DOCTOR,
           email: 'doctor@test.com',
-        },
+        }),
         patientId.toString(),
         {},
       ),
@@ -119,11 +120,11 @@ describe('PatientTimelineService', () => {
 
     await expect(
       service.getTimeline(
-        {
+        buildRequestUser({
           userId: doctorId.toString(),
           role: UserRole.DOCTOR,
           email: 'doctor@test.com',
-        },
+        }),
         patientId.toString(),
         {},
       ),
@@ -136,11 +137,11 @@ describe('PatientTimelineService', () => {
     followupModel.find.mockReturnValue(leanQuery([]));
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       patientId.toString(),
       { limit: 5 },
     );
@@ -165,11 +166,11 @@ describe('PatientTimelineService', () => {
     followupModel.find.mockReturnValue(leanQuery([]));
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: doctorId.toString(),
         role: UserRole.DOCTOR,
         email: 'doctor@test.com',
-      },
+      }),
       patientId.toString(),
       {},
     );
@@ -193,11 +194,11 @@ describe('PatientTimelineService', () => {
     followupModel.find.mockReturnValue(leanQuery([]));
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       patientId.toString(),
       {},
     );
@@ -227,11 +228,11 @@ describe('PatientTimelineService', () => {
     followupModel.find.mockReturnValue(leanQuery([]));
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       patientId.toString(),
       {},
     );
@@ -262,11 +263,11 @@ describe('PatientTimelineService', () => {
     );
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       patientId.toString(),
       {},
     );
@@ -298,11 +299,11 @@ describe('PatientTimelineService', () => {
     );
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       patientId.toString(),
       {},
     );
@@ -333,11 +334,11 @@ describe('PatientTimelineService', () => {
     );
 
     const result = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       patientId.toString(),
       {},
     );
@@ -390,11 +391,11 @@ describe('PatientTimelineService', () => {
     );
 
     const firstPage = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: new Types.ObjectId().toString(),
         role: UserRole.ADMIN,
         email: 'admin@test.com',
-      },
+      }),
       patientId.toString(),
       { limit: 2 },
     );
@@ -407,11 +408,11 @@ describe('PatientTimelineService', () => {
     expect(firstPage.nextCursor).toBe(firstPage.items[1].occurredAt);
 
     const secondPage = await service.getTimeline(
-      {
+      buildRequestUser({
         userId: new Types.ObjectId().toString(),
         role: UserRole.ADMIN,
         email: 'admin@test.com',
-      },
+      }),
       patientId.toString(),
       { limit: 10, cursor: firstPage.nextCursor! },
     );

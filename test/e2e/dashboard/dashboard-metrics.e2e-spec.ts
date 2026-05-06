@@ -22,7 +22,9 @@ describe('E2E Dashboard / Metrics', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('returns business KPIs from persisted data', async () => {

@@ -15,6 +15,7 @@ describe('DoctorsController', () => {
     getMe: jest.Mock;
     rethusResubmit: jest.Mock;
     updateAvailability: jest.Mock;
+    updatePushToken: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -22,6 +23,7 @@ describe('DoctorsController', () => {
       getMe: jest.fn(),
       rethusResubmit: jest.fn(),
       updateAvailability: jest.fn(),
+      updatePushToken: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -98,5 +100,28 @@ describe('DoctorsController', () => {
       undefined,
     );
     expect(result).toEqual({ doctorId: 'd1' });
+  });
+
+  it('updatePushToken should call service with doctor id and token', async () => {
+    service.updatePushToken.mockResolvedValue(undefined);
+
+    await expect(
+      controller.updatePushToken(
+        { token: 'ExponentPushToken[test]' },
+        {
+          user: {
+            userId: 'd1',
+            email: 'doc@example.com',
+            role: UserRole.DOCTOR,
+            isActive: true,
+          },
+        } as unknown as RequestContext,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(service.updatePushToken).toHaveBeenCalledWith(
+      'd1',
+      'ExponentPushToken[test]',
+    );
   });
 });

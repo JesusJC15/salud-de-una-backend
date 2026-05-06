@@ -30,7 +30,9 @@ describe('E2E Triage / Session Management', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('creates a triage session for patient role', async () => {

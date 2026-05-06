@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConnectionOptions, Queue } from 'bullmq';
 import {
@@ -23,7 +22,6 @@ import { Followup, FollowupSchema } from './schemas/followup.schema';
 
 @Module({
   imports: [
-    BullModule,
     NotificationsModule,
     MongooseModule.forFeature([
       { name: Followup.name, schema: FollowupSchema },

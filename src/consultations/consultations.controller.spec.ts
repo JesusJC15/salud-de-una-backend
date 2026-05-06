@@ -1,4 +1,8 @@
+import type { RequestContext } from '../common/interfaces/request-context.interface';
+import { buildRequestContext } from '../common/testing/request-test-helpers';
 import { UserRole } from '../common/enums/user-role.enum';
+import { ListConsultationsHistoryDto } from './dto/list-consultations-history.dto';
+import { SummaryFeedbackDto } from './dto/summary-feedback.dto';
 import { ConsultationsController } from './consultations.controller';
 
 const mockService = {
@@ -18,15 +22,15 @@ function makeReq(
   userId = 'user-1',
   role: UserRole = UserRole.PATIENT,
   correlationId = 'corr-1',
-) {
-  return {
+): RequestContext {
+  return buildRequestContext({
     user: {
       userId,
       role,
       email: `${userId}@test.com`,
     },
     correlationId,
-  } as never;
+  });
 }
 
 describe('ConsultationsController', () => {
@@ -47,7 +51,11 @@ describe('ConsultationsController', () => {
   describe('getPatientHistory', () => {
     it('delegates req.user and query dto as received', () => {
       const req = makeReq('p1', UserRole.PATIENT);
-      const query = { limit: 10, page: 2, status: 'CLOSED' };
+      const query: ListConsultationsHistoryDto = {
+        limit: 10,
+        page: 2,
+        status: 'CLOSED',
+      };
 
       void controller.getPatientHistory(req, query);
 
@@ -59,7 +67,7 @@ describe('ConsultationsController', () => {
 
     it('passes an empty query object when no filters are provided', () => {
       const req = makeReq('p1', UserRole.PATIENT);
-      const query = {};
+      const query: ListConsultationsHistoryDto = {};
 
       void controller.getPatientHistory(req, query);
 
@@ -73,7 +81,11 @@ describe('ConsultationsController', () => {
   describe('getDoctorHistory', () => {
     it('delegates req.user and query dto as received', () => {
       const req = makeReq('d1', UserRole.DOCTOR);
-      const query = { limit: 20, page: 3, status: 'IN_ATTENTION' };
+      const query: ListConsultationsHistoryDto = {
+        limit: 20,
+        page: 3,
+        status: 'IN_ATTENTION',
+      };
 
       void controller.getDoctorHistory(req, query);
 
@@ -110,7 +122,7 @@ describe('ConsultationsController', () => {
 
   it('submitSummaryFeedback delegates with consultationId, req.user and dto', () => {
     const req = makeReq('d1', UserRole.DOCTOR);
-    const dto = { value: 'accepted', comment: 'ok' };
+    const dto: SummaryFeedbackDto = { value: 'USEFUL', comment: 'ok' };
 
     void controller.submitSummaryFeedback(req, 'c1', dto);
 

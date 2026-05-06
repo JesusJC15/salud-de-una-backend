@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
+import { Specialty } from '../common/enums/specialty.enum';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Patient } from '../patients/schemas/patient.schema';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -93,7 +94,7 @@ describe('AuthController', () => {
       lastName: 'Medina',
       email: 'doc@example.com',
       password: 'StrongP@ss1',
-      specialty: 'GENERAL_MEDICINE',
+      specialty: Specialty.GENERAL_MEDICINE,
       personalId: 'CC-123',
       phoneNumber: '3001234567',
     } as RegisterDoctorDto;
@@ -317,7 +318,7 @@ describe('AuthController', () => {
         {
           firstName: 'Laura',
           lastName: 'Medina',
-          specialty: 'GENERAL_MEDICINE',
+          specialty: Specialty.GENERAL_MEDICINE,
           personalId: 'CC-123',
           phoneNumber: '3001234567',
         },
@@ -335,7 +336,7 @@ describe('AuthController', () => {
         firstName: 'Laura',
         lastName: 'Medina',
         role: UserRole.DOCTOR,
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         doctorStatus: 'PENDING',
       }),
     });
@@ -347,7 +348,7 @@ describe('AuthController', () => {
       {
         firstName: 'Laura',
         lastName: 'Medina',
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         personalId: 'CC-123',
         phoneNumber: '3001234567',
       },
@@ -362,7 +363,7 @@ describe('AuthController', () => {
     expect(result).toMatchObject({
       id: 'doctor-existing',
       role: UserRole.DOCTOR,
-      specialty: 'GENERAL_MEDICINE',
+      specialty: Specialty.GENERAL_MEDICINE,
     });
   });
 
@@ -387,7 +388,7 @@ describe('AuthController', () => {
         {
           firstName: 'Laura',
           lastName: 'Medina',
-          specialty: 'GENERAL_MEDICINE',
+          specialty: Specialty.GENERAL_MEDICINE,
           personalId: 'CC-123',
           phoneNumber: '3001234567',
         },
@@ -414,7 +415,7 @@ describe('AuthController', () => {
       firstName: 'Laura',
       lastName: 'Medina',
       role: UserRole.DOCTOR,
-      specialty: 'GENERAL_MEDICINE',
+      specialty: Specialty.GENERAL_MEDICINE,
       doctorStatus: 'PENDING',
     });
 
@@ -425,7 +426,7 @@ describe('AuthController', () => {
       {
         firstName: 'Laura',
         lastName: 'Medina',
-        specialty: 'GENERAL_MEDICINE',
+        specialty: Specialty.GENERAL_MEDICINE,
         personalId: 'CC-123',
         phoneNumber: '3001234567',
       },
@@ -438,7 +439,7 @@ describe('AuthController', () => {
     );
     expect(result).toMatchObject({
       id: 'doctor-1',
-      specialty: 'GENERAL_MEDICINE',
+      specialty: Specialty.GENERAL_MEDICINE,
       role: UserRole.DOCTOR,
     });
   });

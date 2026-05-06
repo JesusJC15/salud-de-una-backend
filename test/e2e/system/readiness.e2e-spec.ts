@@ -9,7 +9,9 @@ describe('E2E System / Readiness', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('reports Redis and AI as disabled without failing readiness', async () => {

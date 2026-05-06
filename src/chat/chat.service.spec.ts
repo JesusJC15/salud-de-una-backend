@@ -7,6 +7,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { UserRole } from '../common/enums/user-role.enum';
+import { buildRequestUser } from '../common/testing/request-test-helpers';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Consultation } from '../consultations/schemas/consultation.schema';
 import { ConsultationMessage } from './schemas/consultation-message.schema';
@@ -34,23 +35,23 @@ describe('ChatService', () => {
   const consultationId = new Types.ObjectId();
   const messageId = new Types.ObjectId();
 
-  const patientUser = {
+  const patientUser = buildRequestUser({
     userId: patientId.toString(),
     role: UserRole.PATIENT,
     email: 'patient@test.com',
-  };
+  });
 
-  const doctorUser = {
+  const doctorUser = buildRequestUser({
     userId: doctorId.toString(),
     role: UserRole.DOCTOR,
     email: 'doctor@test.com',
-  };
+  });
 
-  const adminUser = {
+  const adminUser = buildRequestUser({
     userId: new Types.ObjectId().toString(),
     role: UserRole.ADMIN,
     email: 'admin@test.com',
-  };
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -217,11 +218,14 @@ describe('ChatService', () => {
       mockConsultationLookup(consultationDoc());
 
       await expect(
-        service.getMessages(consultationId.toString(), {
-          userId: new Types.ObjectId().toString(),
-          role: UserRole.PATIENT,
-          email: 'other@test.com',
-        }),
+        service.getMessages(
+          consultationId.toString(),
+          buildRequestUser({
+            userId: new Types.ObjectId().toString(),
+            role: UserRole.PATIENT,
+            email: 'other@test.com',
+          }),
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
