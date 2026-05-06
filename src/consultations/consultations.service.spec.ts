@@ -3,110 +3,66 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClientSession, Types } from 'mongoose';
-import { Specialty } from '../common/enums/specialty.enum';
 import { AiService } from '../ai/ai.service';
+import { UserRole } from '../common/enums/user-role.enum';
+import { Specialty } from '../common/enums/specialty.enum';
+import { Doctor } from '../doctors/schemas/doctor.schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { Patient } from '../patients/schemas/patient.schema';
-import { ConsultationMessage } from '../chat/schemas/consultation-message.schema';
 import { TriageSession } from '../triage/schemas/triage-session.schema';
+import { ChatService } from '../chat/chat.service';
 import { ConsultationsService } from './consultations.service';
 import { Consultation } from './schemas/consultation.schema';
-
-// ── Consultation model ────────────────────────────────────────────────────────
-
-const findExecMock = jest.fn();
-const findChain = {
-  select: jest.fn().mockReturnThis(),
-  lean: jest.fn().mockReturnThis(),
-  sort: jest.fn().mockReturnThis(),
-  skip: jest.fn().mockReturnThis(),
-  limit: jest.fn().mockReturnThis(),
-  exec: findExecMock,
-};
-
-const consultationFindByIdExecMock = jest.fn();
-const consultationFindByIdChain = {
-  select: jest.fn().mockReturnThis(),
-  lean: jest.fn().mockReturnThis(),
-  exec: consultationFindByIdExecMock,
-};
-
-const consultationModel = {
-  create: jest.fn(),
-  find: jest.fn().mockReturnValue(findChain),
-  findById: jest.fn().mockReturnValue(consultationFindByIdChain),
-  countDocuments: jest.fn(),
-};
-
-// ── TriageSession model ───────────────────────────────────────────────────────
-
-const triageExecMock = jest.fn();
-const triageChain = {
-  select: jest.fn().mockReturnThis(),
-  lean: jest.fn().mockReturnThis(),
-  exec: triageExecMock,
-};
-const triageSessionModel = {
-  findById: jest.fn().mockReturnValue(triageChain),
-};
-
-// ── ConsultationMessage model ─────────────────────────────────────────────────
-
-const messageExecMock = jest.fn();
-const messageChain = {
-  sort: jest.fn().mockReturnThis(),
-  limit: jest.fn().mockReturnThis(),
-  lean: jest.fn().mockReturnThis(),
-  exec: messageExecMock,
-};
-const messageModel = {
-  find: jest.fn().mockReturnValue(messageChain),
-};
-
-// ── Patient model ─────────────────────────────────────────────────────────────
-
-const patientExecMock = jest.fn();
-const patientChain = {
-  select: jest.fn().mockReturnThis(),
-  lean: jest.fn().mockReturnThis(),
-  exec: patientExecMock,
-};
-const patientModel = {
-  findById: jest.fn().mockReturnValue(patientChain),
-};
-
-// ── AiService / NotificationsService mocks ───────────────────────────────────
-
-const aiServiceMock = { generateText: jest.fn() };
-const notificationsServiceMock = { sendExpoPush: jest.fn() };
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('ConsultationsService', () => {
   let service: ConsultationsService;
 
+  const findExecMock = jest.fn();
+  const findChain = {
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: findExecMock,
+  };
+
+  const consultationModel = {
+    create: jest.fn(),
+    find: jest.fn().mockReturnValue(findChain),
+    findById: jest.fn(),
+    countDocuments: jest.fn(),
+  };
+  const doctorModel = {
+    findById: jest.fn(),
+    find: jest.fn(),
+  };
+  const patientModel = {};
+  const triageSessionModel = {
+    findById: jest.fn(),
+  };
+  const aiService = {
+    generateText: jest.fn(),
+  };
+  const notificationsService = {
+    createUserNotification: jest.fn(),
+  };
+  const outboxService = {
+    createConsultationClosedEvent: jest.fn(),
+  };
+  const outboxDispatcherService = {
+    dispatchPendingEvents: jest.fn(),
+  };
+  const chatService = {
+    getMessages: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
-
     findExecMock.mockResolvedValue([]);
-    consultationFindByIdExecMock.mockResolvedValue(null);
-    triageExecMock.mockResolvedValue(null);
-    messageExecMock.mockResolvedValue([]);
-    patientExecMock.mockResolvedValue(null);
-
-    consultationModel.find.mockReturnValue(findChain);
-    consultationModel.findById.mockReturnValue(consultationFindByIdChain);
-    consultationModel.countDocuments.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(0),
-    });
-    triageSessionModel.findById.mockReturnValue(triageChain);
-    messageModel.find.mockReturnValue(messageChain);
-    patientModel.findById.mockReturnValue(patientChain);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -116,30 +72,45 @@ describe('ConsultationsService', () => {
           useValue: consultationModel,
         },
         {
-          provide: getModelToken(TriageSession.name),
-          useValue: triageSessionModel,
-        },
-        {
-          provide: getModelToken(ConsultationMessage.name),
-          useValue: messageModel,
+          provide: getModelToken(Doctor.name),
+          useValue: doctorModel,
         },
         {
           provide: getModelToken(Patient.name),
           useValue: patientModel,
         },
-        { provide: AiService, useValue: aiServiceMock },
-        { provide: NotificationsService, useValue: notificationsServiceMock },
+        {
+          provide: getModelToken(TriageSession.name),
+          useValue: triageSessionModel,
+        },
+        {
+          provide: AiService,
+          useValue: aiService,
+        },
+        {
+          provide: NotificationsService,
+          useValue: notificationsService,
+        },
+        {
+          provide: OutboxService,
+          useValue: outboxService,
+        },
+        {
+          provide: OutboxDispatcherService,
+          useValue: outboxDispatcherService,
+        },
+        {
+          provide: ChatService,
+          useValue: chatService,
+        },
       ],
     }).compile();
 
     service = module.get<ConsultationsService>(ConsultationsService);
   });
 
-  // ── createFromTriage ────────────────────────────────────────────────────────
-
   it('creates consultation using string ids without session', async () => {
-    const newId = new Types.ObjectId();
-    consultationModel.create.mockResolvedValue([{ _id: newId }]);
+    consultationModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
 
     await service.createFromTriage({
       patientId: new Types.ObjectId().toString(),
@@ -191,8 +162,6 @@ describe('ConsultationsService', () => {
       { session },
     );
   });
-
-  // ── getQueue ────────────────────────────────────────────────────────────────
 
   it('returns paginated queue using clamped defaults', async () => {
     const consultationId = new Types.ObjectId();
@@ -271,7 +240,9 @@ describe('ConsultationsService', () => {
 
   it('uses default pagination values when options are not provided', async () => {
     findExecMock.mockResolvedValue([]);
+
     const result = await service.getQueue();
+
     expect(result).toEqual({ items: [] });
   });
 
@@ -367,587 +338,677 @@ describe('ConsultationsService', () => {
     expect(result.items[1].id).toBe(unknownId.toString());
   });
 
-  // ── getById ─────────────────────────────────────────────────────────────────
-
-  describe('getById', () => {
-    it('throws NotFoundException when consultation not found', async () => {
-      await expect(service.getById('cid', 'did')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws ForbiddenException when assigned to another doctor', async () => {
-      const assignedId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: new Types.ObjectId(),
-        patientId: new Types.ObjectId(),
-        triageSessionId: new Types.ObjectId(),
-        specialty: Specialty.GENERAL_MEDICINE,
-        priority: 'HIGH',
-        status: 'IN_ATTENTION',
-        assignedDoctorId: assignedId,
-      });
-      await expect(service.getById('cid', 'different-id')).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('returns consultation with triage session', async () => {
-      const consultationId = new Types.ObjectId();
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
+  it('returns consultation details for the owning patient', async () => {
+    const consultationId = new Types.ObjectId();
+    const triageSessionId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
         _id: consultationId,
-        patientId: new Types.ObjectId(),
-        triageSessionId: new Types.ObjectId(),
+        patientId,
+        triageSessionId,
         specialty: Specialty.GENERAL_MEDICINE,
         priority: 'HIGH',
         status: 'IN_ATTENTION',
-        assignedDoctorId: doctorId,
-        clinicalSummary: 'summary',
-      });
-      triageExecMock.mockResolvedValue({
+        assignedDoctorId: new Types.ObjectId(),
+        updatedAt: new Date('2025-01-02T00:00:00.000Z'),
+      }),
+    });
+    triageSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
         status: 'COMPLETED',
         answers: [
-          { questionId: 'q1', questionText: 'Pain?', answerValue: '8' },
-        ],
-        analysis: { priority: 'HIGH', redFlags: [] },
-      });
-
-      const result = await service.getById('cid', doctorId.toString());
-      expect(result.id).toBe(consultationId.toString());
-      expect(result.triage).not.toBeNull();
-      expect(result.clinicalSummary).toBe('summary');
-    });
-
-    it('returns null triage when triage session not found', async () => {
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: new Types.ObjectId(),
-        patientId: new Types.ObjectId(),
-        triageSessionId: new Types.ObjectId(),
-        specialty: Specialty.GENERAL_MEDICINE,
-        priority: 'LOW',
-        status: 'PENDING',
-      });
-
-      const result = await service.getById('cid', 'any-doctor');
-      expect(result.triage).toBeNull();
-    });
-
-    it('allows access when consultation is unassigned', async () => {
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: new Types.ObjectId(),
-        patientId: new Types.ObjectId(),
-        triageSessionId: new Types.ObjectId(),
-        specialty: Specialty.GENERAL_MEDICINE,
-        priority: 'LOW',
-        status: 'PENDING',
-      });
-
-      await expect(service.getById('cid', 'any-doctor')).resolves.not.toThrow();
-    });
-  });
-
-  // ── assign ──────────────────────────────────────────────────────────────────
-
-  describe('assign', () => {
-    it('throws NotFoundException when consultation not found', async () => {
-      await expect(service.assign('cid', 'did')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws ConflictException when consultation is not PENDING', async () => {
-      consultationFindByIdExecMock.mockResolvedValue({
-        status: 'IN_ATTENTION',
-        save: jest.fn(),
-      });
-      await expect(service.assign('cid', 'did')).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('assigns consultation to doctor and returns updated data', async () => {
-      const consultationId = new Types.ObjectId();
-      const doctorId = new Types.ObjectId();
-      const saveMock = jest.fn().mockResolvedValue(undefined);
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: consultationId,
-        status: 'PENDING',
-        patientId: new Types.ObjectId(),
-        save: saveMock,
-      });
-
-      const result = await service.assign(
-        consultationId.toString(),
-        doctorId.toString(),
-      );
-
-      expect(saveMock).toHaveBeenCalled();
-      expect(result.status).toBe('IN_ATTENTION');
-      expect(result.assignedDoctorId).toBe(doctorId.toString());
-    });
-  });
-
-  // ── generateSummary ─────────────────────────────────────────────────────────
-
-  describe('generateSummary', () => {
-    it('throws NotFoundException when consultation not found', async () => {
-      await expect(service.generateSummary('cid', 'did')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws ForbiddenException when caller is not the assigned doctor', async () => {
-      const otherId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: otherId,
-        save: jest.fn(),
-      });
-      await expect(service.generateSummary('cid', 'different')).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('throws NotFoundException when triage session not found', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: doctorId,
-        triageSessionId: new Types.ObjectId(),
-        save: jest.fn(),
-      });
-      await expect(
-        service.generateSummary('cid', doctorId.toString()),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('generates summary with red flags', async () => {
-      const doctorId = new Types.ObjectId();
-      const saveMock = jest.fn().mockResolvedValue(undefined);
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: doctorId,
-        triageSessionId: new Types.ObjectId(),
-        save: saveMock,
-      });
-      triageExecMock.mockResolvedValue({
-        specialty: Specialty.GENERAL_MEDICINE,
-        answers: [
-          { questionId: 'q1', questionText: 'Pain level?', answerValue: '8' },
+          {
+            questionId: 'q1',
+            questionText: 'Dolor',
+            answerValue: 'Alto',
+          },
         ],
         analysis: {
           priority: 'HIGH',
-          redFlags: [{ severity: 'HIGH', evidence: 'chest pain' }],
+          redFlags: [{ severity: 'HIGH', evidence: 'fiebre' }],
+          aiSummary: 'Resumen',
         },
-      });
-      aiServiceMock.generateText.mockResolvedValue({
-        text: 'Clinical summary',
-      });
-
-      const result = await service.generateSummary('cid', doctorId.toString());
-
-      expect(result.summary).toBe('Clinical summary');
-      expect(saveMock).toHaveBeenCalled();
+      }),
     });
 
-    it('generates summary without red flags and trims whitespace', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: doctorId,
-        triageSessionId: new Types.ObjectId(),
-        save: jest.fn().mockResolvedValue(undefined),
-      });
-      triageExecMock.mockResolvedValue({
-        specialty: Specialty.GENERAL_MEDICINE,
-        answers: [],
-        analysis: { priority: 'LOW', redFlags: [] },
-      });
-      aiServiceMock.generateText.mockResolvedValue({ text: '  trimmed  ' });
-
-      const result = await service.generateSummary('cid', doctorId.toString());
-
-      expect(result.summary).toBe('trimmed');
+    const result = await service.getById(consultationId.toString(), {
+      userId: patientId.toString(),
+      role: UserRole.PATIENT,
+      email: 'patient@test.com',
     });
 
-    it('uses SIN ANALIZAR when analysis is null and returns empty summary when text is null', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: doctorId,
-        triageSessionId: new Types.ObjectId(),
-        save: jest.fn().mockResolvedValue(undefined),
-      });
-      triageExecMock.mockResolvedValue({
-        specialty: Specialty.GENERAL_MEDICINE,
-        answers: [],
-        analysis: null,
-      });
-      aiServiceMock.generateText.mockResolvedValue({ text: null });
-
-      const result = await service.generateSummary('cid', doctorId.toString());
-
-      expect(result.summary).toBe('');
-    });
-
-    it('throws ServiceUnavailableException when AI call fails', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: doctorId,
-        triageSessionId: new Types.ObjectId(),
-        save: jest.fn(),
-      });
-      triageExecMock.mockResolvedValue({
-        specialty: Specialty.GENERAL_MEDICINE,
-        answers: [],
-        analysis: null,
-      });
-      aiServiceMock.generateText.mockRejectedValue(new Error('AI error'));
-
-      await expect(
-        service.generateSummary('cid', doctorId.toString()),
-      ).rejects.toThrow(ServiceUnavailableException);
+    expect(result).toMatchObject({
+      id: consultationId.toString(),
+      triage: {
+        status: 'COMPLETED',
+      },
     });
   });
 
-  // ── close ───────────────────────────────────────────────────────────────────
-
-  describe('close', () => {
-    it('throws NotFoundException when consultation not found', async () => {
-      await expect(service.close('cid', 'did')).rejects.toThrow(
-        NotFoundException,
-      );
+  it('assigns a pending consultation to a verified doctor', async () => {
+    const consultationId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const doctorId = new Types.ObjectId();
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        doctorStatus: 'VERIFIED',
+        availabilityStatus: 'AVAILABLE',
+      }),
+    });
+    const consultation = {
+      id: consultationId.toString(),
+      patientId,
+      status: 'PENDING',
+      save: jest.fn(),
+      updatedAt: new Date('2025-01-03T00:00:00.000Z'),
+    };
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(consultation),
     });
 
-    it('throws ForbiddenException when caller is not the assigned doctor', async () => {
-      const otherId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: otherId,
-        save: jest.fn(),
-      });
-      await expect(service.close('cid', 'different')).rejects.toThrow(
-        ForbiddenException,
-      );
+    const result = await service.assign(consultationId.toString(), {
+      userId: doctorId.toString(),
+      role: UserRole.DOCTOR,
+      email: 'doctor@test.com',
     });
 
-    it('throws ConflictException when status is not IN_ATTENTION', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: doctorId,
-        status: 'PENDING',
-        save: jest.fn(),
-      });
-      await expect(service.close('cid', doctorId.toString())).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('closes consultation successfully', async () => {
-      const doctorId = new Types.ObjectId();
-      const consultationId = new Types.ObjectId();
-      const saveMock = jest.fn().mockResolvedValue(undefined);
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: consultationId,
-        assignedDoctorId: doctorId,
-        status: 'IN_ATTENTION',
-        patientId: new Types.ObjectId(),
-        save: saveMock,
-      });
-
-      const result = await service.close(
-        consultationId.toString(),
-        doctorId.toString(),
-      );
-
-      expect(saveMock).toHaveBeenCalled();
-      expect(result.status).toBe('CLOSED');
-    });
+    expect(consultation.save).toHaveBeenCalled();
+    expect(notificationsService.createUserNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: patientId.toString(),
+        type: 'CONSULTATION_ASSIGNED',
+      }),
+    );
+    expect(result.status).toBe('IN_ATTENTION');
   });
 
-  // ── rateConsultation ────────────────────────────────────────────────────────
-
-  describe('rateConsultation', () => {
-    it('throws NotFoundException when consultation not found', async () => {
-      await expect(
-        service.rateConsultation('cid', 'pid', { rating: 5 }),
-      ).rejects.toThrow(NotFoundException);
+  it('closes an assigned consultation and emits the outbox event', async () => {
+    const consultationId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const doctorId = new Types.ObjectId();
+    const consultation = {
+      id: consultationId.toString(),
+      patientId,
+      assignedDoctorId: doctorId,
+      status: 'IN_ATTENTION',
+      save: jest.fn(),
+      closedAt: undefined as Date | undefined,
+    };
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(consultation),
     });
 
-    it('throws ForbiddenException when patient mismatch', async () => {
-      const patientId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        patientId,
-        status: 'CLOSED',
-        save: jest.fn(),
-      });
-      await expect(
-        service.rateConsultation('cid', 'different', { rating: 5 }),
-      ).rejects.toThrow(ForbiddenException);
+    const result = await service.close(
+      consultationId.toString(),
+      {
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      },
+      {
+        baselineSymptomSeverity: 5,
+        redFlagsConfirmed: true,
+      },
+      'corr-123',
+    );
+
+    expect(consultation.save).toHaveBeenCalled();
+    expect(outboxService.createConsultationClosedEvent).toHaveBeenCalledWith(
+      { consultationId: consultationId.toString() },
+      'corr-123',
+    );
+    expect(outboxDispatcherService.dispatchPendingEvents).toHaveBeenCalled();
+    expect(result.status).toBe('CLOSED');
+  });
+
+  it('generates a clinical summary from AI response', async () => {
+    const consultationId = new Types.ObjectId();
+    const doctorId = new Types.ObjectId();
+    const triageSessionId = new Types.ObjectId();
+    const consultation = {
+      id: consultationId.toString(),
+      assignedDoctorId: doctorId,
+      triageSessionId,
+      priority: 'MODERATE',
+      save: jest.fn(),
+      updatedAt: new Date('2025-01-04T00:00:00.000Z'),
+      clinicalSummary: '',
+    };
+    consultationModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue(consultation),
     });
-
-    it('throws BadRequestException when consultation is not CLOSED', async () => {
-      const patientId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        patientId,
-        status: 'IN_ATTENTION',
-        save: jest.fn(),
-      });
-      await expect(
-        service.rateConsultation('cid', patientId.toString(), { rating: 5 }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('throws ConflictException when already rated', async () => {
-      const patientId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        patientId,
-        status: 'CLOSED',
-        rating: 4,
-        save: jest.fn(),
-      });
-      await expect(
-        service.rateConsultation('cid', patientId.toString(), { rating: 5 }),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('saves rating with comment', async () => {
-      const patientId = new Types.ObjectId();
-      const consultationId = new Types.ObjectId();
-      const saveMock = jest.fn().mockResolvedValue(undefined);
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: consultationId,
-        patientId,
-        status: 'CLOSED',
-        rating: undefined,
-        save: saveMock,
-      });
-
-      const result = await service.rateConsultation(
-        'cid',
-        patientId.toString(),
-        {
-          rating: 5,
-          ratingComment: 'Excellent',
+    triageSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        specialty: Specialty.GENERAL_MEDICINE,
+        answers: [
+          {
+            questionText: 'Sintoma',
+            answerValue: ['tos', 'fiebre'],
+          },
+        ],
+        analysis: {
+          priority: 'HIGH',
+          redFlags: [],
+          aiSummary: 'Resumen previo',
         },
-      );
-
-      expect(saveMock).toHaveBeenCalled();
-      expect(result.rating).toBe(5);
-      expect(result.ratingComment).toBe('Excellent');
+      }),
+    });
+    aiService.generateText.mockResolvedValue({
+      text: 'Resumen clínico final',
     });
 
-    it('saves rating without comment', async () => {
-      const patientId = new Types.ObjectId();
-      const saveMock = jest.fn().mockResolvedValue(undefined);
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: new Types.ObjectId(),
-        patientId,
-        status: 'CLOSED',
-        rating: undefined,
-        save: saveMock,
-      });
-
-      const result = await service.rateConsultation(
-        'cid',
-        patientId.toString(),
-        { rating: 3 },
-      );
-
-      expect(result.rating).toBe(3);
-      expect(result.ratingComment).toBeUndefined();
+    const result = await service.generateSummary(consultationId.toString(), {
+      userId: doctorId.toString(),
+      role: UserRole.DOCTOR,
+      email: 'doctor@test.com',
     });
+
+    expect(aiService.generateText).toHaveBeenCalled();
+    expect(result.summary).toBe('Resumen clínico final');
   });
 
-  // ── getMessages ─────────────────────────────────────────────────────────────
-
-  describe('getMessages', () => {
-    it('throws NotFoundException when consultation not found', async () => {
-      await expect(service.getMessages('cid', 'did')).rejects.toThrow(
-        NotFoundException,
-      );
+  it('falls back to local summary generation when AI fails', async () => {
+    const consultationId = new Types.ObjectId();
+    const doctorId = new Types.ObjectId();
+    const triageSessionId = new Types.ObjectId();
+    const consultation = {
+      id: consultationId.toString(),
+      assignedDoctorId: doctorId,
+      triageSessionId,
+      priority: 'LOW',
+      save: jest.fn(),
+      clinicalSummary: '',
+    };
+    consultationModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue(consultation),
     });
-
-    it('throws ForbiddenException when assigned to another doctor', async () => {
-      const assignedId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        assignedDoctorId: assignedId,
-      });
-      await expect(service.getMessages('cid', 'other-doctor')).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('returns messages in reverse-chronological then reversed order', async () => {
-      const cId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({ _id: cId });
-      const msgId = new Types.ObjectId();
-      messageExecMock.mockResolvedValue([
-        {
-          _id: msgId,
-          consultationId: cId,
-          senderId: new Types.ObjectId(),
-          senderRole: 'DOCTOR',
-          content: 'Hello',
-          type: 'TEXT',
-          createdAt: new Date(),
-        },
-      ]);
-
-      const result = await service.getMessages(cId.toString(), 'any-doctor');
-
-      expect(result.items).toHaveLength(1);
-      expect(result.total).toBe(1);
-      expect(result.items[0].content).toBe('Hello');
-    });
-
-    it('allows access to unassigned consultation', async () => {
-      const validId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({ _id: validId });
-
-      await expect(
-        service.getMessages(validId.toString(), 'any-doctor'),
-      ).resolves.not.toThrow();
-    });
-  });
-
-  // ── getPatientHistory ───────────────────────────────────────────────────────
-
-  describe('getPatientHistory', () => {
-    it('returns paginated history without status filter', async () => {
-      const patientId = new Types.ObjectId().toString();
-      const result = await service.getPatientHistory(patientId);
-
-      expect(consultationModel.find).toHaveBeenCalledWith(
-        expect.not.objectContaining({ status: expect.anything() }),
-      );
-      expect(result.items).toEqual([]);
-      expect(result.total).toBe(0);
-    });
-
-    it('applies status filter when provided', async () => {
-      const patientId = new Types.ObjectId().toString();
-      await service.getPatientHistory(patientId, { status: 'CLOSED' });
-
-      expect(consultationModel.find).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'CLOSED' }),
-      );
-    });
-
-    it('clamps page to 1 and limit to 50', async () => {
-      const patientId = new Types.ObjectId().toString();
-      const result = await service.getPatientHistory(patientId, {
-        page: 0,
-        limit: 999,
-      });
-
-      expect(result.page).toBe(1);
-      expect(result.limit).toBe(50);
-    });
-
-    it('maps history items correctly', async () => {
-      const patientId = new Types.ObjectId().toString();
-      const consultationId = new Types.ObjectId();
-      findExecMock.mockResolvedValue([
-        {
-          _id: consultationId,
-          specialty: Specialty.GENERAL_MEDICINE,
+    triageSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        specialty: Specialty.ODONTOLOGY,
+        answers: [
+          {
+            questionText: 'Motivo',
+            answerValue: 'dolor dental',
+          },
+        ],
+        analysis: {
           priority: 'LOW',
-          status: 'CLOSED',
-          clinicalSummary: 'summary',
-          rating: 5,
-          ratingComment: 'Good',
-          createdAt: new Date('2026-01-01'),
-          closedAt: new Date('2026-01-02'),
+          redFlags: [],
+          aiSummary: 'Paciente estable',
         },
-      ]);
+      }),
+    });
+    aiService.generateText.mockRejectedValue(new Error('gemini down'));
 
-      const result = await service.getPatientHistory(patientId);
+    const result = await service.generateSummary(consultationId.toString(), {
+      userId: doctorId.toString(),
+      role: UserRole.DOCTOR,
+      email: 'doctor@test.com',
+    });
 
-      expect(result.items[0].id).toBe(consultationId.toString());
-      expect(result.items[0].rating).toBe(5);
-      expect(result.items[0].ratingComment).toBe('Good');
+    expect(result.summary).toContain('Especialidad: ODONTOLOGY');
+    expect(result.summary).toContain('Resumen IA: Paciente estable');
+  });
+
+  it('delegates chat retrieval to chat service', async () => {
+    chatService.getMessages.mockResolvedValue({ items: [], total: 0 });
+    const user = {
+      userId: new Types.ObjectId().toString(),
+      role: UserRole.ADMIN,
+      email: 'admin@test.com',
+    };
+
+    await expect(
+      service.getMessages(new Types.ObjectId().toString(), user, 25),
+    ).resolves.toEqual({ items: [], total: 0 });
+    expect(chatService.getMessages).toHaveBeenCalledWith(
+      expect.any(String),
+      user,
+      25,
+    );
+  });
+
+  it('rates a closed consultation owned by the patient', async () => {
+    const consultationId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
+    const consultation = {
+      id: consultationId.toString(),
+      patientId,
+      status: 'CLOSED',
+      save: jest.fn(),
+      rating: undefined as number | undefined,
+      ratingComment: undefined as string | undefined,
+    };
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(consultation),
+    });
+
+    const result = await service.rate(
+      consultationId.toString(),
+      {
+        userId: patientId.toString(),
+        role: UserRole.PATIENT,
+        email: 'patient@test.com',
+      },
+      { rating: 5, ratingComment: 'Excelente' },
+    );
+
+    expect(consultation.save).toHaveBeenCalled();
+    expect(result).toEqual({
+      id: consultationId.toString(),
+      rating: 5,
+      ratingComment: 'Excelente',
     });
   });
 
-  // ── getDoctorHistory ────────────────────────────────────────────────────────
-
-  describe('getDoctorHistory', () => {
-    it('returns paginated history without status filter', async () => {
-      const doctorId = new Types.ObjectId().toString();
-      const result = await service.getDoctorHistory(doctorId);
-
-      expect(result.items).toEqual([]);
-      expect(result.total).toBe(0);
-    });
-
-    it('applies status filter when provided', async () => {
-      const doctorId = new Types.ObjectId().toString();
-      await service.getDoctorHistory(doctorId, { status: 'CLOSED' });
-
-      expect(consultationModel.find).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'CLOSED' }),
-      );
-    });
-
-    it('maps history items correctly including patientId', async () => {
-      const doctorId = new Types.ObjectId().toString();
-      const consultationId = new Types.ObjectId();
-      const patientId = new Types.ObjectId();
-      findExecMock.mockResolvedValue([
+  it('returns paginated doctor history', async () => {
+    const doctorId = new Types.ObjectId();
+    consultationModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([
         {
-          _id: consultationId,
-          patientId,
+          _id: new Types.ObjectId(),
+          patientId: new Types.ObjectId(),
           specialty: Specialty.GENERAL_MEDICINE,
           priority: 'HIGH',
           status: 'CLOSED',
-          clinicalSummary: 'summary',
-          createdAt: new Date(),
-          closedAt: new Date(),
+          createdAt: new Date('2025-01-01T00:00:00.000Z'),
+          closedAt: new Date('2025-01-02T00:00:00.000Z'),
         },
-      ]);
+      ]),
+    });
+    consultationModel.countDocuments.mockResolvedValue(1);
 
-      const result = await service.getDoctorHistory(doctorId);
+    const result = await service.getDoctorHistory(
+      {
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      },
+      { page: 2, limit: 1, status: 'CLOSED' },
+    );
 
-      expect(result.items[0].patientId).toBe(patientId.toString());
-      expect(result.items[0].id).toBe(consultationId.toString());
+    expect(result.total).toBe(1);
+    expect(result.page).toBe(2);
+    expect(result.limit).toBe(1);
+  });
+
+  it('creates a followup escalation consultation', async () => {
+    const patientId = new Types.ObjectId();
+    const triageSessionId = new Types.ObjectId();
+    const sourceFollowupId = new Types.ObjectId();
+    const consultation = { id: 'c-escalated' };
+    consultationModel.create.mockResolvedValue([consultation]);
+
+    const result = await service.createFollowupEscalationConsultation({
+      patientId,
+      triageSessionId,
+      specialty: Specialty.ODONTOLOGY,
+      priority: 'HIGH',
+      sourceFollowupId,
+    });
+
+    expect(consultationModel.create).toHaveBeenCalledWith([
+      expect.objectContaining({
+        patientId,
+        triageSessionId,
+        specialty: Specialty.ODONTOLOGY,
+        priority: 'HIGH',
+        sourceFollowupId,
+      }),
+    ]);
+    expect(result).toBe(consultation);
+  });
+
+  it('assign rejects invalid doctor ids', async () => {
+    try {
+      await service.assign('consultation-1', {
+        userId: 'invalid-id',
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      });
+      fail('Expected assign to throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('assign rejects paused doctors', async () => {
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        doctorStatus: 'VERIFIED',
+        availabilityStatus: 'PAUSED',
+      }),
+    });
+
+    await expect(
+      service.assign(new Types.ObjectId().toString(), {
+        userId: new Types.ObjectId().toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('assign rejects missing consultations', async () => {
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        doctorStatus: 'VERIFIED',
+        availabilityStatus: 'AVAILABLE',
+      }),
+    });
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.assign(new Types.ObjectId().toString(), {
+        userId: new Types.ObjectId().toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('assign rejects consultations that are not pending', async () => {
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        doctorStatus: 'VERIFIED',
+        availabilityStatus: 'AVAILABLE',
+      }),
+    });
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        status: 'IN_ATTENTION',
+      }),
+    });
+
+    await expect(
+      service.assign(new Types.ObjectId().toString(), {
+        userId: new Types.ObjectId().toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('close rejects consultations that are not in attention', async () => {
+    const doctorId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        assignedDoctorId: doctorId,
+        status: 'PENDING',
+      }),
+    });
+
+    await expect(
+      service.close(
+        new Types.ObjectId().toString(),
+        {
+          userId: doctorId.toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        },
+        {
+          baselineSymptomSeverity: 2,
+          redFlagsConfirmed: false,
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('generateSummary rejects when the triage session is missing', async () => {
+    const doctorId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
+        assignedDoctorId: doctorId,
+        triageSessionId: new Types.ObjectId(),
+      }),
+    });
+    triageSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.generateSummary(new Types.ObjectId().toString(), {
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('generateSummary builds a minimal fallback summary when AI fails and there are no answers', async () => {
+    const doctorId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
+        id: 'c1',
+        assignedDoctorId: doctorId,
+        triageSessionId: new Types.ObjectId(),
+        priority: 'LOW',
+        save: jest.fn(),
+        clinicalSummary: '',
+      }),
+    });
+    triageSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        specialty: Specialty.GENERAL_MEDICINE,
+        answers: [],
+        analysis: null,
+      }),
+    });
+    aiService.generateText.mockRejectedValue(new Error('gemini down'));
+
+    const result = await service.generateSummary(
+      new Types.ObjectId().toString(),
+      {
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      },
+    );
+
+    expect(result.summary).toContain('Especialidad: GENERAL_MEDICINE');
+    expect(result.summary).toContain('Prioridad: LOW');
+  });
+
+  it('submitSummaryFeedback persists doctor feedback', async () => {
+    const doctorId = new Types.ObjectId();
+    const consultation = {
+      id: 'c1',
+      assignedDoctorId: doctorId,
+      save: jest.fn(),
+      summaryFeedback: undefined as
+        | {
+            value: string;
+            comment?: string;
+          }
+        | undefined,
+    };
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(consultation),
+    });
+
+    const result = await service.submitSummaryFeedback(
+      'c1',
+      {
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      },
+      { value: 'USEFUL', comment: 'Buen resumen' },
+    );
+
+    expect(consultation.save).toHaveBeenCalled();
+    expect(result).toEqual({
+      id: 'c1',
+      summaryFeedback: {
+        value: 'USEFUL',
+        comment: 'Buen resumen',
+      },
     });
   });
 
-  // ── notifyPatient (side effect via assign / close) ──────────────────────────
-
-  describe('notifyPatient', () => {
-    it('sends push notification when patient has expoPushToken', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: new Types.ObjectId(),
-        status: 'PENDING',
+  it('rate rejects consultations that are not owned by the patient', async () => {
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
         patientId: new Types.ObjectId(),
-        save: jest.fn().mockResolvedValue(undefined),
-      });
-      patientExecMock.mockResolvedValue({
-        expoPushToken: 'ExponentPushToken[test]',
-      });
-
-      await service.assign('cid', doctorId.toString());
-      await new Promise((r) => setImmediate(r));
-
-      expect(notificationsServiceMock.sendExpoPush).toHaveBeenCalledWith(
-        'ExponentPushToken[test]',
-        expect.any(String),
-        expect.any(String),
-      );
+      }),
     });
 
-    it('does not send push notification when patient has no expoPushToken', async () => {
-      const doctorId = new Types.ObjectId();
-      consultationFindByIdExecMock.mockResolvedValue({
-        _id: new Types.ObjectId(),
-        status: 'PENDING',
-        patientId: new Types.ObjectId(),
-        save: jest.fn().mockResolvedValue(undefined),
-      });
-      patientExecMock.mockResolvedValue({ expoPushToken: null });
+    await expect(
+      service.rate(
+        'c1',
+        {
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.PATIENT,
+          email: 'patient@test.com',
+        },
+        { rating: 4 },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 
-      await service.assign('cid', doctorId.toString());
-      await new Promise((r) => setImmediate(r));
-
-      expect(notificationsServiceMock.sendExpoPush).not.toHaveBeenCalled();
+  it('rate rejects consultations that are not closed', async () => {
+    const patientId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        patientId,
+        status: 'IN_ATTENTION',
+      }),
     });
+
+    await expect(
+      service.rate(
+        'c1',
+        {
+          userId: patientId.toString(),
+          role: UserRole.PATIENT,
+          email: 'patient@test.com',
+        },
+        { rating: 4 },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rate rejects already rated consultations', async () => {
+    const patientId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        patientId,
+        status: 'CLOSED',
+        rating: 5,
+      }),
+    });
+
+    await expect(
+      service.rate(
+        'c1',
+        {
+          userId: patientId.toString(),
+          role: UserRole.PATIENT,
+          email: 'patient@test.com',
+        },
+        { rating: 4 },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('getPatientHistory returns default pagination when no query values are provided', async () => {
+    consultationModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+    });
+    consultationModel.countDocuments.mockResolvedValue(0);
+    const patientId = new Types.ObjectId();
+
+    const result = await service.getPatientHistory(
+      {
+        userId: patientId.toString(),
+        role: UserRole.PATIENT,
+        email: 'patient@test.com',
+      },
+      {},
+    );
+
+    expect(result).toEqual({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 20,
+    });
+  });
+
+  it('getById allows admin access to any consultation', async () => {
+    const consultationId = new Types.ObjectId();
+    const triageSessionId = new Types.ObjectId();
+    consultationModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
+        _id: consultationId,
+        patientId: new Types.ObjectId(),
+        triageSessionId,
+        specialty: Specialty.GENERAL_MEDICINE,
+        priority: 'LOW',
+        status: 'PENDING',
+      }),
+    });
+    triageSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    const result = await service.getById(consultationId.toString(), {
+      userId: new Types.ObjectId().toString(),
+      role: UserRole.ADMIN,
+      email: 'admin@test.com',
+    });
+
+    expect(result.id).toBe(consultationId.toString());
+    expect(result.triage).toBeNull();
+  });
+
+  it('getById rejects invalid consultation ids', async () => {
+    await expect(
+      service.getById('invalid-id', {
+        userId: new Types.ObjectId().toString(),
+        role: UserRole.ADMIN,
+        email: 'admin@test.com',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('findByIdUnsafe delegates directly to the model', async () => {
+    const consultation = { id: 'c1' };
+    consultationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(consultation),
+    });
+
+    await expect(service.findByIdUnsafe('c1')).resolves.toBe(consultation);
   });
 });

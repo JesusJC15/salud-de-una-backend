@@ -24,4 +24,10 @@ export class DashboardController {
   getConsultations() {
     return this.dashboardService.getConsultationMetrics();
   }
+
+  @Get('alerts')
+  @Roles(UserRole.ADMIN)
+  getAlerts() {
+    return this.dashboardService.getAlerts();
+  }
 }

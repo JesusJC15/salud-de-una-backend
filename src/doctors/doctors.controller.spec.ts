@@ -1,8 +1,8 @@
 import { CanActivate } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DoctorVerifiedGuard } from '../common/guards/doctor-verified.guard';
 import { DoctorAvailability } from '../common/enums/doctor-availability.enum';
 import { UserRole } from '../common/enums/user-role.enum';
+import { DoctorVerifiedGuard } from '../common/guards/doctor-verified.guard';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { DoctorsController } from './doctors.controller';
 import { DoctorsService } from './doctors.service';
@@ -23,6 +23,7 @@ describe('DoctorsController', () => {
       rethusResubmit: jest.fn(),
       updateAvailability: jest.fn(),
     };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DoctorsController],
       providers: [{ provide: DoctorsService, useValue: service }],

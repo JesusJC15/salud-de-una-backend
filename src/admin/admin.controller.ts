@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseEnumPipe,
   Patch,
@@ -15,6 +16,7 @@ import type { RequestContext } from '../common/interfaces/request-context.interf
 import { AdminService } from './admin.service';
 import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
 import { ListUsersDto } from './dto/list-users.dto';
+import { AdminConsultationReportQueryDto } from './dto/admin-consultation-report-query.dto';
 import { RethusDecisionDto } from './dto/rethus-decision.dto';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
 import { UpdateUserActiveDto } from './dto/update-user-active.dto';
@@ -100,5 +102,12 @@ export class AdminController {
     @Body() dto: UpdateUserActiveDto,
   ) {
     return this.adminService.updateUserActive(role, userId, dto);
+  }
+
+  @Get('reports/consultations.csv')
+  @Roles(UserRole.ADMIN)
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  exportConsultationsCsv(@Query() query: AdminConsultationReportQueryDto) {
+    return this.adminService.exportConsultationsCsv(query);
   }
 }

@@ -15,6 +15,9 @@ export class Admin {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
 
+  @Prop({ unique: true, sparse: true, index: true, trim: true })
+  auth0Subject?: string;
+
   @Prop({ required: true, select: false })
   passwordHash!: string;
 

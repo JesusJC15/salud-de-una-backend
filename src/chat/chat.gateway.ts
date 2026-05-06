@@ -1,173 +1,154 @@
-import { Logger } from '@nestjs/common';
+import { UsePipes, ValidationPipe } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
-  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { AuthService } from '../auth/auth.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { ChatJoinDto } from './dto/chat-join.dto';
+import { ChatSendDto } from './dto/chat-send.dto';
 import { ChatService } from './chat.service';
 
-type JoinPayload = { consultationId: string };
-type SendPayload = { consultationId: string; content: string };
+type SocketEventsMap = Record<string, (...args: unknown[]) => void>;
 
-interface SocketUser {
-  userId: string;
-  role: string;
-}
-
-interface TypedSocketData {
-  user?: SocketUser;
-}
-
-function getSocketUser(client: Socket): SocketUser | undefined {
-  return (client.data as TypedSocketData).user;
-}
+type AuthenticatedSocket = Socket<
+  SocketEventsMap,
+  SocketEventsMap,
+  SocketEventsMap,
+  { user?: RequestUser }
+>;
 
 @WebSocketGateway({
-  namespace: 'chat',
-  cors: { origin: '*', credentials: true },
+  namespace: '/chat',
+  cors: {
+    origin: true,
+    credentials: true,
+  },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+@UsePipes(
+  new ValidationPipe({
+    whitelist: true,
+    transform: true,
+  }),
+)
+export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
-  server!: Server;
+  private server!: Server;
 
-  private readonly logger = new Logger(ChatGateway.name);
+  constructor(
+    private readonly authService: AuthService,
+    private readonly chatService: ChatService,
+  ) {}
 
-  constructor(private readonly chatService: ChatService) {}
-
-  async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as string | undefined;
-
+  async handleConnection(client: AuthenticatedSocket) {
+    const token = this.extractToken(client);
     if (!token) {
-      this.logger.warn(`WS connection rejected — no token | id=${client.id}`);
+      client.emit('chat:error', {
+        code: 'UNAUTHORIZED',
+        message: 'Token ausente',
+      });
       client.disconnect();
       return;
     }
 
     try {
-      const user = await this.chatService.validateWsToken(token);
-      (client.data as TypedSocketData).user = user;
-      this.logger.log(
-        `WS connected | id=${client.id} | userId=${user.userId} | role=${user.role}`,
-      );
+      client.data.user = await this.authService.authenticateAccessToken(token);
     } catch {
-      this.logger.warn(
-        `WS connection rejected — invalid token | id=${client.id}`,
-      );
+      client.emit('chat:error', {
+        code: 'UNAUTHORIZED',
+        message: 'Token invalido',
+      });
       client.disconnect();
     }
-  }
-
-  handleDisconnect(client: Socket) {
-    this.logger.log(`WS disconnected | id=${client.id}`);
   }
 
   @SubscribeMessage('chat:join')
   async handleJoin(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: JoinPayload,
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() dto: ChatJoinDto,
   ) {
-    const user = getSocketUser(client);
+    const user = client.data.user;
     if (!user) {
       client.emit('chat:error', {
         code: 'UNAUTHORIZED',
-        message: 'No autenticado',
+        message: 'Sesion no valida',
       });
-      return;
-    }
-
-    const { consultationId } = payload;
-    if (!consultationId) {
-      client.emit('chat:error', {
-        code: 'INVALID_PAYLOAD',
-        message: 'consultationId requerido',
-      });
+      client.disconnect();
       return;
     }
 
     try {
-      await this.chatService.validateAccess(
-        consultationId,
-        user.userId,
-        user.role,
+      await client.join(this.toRoom(dto.consultationId));
+      const messages = await this.chatService.getHistoryForSocket(
+        dto.consultationId,
+        user,
       );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Sin acceso';
-      client.emit('chat:error', { code: 'FORBIDDEN', message });
-      return;
+      client.emit('chat:history', { messages });
+    } catch (error) {
+      client.emit('chat:error', this.toErrorPayload(error));
     }
-
-    const room = `consultation:${consultationId}`;
-    await client.join(room);
-
-    const history = await this.chatService.getMessageHistory(consultationId);
-    client.emit('chat:history', { messages: history });
-
-    this.logger.log(`WS join | id=${client.id} | room=${room}`);
   }
 
   @SubscribeMessage('chat:send')
   async handleSend(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: SendPayload,
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() dto: ChatSendDto,
   ) {
-    const user = getSocketUser(client);
+    const user = client.data.user;
     if (!user) {
       client.emit('chat:error', {
         code: 'UNAUTHORIZED',
-        message: 'No autenticado',
+        message: 'Sesion no valida',
       });
-      return;
-    }
-
-    const { consultationId, content } = payload;
-    if (!consultationId || !content?.trim()) {
-      client.emit('chat:error', {
-        code: 'INVALID_PAYLOAD',
-        message: 'consultationId y content requeridos',
-      });
-      return;
-    }
-
-    if (content.trim().length > 2000) {
-      client.emit('chat:error', {
-        code: 'CONTENT_TOO_LONG',
-        message: 'Mensaje demasiado largo (máx 2000 caracteres)',
-      });
+      client.disconnect();
       return;
     }
 
     try {
-      await this.chatService.validateAccess(
-        consultationId,
-        user.userId,
-        user.role,
-        'send',
+      const message = await this.chatService.sendMessage(
+        dto.consultationId,
+        user,
+        dto.content,
       );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Sin acceso';
-      client.emit('chat:error', { code: 'FORBIDDEN', message });
-      return;
+      this.server
+        .to(this.toRoom(dto.consultationId))
+        .emit('chat:message', message);
+    } catch (error) {
+      client.emit('chat:error', this.toErrorPayload(error));
+    }
+  }
+
+  private extractToken(client: Socket): string | null {
+    const auth = client.handshake.auth as Record<string, unknown> | undefined;
+    const authToken = auth?.token;
+    if (typeof authToken === 'string' && authToken.trim().length > 0) {
+      return authToken.trim();
     }
 
-    const senderRole: 'DOCTOR' | 'PATIENT' =
-      user.role === 'DOCTOR' ? 'DOCTOR' : 'PATIENT';
-    const savedMessage = await this.chatService.saveMessage(
-      consultationId,
-      user.userId,
-      senderRole,
-      content,
-    );
+    const authorization = client.handshake.headers.authorization;
+    if (
+      typeof authorization === 'string' &&
+      authorization.toLowerCase().startsWith('bearer ')
+    ) {
+      return authorization.slice(7).trim();
+    }
 
-    const room = `consultation:${consultationId}`;
-    this.server.to(room).emit('chat:message', savedMessage);
+    return null;
+  }
 
-    this.logger.log(
-      `WS message sent | room=${room} | senderId=${user.userId} | chars=${content.length}`,
-    );
+  private toRoom(consultationId: string) {
+    return `consultation:${consultationId}`;
+  }
+
+  private toErrorPayload(error: unknown) {
+    return {
+      code: 'FORBIDDEN',
+      message: error instanceof Error ? error.message : 'Error de mensajeria',
+    };
   }
 }

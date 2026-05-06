@@ -7,6 +7,7 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { UserRole } from '../common/enums/user-role.enum';
 import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { DoctorsService } from './doctors.service';
@@ -82,7 +83,7 @@ describe('DoctorsService', () => {
         firstName: 'Laura',
         lastName: 'Medina',
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         specialty: 'GENERAL_MEDICINE',
         doctorStatus: 'VERIFIED',
       }),
@@ -106,7 +107,7 @@ describe('DoctorsService', () => {
     const result = await service.getMe({
       userId: id,
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
 
@@ -128,7 +129,7 @@ describe('DoctorsService', () => {
         firstName: 'Laura',
         lastName: 'Medina',
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         specialty: 'GENERAL_MEDICINE',
         doctorStatus: 'PENDING',
       }),
@@ -138,7 +139,7 @@ describe('DoctorsService', () => {
     const result = await service.getMe({
       userId: id,
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
 
@@ -151,7 +152,7 @@ describe('DoctorsService', () => {
       service.getMe({
         userId: 'missing',
         email: 'missing@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -165,7 +166,7 @@ describe('DoctorsService', () => {
         firstName: 'Laura',
         lastName: 'Medina',
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         specialty: null,
         doctorStatus: null,
       }),
@@ -188,13 +189,13 @@ describe('DoctorsService', () => {
     const result = await service.getMe({
       userId: id,
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
     expect(result.specialty).toBeNull();
     expect(result.doctorStatus).toBeNull();
     expect(result.verification).toBeDefined();
-    expect(result.verification.programType).toBeNull();
+    expect(result.verification?.programType).toBeNull();
   });
 
   it('rethusResubmit should set status to pending and emit outbox', async () => {
@@ -233,7 +234,7 @@ describe('DoctorsService', () => {
       {
         userId: doctorId,
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       },
       {
@@ -242,7 +243,7 @@ describe('DoctorsService', () => {
       },
     );
 
-    expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
+    expect((result as any).doctorStatus).toBe(DoctorStatus.PENDING);
     expect(doctorDocument.save).toHaveBeenCalled();
     expect(
       outboxServiceMock.createDoctorVerificationChangedEvent,
@@ -268,7 +269,7 @@ describe('DoctorsService', () => {
         {
           userId: doctorId,
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
         { notes: 'nueva evidencia' },
@@ -385,7 +386,7 @@ describe('DoctorsService', () => {
         {
           userId: doctorId,
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
         { notes: 'nueva evidencia' },

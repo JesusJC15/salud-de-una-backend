@@ -12,9 +12,9 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { DoctorVerifiedGuard } from '../common/guards/doctor-verified.guard';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
+import { RethusResubmitDto } from './dto/rethus-resubmit.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 import { UpdatePushTokenDto } from './dto/update-push-token.dto';
-import { RethusResubmitDto } from './dto/rethus-resubmit.dto';
 import { DoctorsService } from './doctors.service';
 
 @Controller('doctors')

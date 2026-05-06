@@ -16,6 +16,8 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
+import { ProvisionDoctorDto } from './dto/provision-doctor.dto';
+import { ProvisionPatientDto } from './dto/provision-patient.dto';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
@@ -24,6 +26,9 @@ import {
   RefreshSessionDocument,
 } from './schemas/refresh-session.schema';
 import { ProvisioningService } from './provisioning.service';
+
+type JoseModule = typeof import('jose');
+type JoseJWTPayload = import('jose').JWTPayload;
 
 type AuthUser = {
   id: string;
@@ -50,8 +55,19 @@ type TokenUser = {
   role: UserRole;
 };
 
+type Auth0Identity = {
+  subject: string;
+  email: string;
+  role: UserRole | null;
+  dbId: string | null;
+};
+
 @Injectable()
 export class AuthService {
+  private static readonly AUTH0_CLAIMS_NAMESPACE = 'https://salud-de-una.com/';
+  private auth0Jwks: ReturnType<JoseModule['createRemoteJWKSet']> | null = null;
+  private auth0JwksUri = '';
+
   constructor(
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
@@ -253,6 +269,143 @@ export class AuthService {
         session ? { session } : undefined,
       )
       .exec();
+  }
+
+  async authenticateAccessToken(token: string): Promise<RequestUser> {
+    const localIdentity = await this.tryAuthenticateLocalAccessToken(token);
+    if (localIdentity) {
+      return localIdentity;
+    }
+
+    const auth0Identity = await this.verifyAuth0AccessToken(token);
+    const requestUser = await this.resolveAuth0RequestUser(auth0Identity);
+    if (!requestUser) {
+      throw new UnauthorizedException('Token invalido o usuario inactivo');
+    }
+
+    return requestUser;
+  }
+
+  async provisionPatientWithAuth0(
+    dto: ProvisionPatientDto,
+    authorizationHeader?: string,
+  ) {
+    const identity =
+      await this.verifyAuth0FromAuthorizationHeader(authorizationHeader);
+    const linkedUser = await this.findRequestUserByAuth0Subject(
+      identity.subject,
+    );
+
+    if (linkedUser) {
+      if (linkedUser.role !== UserRole.PATIENT) {
+        throw new ConflictException(
+          'La cuenta de Auth0 ya esta vinculada con otro rol',
+        );
+      }
+
+      const patient = await this.patientModel
+        .findById(linkedUser.userId)
+        .exec();
+      if (!patient) {
+        throw new UnauthorizedException('Token invalido o usuario inactivo');
+      }
+
+      return {
+        id: patient.id,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        email: patient.email,
+        role: patient.role,
+        createdAt: patient.createdAt ?? new Date(),
+      };
+    }
+
+    await this.ensureEmailIsAvailable(identity.email);
+
+    const passwordHash = await this.buildExternalPasswordHash();
+    const patient = await this.patientModel.create({
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: identity.email,
+      auth0Subject: identity.subject,
+      passwordHash,
+      birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
+      gender: dto.gender,
+    });
+
+    return {
+      id: patient.id,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      email: patient.email,
+      role: patient.role,
+      createdAt: patient.createdAt ?? new Date(),
+    };
+  }
+
+  async provisionDoctorWithAuth0(
+    dto: ProvisionDoctorDto,
+    authorizationHeader?: string,
+  ) {
+    const identity =
+      await this.verifyAuth0FromAuthorizationHeader(authorizationHeader);
+    const linkedUser = await this.findRequestUserByAuth0Subject(
+      identity.subject,
+    );
+
+    if (linkedUser) {
+      if (linkedUser.role !== UserRole.DOCTOR) {
+        throw new ConflictException(
+          'La cuenta de Auth0 ya esta vinculada con otro rol',
+        );
+      }
+
+      const doctor = await this.doctorModel.findById(linkedUser.userId).exec();
+      if (!doctor) {
+        throw new UnauthorizedException('Token invalido o usuario inactivo');
+      }
+
+      return {
+        id: doctor.id,
+        firstName: doctor.firstName,
+        lastName: doctor.lastName,
+        email: doctor.email,
+        role: doctor.role,
+        specialty: doctor.specialty,
+        doctorStatus: doctor.doctorStatus,
+        createdAt: doctor.createdAt ?? new Date(),
+      };
+    }
+
+    await this.ensureEmailIsAvailable(identity.email);
+    if (!dto.personalId) {
+      throw new BadRequestException('personalId es obligatorio');
+    }
+    await this.assertPersonalIdDoesNotExist(dto.personalId);
+
+    const passwordHash = await this.buildExternalPasswordHash();
+    const doctor = await this.doctorModel.create({
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: identity.email,
+      auth0Subject: identity.subject,
+      passwordHash,
+      specialty: dto.specialty,
+      personalId: dto.personalId,
+      phoneNumber: dto.phoneNumber,
+      professionalLicense: dto.professionalLicense,
+    });
+
+    return {
+      id: doctor.id,
+      firstName: doctor.firstName,
+      lastName: doctor.lastName,
+      email: doctor.email,
+      role: doctor.role,
+      specialty: doctor.specialty,
+      doctorStatus: doctor.doctorStatus,
+      createdAt: doctor.createdAt ?? new Date(),
+    };
   }
 
   private async buildSession(
@@ -647,5 +800,347 @@ export class AuthService {
       email: admin.email,
       role: admin.role,
     };
+  }
+
+  private async tryAuthenticateLocalAccessToken(
+    token: string,
+  ): Promise<RequestUser | null> {
+    const jwtSecret = this.configService.getOrThrow<string>('auth.jwtSecret');
+    let payload: JwtPayload;
+
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        secret: jwtSecret,
+      });
+    } catch {
+      return null;
+    }
+
+    if (payload.tokenType !== 'access') {
+      throw new UnauthorizedException(
+        'Token invalido o tipo de token no permitido',
+      );
+    }
+
+    const authUser = await this.findAuthUserById(payload.sub, payload.role);
+    if (!authUser) {
+      throw new UnauthorizedException('Token invalido o usuario inactivo');
+    }
+
+    return {
+      userId: authUser.id,
+      email: authUser.email,
+      role: authUser.role,
+      isActive: true,
+    };
+  }
+
+  private async verifyAuth0FromAuthorizationHeader(
+    authorizationHeader?: string,
+  ): Promise<Auth0Identity> {
+    const token = this.extractBearerToken(authorizationHeader);
+    return this.verifyAuth0AccessToken(token);
+  }
+
+  private extractBearerToken(authorizationHeader?: string): string {
+    const trimmedHeader = authorizationHeader?.trim();
+    if (!trimmedHeader?.toLowerCase().startsWith('bearer ')) {
+      throw new UnauthorizedException('Bearer token ausente');
+    }
+
+    const token = trimmedHeader.slice(7).trim();
+    if (!token) {
+      throw new UnauthorizedException('Bearer token ausente');
+    }
+
+    return token;
+  }
+
+  private async verifyAuth0AccessToken(token: string): Promise<Auth0Identity> {
+    const { jwtVerify } = await this.getJoseModule();
+    const auth0Audience = this.configService.get<string>('auth.auth0Audience');
+    const auth0Issuer = this.resolveAuth0Issuer();
+
+    if (!auth0Audience || !auth0Issuer) {
+      throw new UnauthorizedException('Auth0 no esta configurado');
+    }
+
+    const { payload } = await jwtVerify(
+      token,
+      await this.getAuth0Jwks(auth0Issuer),
+      {
+        issuer: auth0Issuer,
+        audience: auth0Audience,
+      },
+    );
+
+    if (typeof payload.sub !== 'string' || payload.sub.trim().length === 0) {
+      throw new UnauthorizedException('Token de Auth0 sin subject valido');
+    }
+
+    if (payload.email_verified === false) {
+      throw new UnauthorizedException('El correo de Auth0 no esta verificado');
+    }
+
+    const emailValue =
+      payload[`${AuthService.AUTH0_CLAIMS_NAMESPACE}email`] ?? payload.email;
+    if (typeof emailValue !== 'string' || emailValue.trim().length === 0) {
+      throw new UnauthorizedException('Token de Auth0 sin correo valido');
+    }
+
+    const roleValue =
+      payload[`${AuthService.AUTH0_CLAIMS_NAMESPACE}role`] ?? payload.role;
+    const dbIdValue =
+      payload[`${AuthService.AUTH0_CLAIMS_NAMESPACE}db_id`] ?? payload.db_id;
+
+    return {
+      subject: payload.sub.trim(),
+      email: emailValue.trim().toLowerCase(),
+      role: this.parseUserRole(roleValue),
+      dbId:
+        typeof dbIdValue === 'string' && dbIdValue.trim().length > 0
+          ? dbIdValue.trim()
+          : null,
+    };
+  }
+
+  private async resolveAuth0RequestUser(
+    identity: Auth0Identity,
+  ): Promise<RequestUser | null> {
+    if (identity.dbId && identity.role) {
+      const user = await this.findAuthUserById(identity.dbId, identity.role);
+      if (user) {
+        await this.syncAuth0Subject(user.role, user.id, identity.subject);
+        return {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          isActive: true,
+        };
+      }
+    }
+
+    const linkedUser = await this.findRequestUserByAuth0Subject(
+      identity.subject,
+    );
+    if (linkedUser) {
+      return linkedUser;
+    }
+
+    return this.findOrLinkRequestUserByEmail(identity.email, identity.subject);
+  }
+
+  private async findRequestUserByAuth0Subject(
+    subject: string,
+  ): Promise<RequestUser | null> {
+    const [patient, doctor, admin] = await Promise.all([
+      this.patientModel
+        .findOne({ auth0Subject: subject })
+        .select('email role isActive')
+        .lean()
+        .exec(),
+      this.doctorModel
+        .findOne({ auth0Subject: subject })
+        .select('email role isActive')
+        .lean()
+        .exec(),
+      this.adminModel
+        .findOne({ auth0Subject: subject })
+        .select('email role isActive')
+        .lean()
+        .exec(),
+    ]);
+
+    if (patient?.isActive) {
+      return {
+        userId: patient._id.toString(),
+        email: patient.email,
+        role: patient.role,
+        isActive: true,
+      };
+    }
+
+    if (doctor?.isActive) {
+      return {
+        userId: doctor._id.toString(),
+        email: doctor.email,
+        role: doctor.role,
+        isActive: true,
+      };
+    }
+
+    if (admin?.isActive) {
+      return {
+        userId: admin._id.toString(),
+        email: admin.email,
+        role: admin.role,
+        isActive: true,
+      };
+    }
+
+    return null;
+  }
+
+  private async findOrLinkRequestUserByEmail(
+    email: string,
+    subject: string,
+  ): Promise<RequestUser | null> {
+    const [patient, doctor, admin] = await Promise.all([
+      this.patientModel
+        .findOne({ email })
+        .select('email role isActive auth0Subject')
+        .lean()
+        .exec(),
+      this.doctorModel
+        .findOne({ email })
+        .select('email role isActive auth0Subject')
+        .lean()
+        .exec(),
+      this.adminModel
+        .findOne({ email })
+        .select('email role isActive auth0Subject')
+        .lean()
+        .exec(),
+    ]);
+
+    if (patient) {
+      return this.linkAuth0SubjectForResolvedUser(
+        {
+          userId: patient._id.toString(),
+          email: patient.email,
+          role: patient.role,
+          isActive: patient.isActive,
+        },
+        patient.auth0Subject,
+        subject,
+      );
+    }
+
+    if (doctor) {
+      return this.linkAuth0SubjectForResolvedUser(
+        {
+          userId: doctor._id.toString(),
+          email: doctor.email,
+          role: doctor.role,
+          isActive: doctor.isActive,
+        },
+        doctor.auth0Subject,
+        subject,
+      );
+    }
+
+    if (admin) {
+      return this.linkAuth0SubjectForResolvedUser(
+        {
+          userId: admin._id.toString(),
+          email: admin.email,
+          role: admin.role,
+          isActive: admin.isActive,
+        },
+        admin.auth0Subject,
+        subject,
+      );
+    }
+
+    return null;
+  }
+
+  private async linkAuth0SubjectForResolvedUser(
+    user: RequestUser,
+    currentAuth0Subject: string | null | undefined,
+    nextAuth0Subject: string,
+  ): Promise<RequestUser | null> {
+    if (!user.isActive) {
+      return null;
+    }
+
+    if (currentAuth0Subject && currentAuth0Subject !== nextAuth0Subject) {
+      throw new UnauthorizedException('Cuenta Auth0 no autorizada');
+    }
+
+    if (!currentAuth0Subject) {
+      await this.syncAuth0Subject(user.role, user.userId, nextAuth0Subject);
+    }
+
+    return user;
+  }
+
+  private async syncAuth0Subject(
+    role: UserRole,
+    userId: string,
+    auth0Subject: string,
+  ): Promise<void> {
+    const update = { $set: { auth0Subject } };
+
+    if (role === UserRole.PATIENT) {
+      await this.patientModel.updateOne({ _id: userId }, update).exec();
+      return;
+    }
+
+    if (role === UserRole.DOCTOR) {
+      await this.doctorModel.updateOne({ _id: userId }, update).exec();
+      return;
+    }
+
+    await this.adminModel.updateOne({ _id: userId }, update).exec();
+  }
+
+  private parseUserRole(value: JoseJWTPayload[string]): UserRole | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalized = value.trim().toUpperCase();
+    switch (normalized) {
+      case 'PATIENT':
+        return UserRole.PATIENT;
+      case 'DOCTOR':
+        return UserRole.DOCTOR;
+      case 'ADMIN':
+        return UserRole.ADMIN;
+      default:
+        return null;
+    }
+  }
+
+  private resolveAuth0Issuer(): string | null {
+    const configuredIssuer =
+      this.configService.get<string>('auth.auth0Issuer')?.trim() ?? '';
+    if (configuredIssuer) {
+      return configuredIssuer.endsWith('/')
+        ? configuredIssuer
+        : `${configuredIssuer}/`;
+    }
+
+    const configuredDomain =
+      this.configService.get<string>('auth.auth0Domain')?.trim() ?? '';
+    if (!configuredDomain) {
+      return null;
+    }
+
+    const origin = configuredDomain.startsWith('http')
+      ? configuredDomain
+      : `https://${configuredDomain}`;
+
+    return origin.endsWith('/') ? origin : `${origin}/`;
+  }
+
+  private async getAuth0Jwks(auth0Issuer: string) {
+    const { createRemoteJWKSet } = await this.getJoseModule();
+    const jwksUri = new URL('.well-known/jwks.json', auth0Issuer).toString();
+    if (!this.auth0Jwks || this.auth0JwksUri !== jwksUri) {
+      this.auth0JwksUri = jwksUri;
+      this.auth0Jwks = createRemoteJWKSet(new URL(jwksUri));
+    }
+
+    return this.auth0Jwks;
+  }
+
+  private async getJoseModule(): Promise<JoseModule> {
+    return import('jose');
+  }
+
+  private async buildExternalPasswordHash(): Promise<string> {
+    return bcrypt.hash(randomBytes(32).toString('hex'), 12);
   }
 }

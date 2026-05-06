@@ -6,12 +6,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Connection, Model, PipelineStage, Types } from 'mongoose';
+import {
+  ClientSession,
+  Connection,
+  Model,
+  PipelineStage,
+  Types,
+} from 'mongoose';
 import { Admin, AdminDocument } from '../admins/schemas/admin.schema';
 import {
   RefreshSession,
   RefreshSessionDocument,
 } from '../auth/schemas/refresh-session.schema';
+import {
+  Consultation,
+  ConsultationDocument,
+} from '../consultations/schemas/consultation.schema';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { ProgramType } from '../common/enums/program-type.enum';
 import { RethusState } from '../common/enums/rethus-state.enum';
@@ -29,6 +39,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
 import { ListUsersDto } from './dto/list-users.dto';
+import { AdminConsultationReportQueryDto } from './dto/admin-consultation-report-query.dto';
 import {
   RethusDecisionAction,
   RethusDecisionDto,
@@ -130,6 +141,8 @@ export class AdminService {
     private readonly adminModel: Model<AdminDocument>,
     @InjectModel(RefreshSession.name)
     private readonly refreshSessionModel: Model<RefreshSessionDocument>,
+    @InjectModel(Consultation.name)
+    private readonly consultationModel: Model<ConsultationDocument>,
     private readonly outboxService: OutboxService,
     private readonly outboxDispatcherService: OutboxDispatcherService,
   ) {}
@@ -443,6 +456,60 @@ export class AdminService {
       isActive: user.isActive,
       updatedAt: new Date(),
     };
+  }
+
+  async exportConsultationsCsv(query: AdminConsultationReportQueryDto) {
+    const filter: Record<string, unknown> = {};
+    if (query.specialty) {
+      filter.specialty = query.specialty;
+    }
+    if (query.priority) {
+      filter.priority = query.priority;
+    }
+    if (query.from || query.to) {
+      filter.createdAt = {
+        ...(query.from ? { $gte: new Date(query.from) } : {}),
+        ...(query.to ? { $lte: new Date(query.to) } : {}),
+      };
+    }
+
+    const consultations = await this.consultationModel
+      .find(filter)
+      .select(
+        'specialty priority status patientId assignedDoctorId createdAt assignedAt closedAt',
+      )
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
+    const rows = [
+      [
+        'consultationId',
+        'specialty',
+        'priority',
+        'status',
+        'patientId',
+        'assignedDoctorId',
+        'createdAt',
+        'assignedAt',
+        'closedAt',
+      ].join(','),
+      ...consultations.map((item) =>
+        [
+          item._id.toString(),
+          item.specialty,
+          item.priority,
+          item.status,
+          item.patientId?.toString() ?? '',
+          item.assignedDoctorId?.toString() ?? '',
+          item.createdAt?.toISOString() ?? '',
+          item.assignedAt?.toISOString() ?? '',
+          item.closedAt?.toISOString() ?? '',
+        ].join(','),
+      ),
+    ];
+
+    return rows.join('\n');
   }
 
   private async executeVerification(

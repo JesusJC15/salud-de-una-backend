@@ -9,7 +9,10 @@ import { Connection, Model } from 'mongoose';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { PatientTimelineService } from './patient-timeline.service';
+import { TimelineQueryDto } from './dto/timeline-query.dto';
 import { UpdatePatientProfileDto } from './dto/update-patient-profile.dto';
+import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { Patient, PatientDocument } from './schemas/patient.schema';
 
 @Injectable()
@@ -20,6 +23,7 @@ export class PatientsService {
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
     private readonly authService: AuthService,
+    private readonly patientTimelineService: PatientTimelineService,
   ) {}
 
   async getMe(user: RequestUser) {
@@ -68,12 +72,12 @@ export class PatientsService {
 
           if (dto.firstName !== undefined) patient.firstName = dto.firstName;
           if (dto.lastName !== undefined) patient.lastName = dto.lastName;
-          if (dto.birthDate !== undefined)
+          if (dto.birthDate !== undefined) {
             patient.birthDate = new Date(dto.birthDate);
+          }
           if (dto.gender !== undefined) patient.gender = dto.gender;
 
           await patient.save({ session });
-
           response = this.toProfileResponse(patient);
         });
 
@@ -90,11 +94,30 @@ export class PatientsService {
     }
   }
 
-  async updatePushToken(userId: string, token: string): Promise<void> {
-    await this.patientModel
-      .findByIdAndUpdate(userId, { expoPushToken: token })
-      .lean()
-      .exec();
+  async updatePushToken(user: RequestUser, dto: UpdatePushTokenDto) {
+    const patient = await this.patientModel.findById(user.userId).exec();
+    if (!patient) {
+      throw new NotFoundException('Paciente no encontrado');
+    }
+
+    patient.pushTokens = Array.from(
+      new Set([...(patient.pushTokens ?? []), dto.token]),
+    );
+    patient.expoPushToken = dto.token;
+    await patient.save();
+
+    return {
+      updated: true,
+      tokensCount: patient.pushTokens.length,
+    };
+  }
+
+  async getTimeline(
+    user: RequestUser,
+    patientId: string,
+    query: TimelineQueryDto,
+  ) {
+    return this.patientTimelineService.getTimeline(user, patientId, query);
   }
 
   private toProfileResponse(patient: {

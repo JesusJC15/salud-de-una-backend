@@ -12,6 +12,32 @@ export type ConsultationStatus = (typeof CONSULTATION_STATUSES)[number];
 
 export type ConsultationDocument = HydratedDocument<Consultation>;
 
+export const SUMMARY_FEEDBACK_VALUES = [
+  'USEFUL',
+  'PARTIALLY_USEFUL',
+  'NOT_USEFUL',
+] as const;
+export type SummaryFeedbackValue = (typeof SUMMARY_FEEDBACK_VALUES)[number];
+
+@Schema({ _id: false })
+export class ConsultationSummaryFeedback {
+  @Prop({ required: true, type: String, enum: SUMMARY_FEEDBACK_VALUES })
+  value!: SummaryFeedbackValue;
+
+  @Prop()
+  comment?: string;
+
+  @Prop({ required: true })
+  createdBy!: string;
+
+  @Prop({ required: true, type: Date })
+  createdAt!: Date;
+}
+
+export const ConsultationSummaryFeedbackSchema = SchemaFactory.createForClass(
+  ConsultationSummaryFeedback,
+);
+
 @Schema({ timestamps: true })
 export class Consultation {
   @Prop({ type: Types.ObjectId, ref: 'Patient', required: true, index: true })
@@ -21,7 +47,6 @@ export class Consultation {
     type: Types.ObjectId,
     ref: 'TriageSession',
     required: true,
-    unique: true,
     index: true,
   })
   triageSessionId!: Types.ObjectId;
@@ -43,17 +68,32 @@ export class Consultation {
   @Prop({ type: Types.ObjectId, ref: 'Doctor' })
   assignedDoctorId?: Types.ObjectId;
 
-  @Prop({ type: String })
-  clinicalSummary?: string;
+  @Prop({ type: Date })
+  assignedAt?: Date;
 
   @Prop({ type: Date })
   closedAt?: Date;
 
-  @Prop({ type: Number, min: 1, max: 5 })
+  @Prop()
+  clinicalSummary?: string;
+
+  @Prop({ min: 1, max: 10 })
+  baselineSymptomSeverity?: number;
+
+  @Prop()
+  redFlagsConfirmed?: boolean;
+
+  @Prop({ min: 1, max: 5 })
   rating?: number;
 
-  @Prop({ type: String, maxlength: 500 })
+  @Prop()
   ratingComment?: string;
+
+  @Prop({ type: ConsultationSummaryFeedbackSchema })
+  summaryFeedback?: ConsultationSummaryFeedback;
+
+  @Prop({ type: Types.ObjectId, ref: 'Followup' })
+  sourceFollowupId?: Types.ObjectId;
 
   createdAt?: Date;
   updatedAt?: Date;

@@ -13,7 +13,10 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { DoctorVerifiedGuard } from '../common/guards/doctor-verified.guard';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
+import { CloseConsultationDto } from './dto/close-consultation.dto';
+import { ListConsultationsHistoryDto } from './dto/list-consultations-history.dto';
 import { RateConsultationDto } from './dto/rate-consultation.dto';
+import { SummaryFeedbackDto } from './dto/summary-feedback.dto';
 import { ConsultationsService } from './consultations.service';
 
 @Controller('consultations')
@@ -27,91 +30,105 @@ export class ConsultationsController {
     return this.consultationsService.getQueue();
   }
 
+  @Get('doctor/my-history')
+  @Roles(UserRole.DOCTOR)
+  getDoctorHistory(
+    @Req() req: RequestContext,
+    @Query() query: ListConsultationsHistoryDto,
+  ) {
+    return this.consultationsService.getDoctorHistory(req.user!, query);
+  }
+
   @Get('my-history')
   @Roles(UserRole.PATIENT)
   getPatientHistory(
-    @Query('limit') limit: string,
-    @Query('page') page: string,
-    @Query('status') status: string,
     @Req() req: RequestContext,
+    @Query() query: ListConsultationsHistoryDto,
   ) {
-    return this.consultationsService.getPatientHistory(req.user!.userId, {
-      limit: limit ? parseInt(limit, 10) : undefined,
-      page: page ? parseInt(page, 10) : undefined,
-      status: status || undefined,
-    });
+    return this.consultationsService.getPatientHistory(req.user!, query);
   }
 
-  @Get('doctor/my-history')
-  @Roles(UserRole.DOCTOR)
-  @UseGuards(DoctorVerifiedGuard)
-  getDoctorHistory(
-    @Query('limit') limit: string,
-    @Query('page') page: string,
-    @Query('status') status: string,
+  @Get(':consultationId')
+  @Roles(UserRole.DOCTOR, UserRole.PATIENT, UserRole.ADMIN)
+  getById(
     @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
   ) {
-    return this.consultationsService.getDoctorHistory(req.user!.userId, {
-      limit: limit ? parseInt(limit, 10) : undefined,
-      page: page ? parseInt(page, 10) : undefined,
-      status: status || undefined,
-    });
+    return this.consultationsService.getById(consultationId, req.user!);
   }
 
-  @Get(':id')
+  @Patch(':consultationId/assign')
   @Roles(UserRole.DOCTOR)
   @UseGuards(DoctorVerifiedGuard)
-  getById(@Param('id') id: string, @Req() req: RequestContext) {
-    return this.consultationsService.getById(id, req.user!.userId);
-  }
-
-  @Patch(':id/assign')
-  @Roles(UserRole.DOCTOR)
-  @UseGuards(DoctorVerifiedGuard)
-  assign(@Param('id') id: string, @Req() req: RequestContext) {
-    return this.consultationsService.assign(id, req.user!.userId);
-  }
-
-  @Post(':id/summary/generate')
-  @Roles(UserRole.DOCTOR)
-  @UseGuards(DoctorVerifiedGuard)
-  generateSummary(@Param('id') id: string, @Req() req: RequestContext) {
-    return this.consultationsService.generateSummary(id, req.user!.userId);
-  }
-
-  @Patch(':id/close')
-  @Roles(UserRole.DOCTOR)
-  @UseGuards(DoctorVerifiedGuard)
-  close(@Param('id') id: string, @Req() req: RequestContext) {
-    return this.consultationsService.close(id, req.user!.userId);
-  }
-
-  @Post(':id/rate')
-  @Roles(UserRole.PATIENT)
-  rateConsultation(
-    @Param('id') id: string,
-    @Body() dto: RateConsultationDto,
+  assign(
     @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
   ) {
-    return this.consultationsService.rateConsultation(
-      id,
-      req.user!.userId,
+    return this.consultationsService.assign(consultationId, req.user!);
+  }
+
+  @Patch(':consultationId/close')
+  @Roles(UserRole.DOCTOR)
+  @UseGuards(DoctorVerifiedGuard)
+  close(
+    @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
+    @Body() dto: CloseConsultationDto,
+  ) {
+    return this.consultationsService.close(
+      consultationId,
+      req.user!,
+      dto,
+      req.correlationId,
+    );
+  }
+
+  @Post(':consultationId/summary/generate')
+  @Roles(UserRole.DOCTOR)
+  @UseGuards(DoctorVerifiedGuard)
+  generateSummary(
+    @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
+  ) {
+    return this.consultationsService.generateSummary(consultationId, req.user!);
+  }
+
+  @Patch(':consultationId/summary/feedback')
+  @Roles(UserRole.DOCTOR)
+  @UseGuards(DoctorVerifiedGuard)
+  submitSummaryFeedback(
+    @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
+    @Body() dto: SummaryFeedbackDto,
+  ) {
+    return this.consultationsService.submitSummaryFeedback(
+      consultationId,
+      req.user!,
       dto,
     );
   }
 
-  @Get(':id/messages')
-  @Roles(UserRole.DOCTOR)
-  @UseGuards(DoctorVerifiedGuard)
+  @Get(':consultationId/messages')
+  @Roles(UserRole.DOCTOR, UserRole.PATIENT, UserRole.ADMIN)
   getMessages(
-    @Param('id') id: string,
-    @Query('limit') limit: string,
     @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
+    @Query('limit') limit?: string,
   ) {
     return this.consultationsService.getMessages(
-      id,
-      req.user!.userId,
-      limit ? Math.min(parseInt(limit, 10) || 50, 100) : 50,
+      consultationId,
+      req.user!,
+      limit ? Number(limit) : undefined,
     );
+  }
+
+  @Post(':consultationId/rate')
+  @Roles(UserRole.PATIENT)
+  rate(
+    @Req() req: RequestContext,
+    @Param('consultationId') consultationId: string,
+    @Body() dto: RateConsultationDto,
+  ) {
+    return this.consultationsService.rate(consultationId, req.user!, dto);
   }
 }

@@ -17,6 +17,7 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
 import aiConfig from './config/ai.config';
 import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
+import notificationsConfig from './config/notifications.config';
 import redisConfig from './config/redis.config';
 import { validationSchema } from './config/validation.schema';
 import webConfig from './config/web.config';
@@ -24,6 +25,7 @@ import { ChatModule } from './chat/chat.module';
 import { ConsultationsModule } from './consultations/consultations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DoctorsModule } from './doctors/doctors.module';
+import { FollowupsModule } from './followups/followups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
@@ -39,7 +41,14 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [aiConfig, authConfig, databaseConfig, redisConfig, webConfig],
+      load: [
+        aiConfig,
+        authConfig,
+        databaseConfig,
+        notificationsConfig,
+        redisConfig,
+        webConfig,
+      ],
       validationSchema,
       validationOptions: {
         abortEarly: true,
@@ -92,6 +101,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     DoctorsModule,
     AdminModule,
     NotificationsModule,
+    FollowupsModule,
     DashboardModule,
     ChatModule,
     ConsultationsModule,

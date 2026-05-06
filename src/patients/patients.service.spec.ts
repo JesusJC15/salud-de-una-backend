@@ -3,6 +3,7 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
+import { PatientTimelineService } from './patient-timeline.service';
 import { PatientsService } from './patients.service';
 import { Patient } from './schemas/patient.schema';
 
@@ -49,6 +50,9 @@ describe('PatientsService', () => {
     ensureEmailIsAvailable: jest.Mock;
     revokeAllRefreshSessionsForUser: jest.Mock;
   };
+  let patientTimelineService: {
+    getTimeline: jest.Mock;
+  };
 
   beforeEach(async () => {
     patientModel = { findById: jest.fn() };
@@ -57,6 +61,9 @@ describe('PatientsService', () => {
       ensureEmailIsAvailable: jest.fn(),
       revokeAllRefreshSessionsForUser: jest.fn(),
     };
+    patientTimelineService = {
+      getTimeline: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -64,6 +71,10 @@ describe('PatientsService', () => {
         { provide: getConnectionToken(), useValue: connection },
         { provide: getModelToken(Patient.name), useValue: patientModel },
         { provide: AuthService, useValue: authService },
+        {
+          provide: PatientTimelineService,
+          useValue: patientTimelineService,
+        },
       ],
     }).compile();
 
@@ -305,5 +316,74 @@ describe('PatientsService', () => {
         { firstName: 'Laura' },
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('updatePushToken should append tokens without duplicates', async () => {
+    const patient = createPatientDocument({
+      pushTokens: ['ExponentPushToken[old]'],
+      save: jest.fn().mockResolvedValue(undefined),
+    });
+    patientModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(patient),
+    });
+
+    const result = await service.updatePushToken(
+      {
+        userId: patient.id,
+        email: patient.email,
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      { token: 'ExponentPushToken[new]' },
+    );
+
+    expect(patient.save).toHaveBeenCalled();
+    expect(result).toEqual({
+      updated: true,
+      tokensCount: 2,
+    });
+  });
+
+  it('updatePushToken should throw when patient does not exist', async () => {
+    patientModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.updatePushToken(
+        {
+          userId: 'missing',
+          email: 'missing@example.com',
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        { token: 'ExponentPushToken[new]' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('getTimeline should delegate to patient timeline service', async () => {
+    patientTimelineService.getTimeline.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    const user = {
+      userId: '507f1f77bcf86cd799439011',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    };
+
+    const result = await service.getTimeline(user, user.userId, { limit: 10 });
+
+    expect(patientTimelineService.getTimeline).toHaveBeenCalledWith(
+      user,
+      user.userId,
+      { limit: 10 },
+    );
+    expect(result).toEqual({
+      items: [],
+      nextCursor: null,
+    });
   });
 });

@@ -8,10 +8,18 @@ import {
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import {
+  Followup,
+  FollowupDocument,
+} from '../followups/schemas/followup.schema';
+import {
   Notification,
   NotificationDocument,
 } from '../notifications/schemas/notification.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import {
+  TriageSession,
+  TriageSessionDocument,
+} from '../triage/schemas/triage-session.schema';
 import { TechnicalMetricsService } from './metrics/technical-metrics.service';
 import { RequestMetric } from './metrics/technical-metrics.types';
 
@@ -26,6 +34,10 @@ export class DashboardService {
     private readonly notificationModel: Model<NotificationDocument>,
     @InjectModel(Consultation.name)
     private readonly consultationModel: Model<ConsultationDocument>,
+    @InjectModel(TriageSession.name)
+    private readonly triageSessionModel: Model<TriageSessionDocument>,
+    @InjectModel(Followup.name)
+    private readonly followupModel: Model<FollowupDocument>,
     private readonly technicalMetricsService: TechnicalMetricsService,
   ) {}
 
@@ -35,151 +47,6 @@ export class DashboardService {
 
   async getTechnicalMetrics() {
     return this.technicalMetricsService.getSummary();
-  }
-
-  async getConsultationMetrics() {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const SLA_LIMIT_MS = 120 * 60 * 1000; // 2 hours
-
-    const [statusAgg, closedLast7Agg, timingAgg, specialtyAgg, topDoctorsAgg] =
-      await Promise.all([
-        // 1 — count by status
-        this.consultationModel.aggregate([
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ]),
-
-        // 2 — closed consultations in last 7 days
-        this.consultationModel.countDocuments({
-          status: 'CLOSED',
-          closedAt: { $gte: sevenDaysAgo },
-        }),
-
-        // 3 — avg attention time + SLA compliance (only CLOSED with closedAt)
-        this.consultationModel.aggregate([
-          {
-            $match: {
-              status: 'CLOSED',
-              closedAt: { $exists: true, $ne: null },
-            },
-          },
-          {
-            $project: {
-              durationMs: { $subtract: ['$closedAt', '$createdAt'] },
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              avgMs: { $avg: '$durationMs' },
-              total: { $sum: 1 },
-              slaOk: {
-                $sum: {
-                  $cond: [{ $lte: ['$durationMs', SLA_LIMIT_MS] }, 1, 0],
-                },
-              },
-            },
-          },
-        ]),
-
-        // 4 — total + closed by specialty
-        this.consultationModel.aggregate([
-          {
-            $group: {
-              _id: '$specialty',
-              total: { $sum: 1 },
-              closed: {
-                $sum: { $cond: [{ $eq: ['$status', 'CLOSED'] }, 1, 0] },
-              },
-            },
-          },
-          { $sort: { total: -1 } },
-        ]),
-
-        // 5 — top 5 doctors by closed consultations
-        this.consultationModel.aggregate([
-          {
-            $match: {
-              status: 'CLOSED',
-              assignedDoctorId: { $exists: true, $ne: null },
-            },
-          },
-          { $group: { _id: '$assignedDoctorId', closed: { $sum: 1 } } },
-          { $sort: { closed: -1 } },
-          { $limit: 5 },
-          {
-            $lookup: {
-              from: 'doctors',
-              localField: '_id',
-              foreignField: '_id',
-              as: 'doctor',
-            },
-          },
-          { $unwind: { path: '$doctor', preserveNullAndEmptyArrays: true } },
-          {
-            $project: {
-              _id: 0,
-              doctorId: { $toString: '$_id' },
-              name: {
-                $cond: [
-                  { $gt: ['$doctor', null] },
-                  { $concat: ['$doctor.firstName', ' ', '$doctor.lastName'] },
-                  'Médico desconocido',
-                ],
-              },
-              specialty: '$doctor.specialty',
-              closed: 1,
-            },
-          },
-        ]),
-      ]);
-
-    // Build status breakdown map
-    const statusMap: Record<string, number> = {};
-    for (const row of statusAgg as { _id: string; count: number }[]) {
-      statusMap[row._id] = row.count;
-    }
-
-    const timingRow = (timingAgg[0] ?? {}) as {
-      avgMs?: number;
-      total?: number;
-      slaOk?: number;
-    };
-    const closedTotal = timingRow.total ?? 0;
-    const avgAttentionMs = timingRow.avgMs ?? 0;
-    const slaOk = timingRow.slaOk ?? 0;
-
-    return {
-      generatedAt: new Date().toISOString(),
-      statusBreakdown: {
-        pending: statusMap['PENDING'] ?? 0,
-        inAttention: statusMap['IN_ATTENTION'] ?? 0,
-        closed: statusMap['CLOSED'] ?? 0,
-      },
-      totalConsultations:
-        (statusMap['PENDING'] ?? 0) +
-        (statusMap['IN_ATTENTION'] ?? 0) +
-        (statusMap['CLOSED'] ?? 0),
-      closedLast7Days: closedLast7Agg,
-      avgAttentionTimeMinutes:
-        closedTotal > 0 ? Math.round(avgAttentionMs / 60_000) : null,
-      slaCompliance:
-        closedTotal > 0
-          ? Number(((slaOk / closedTotal) * 100).toFixed(1))
-          : null,
-      bySpecialty: (
-        specialtyAgg as { _id: string; total: number; closed: number }[]
-      ).map((row) => ({
-        specialty: row._id,
-        total: row.total,
-        closed: row.closed,
-      })),
-      topDoctors: topDoctorsAgg as {
-        doctorId: string;
-        name: string;
-        specialty?: string;
-        closed: number;
-      }[],
-    };
   }
 
   async getBusinessMetrics() {
@@ -242,6 +109,8 @@ export class DashboardService {
       ]),
     ]);
 
+    const productKpis = await this.buildProductKpis();
+
     const doctorStats = (doctorAgg[0] ?? {}) as {
       totalDoctors?: number;
       verifiedDoctors?: number;
@@ -277,6 +146,7 @@ export class DashboardService {
         verifiedDoctors,
         pendingDoctors,
       },
+      productKpis,
       doctorStatusBreakdown: {
         verified: verifiedDoctors,
         pending: pendingDoctors,
@@ -293,6 +163,383 @@ export class DashboardService {
             ? Number(((verifiedDoctors / totalDoctors) * 100).toFixed(2))
             : 0,
       },
+    };
+  }
+
+  async getConsultationMetrics() {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const consultations = await this.consultationModel
+      .find({})
+      .select(
+        'specialty priority status createdAt closedAt assignedAt assignedDoctorId',
+      )
+      .lean()
+      .exec();
+
+    const doctorIds = consultations
+      .map((consultation) => consultation.assignedDoctorId?.toString())
+      .filter(Boolean) as string[];
+    const doctors = doctorIds.length
+      ? await this.doctorModel
+          .find({ _id: { $in: doctorIds } })
+          .select('firstName lastName specialty')
+          .lean()
+          .exec()
+      : [];
+    const doctorMap = new Map(
+      doctors.map((doctor) => [
+        doctor._id.toString(),
+        {
+          name: `${doctor.firstName} ${doctor.lastName}`.trim(),
+          specialty: doctor.specialty,
+        },
+      ]),
+    );
+
+    const totalConsultations = consultations.length;
+    const statusBreakdown = {
+      pending: consultations.filter((item) => item.status === 'PENDING').length,
+      inAttention: consultations.filter(
+        (item) => item.status === 'IN_ATTENTION',
+      ).length,
+      closed: consultations.filter((item) => item.status === 'CLOSED').length,
+    };
+    const closedConsultations = consultations.filter(
+      (item) => item.status === 'CLOSED' && item.closedAt,
+    );
+    const closedLast7Days = closedConsultations.filter(
+      (item) => item.closedAt && item.closedAt >= sevenDaysAgo,
+    ).length;
+
+    const closedWithAssignedAt = closedConsultations.filter(
+      (item) => item.assignedAt && item.closedAt,
+    );
+    const avgAttentionTimeMinutes =
+      closedWithAssignedAt.length > 0
+        ? Number(
+            (
+              closedWithAssignedAt.reduce((total, item) => {
+                return (
+                  total +
+                  (item.closedAt!.getTime() - item.assignedAt!.getTime()) /
+                    60_000
+                );
+              }, 0) / closedWithAssignedAt.length
+            ).toFixed(2),
+          )
+        : null;
+    const slaCompliance =
+      closedWithAssignedAt.length > 0
+        ? Number(
+            (
+              (closedWithAssignedAt.filter(
+                (item) =>
+                  item.closedAt!.getTime() - item.assignedAt!.getTime() <=
+                  120 * 60_000,
+              ).length /
+                closedWithAssignedAt.length) *
+              100
+            ).toFixed(2),
+          )
+        : null;
+
+    const specialties = new Map<
+      string,
+      { specialty: string; total: number; closed: number }
+    >();
+    for (const consultation of consultations) {
+      const current = specialties.get(consultation.specialty) ?? {
+        specialty: consultation.specialty,
+        total: 0,
+        closed: 0,
+      };
+      current.total += 1;
+      if (consultation.status === 'CLOSED') {
+        current.closed += 1;
+      }
+      specialties.set(consultation.specialty, current);
+    }
+
+    const topDoctorsMap = new Map<
+      string,
+      { doctorId: string; closed: number; name: string; specialty?: string }
+    >();
+    for (const consultation of closedConsultations) {
+      const doctorId = consultation.assignedDoctorId?.toString();
+      if (!doctorId) {
+        continue;
+      }
+      const doctor = doctorMap.get(doctorId);
+      const current = topDoctorsMap.get(doctorId) ?? {
+        doctorId,
+        closed: 0,
+        name: doctor?.name ?? 'Doctor sin nombre',
+        specialty: doctor?.specialty,
+      };
+      current.closed += 1;
+      topDoctorsMap.set(doctorId, current);
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      statusBreakdown,
+      totalConsultations,
+      closedLast7Days,
+      avgAttentionTimeMinutes,
+      slaCompliance,
+      bySpecialty: Array.from(specialties.values()),
+      topDoctors: Array.from(topDoctorsMap.values())
+        .sort((left, right) => right.closed - left.closed)
+        .slice(0, 5),
+    };
+  }
+
+  async getAlerts() {
+    const [technical, business, consultations] = await Promise.all([
+      this.getTechnicalMetrics(),
+      this.getBusinessMetrics(),
+      this.getConsultationMetrics(),
+    ]);
+
+    const alerts: Array<{
+      key: string;
+      level: 'OK' | 'WARNING' | 'CRITICAL';
+      message: string;
+    }> = [];
+
+    if (technical.p95LatencyMs > 1_500) {
+      alerts.push({
+        key: 'technical-p95',
+        level: technical.p95LatencyMs > 2_000 ? 'CRITICAL' : 'WARNING',
+        message: `Latencia P95 ${technical.p95LatencyMs} ms`,
+      });
+    }
+
+    if (technical.errorRate > 0.02) {
+      alerts.push({
+        key: 'technical-error-rate',
+        level: technical.errorRate > 0.05 ? 'CRITICAL' : 'WARNING',
+        message: `Error rate ${(technical.errorRate * 100).toFixed(2)}%`,
+      });
+    }
+
+    if (
+      consultations.slaCompliance !== null &&
+      consultations.slaCompliance < 80
+    ) {
+      alerts.push({
+        key: 'consultation-sla',
+        level: consultations.slaCompliance < 60 ? 'CRITICAL' : 'WARNING',
+        message: `Cumplimiento SLA ${consultations.slaCompliance}%`,
+      });
+    }
+
+    for (const kpi of business.productKpis) {
+      if (kpi.state !== 'OK') {
+        alerts.push({
+          key: `kpi-${kpi.key}`,
+          level: kpi.state,
+          message: `${kpi.label}: ${kpi.value}${kpi.unit ?? ''}`,
+        });
+      }
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        key: 'system-ok',
+        level: 'OK',
+        message: 'Sin alertas activas',
+      });
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      items: alerts,
+    };
+  }
+
+  private async buildProductKpis() {
+    const [consultations, triageSessions, followups] = await Promise.all([
+      this.consultationModel
+        .find({})
+        .select(
+          'triageSessionId assignedAt createdAt closedAt summaryFeedback redFlagsConfirmed',
+        )
+        .lean()
+        .exec(),
+      this.triageSessionModel
+        .find({})
+        .select('analysis.redFlags')
+        .lean()
+        .exec(),
+      this.followupModel
+        .find({ status: 'COMPLETED' })
+        .select('consultationId submittedAt')
+        .lean()
+        .exec(),
+    ]);
+
+    const triageMap = new Map(
+      triageSessions.map((session) => [session._id.toString(), session]),
+    );
+    const followupsByConsultation = new Map<string, Date[]>();
+    for (const followup of followups) {
+      const key = followup.consultationId.toString();
+      const current = followupsByConsultation.get(key) ?? [];
+      if (followup.submittedAt) {
+        current.push(followup.submittedAt);
+      }
+      followupsByConsultation.set(key, current);
+    }
+
+    const assignedConsultations = consultations.filter(
+      (consultation) => consultation.assignedAt && consultation.createdAt,
+    );
+    const firstResponseMinutes =
+      assignedConsultations.length > 0
+        ? Number(
+            (
+              assignedConsultations.reduce((total, consultation) => {
+                return (
+                  total +
+                  (consultation.assignedAt!.getTime() -
+                    consultation.createdAt!.getTime()) /
+                    60_000
+                );
+              }, 0) / assignedConsultations.length
+            ).toFixed(2),
+          )
+        : 0;
+
+    const consultationsWithFeedback = consultations.filter(
+      (consultation) => consultation.summaryFeedback?.value,
+    );
+    const summaryUtility =
+      consultationsWithFeedback.length > 0
+        ? Number(
+            (
+              (consultationsWithFeedback.filter(
+                (consultation) =>
+                  consultation.summaryFeedback?.value === 'USEFUL',
+              ).length /
+                consultationsWithFeedback.length) *
+              100
+            ).toFixed(2),
+          )
+        : 0;
+
+    const consultationsWithRedFlags = consultations.filter((consultation) => {
+      const triage = triageMap.get(consultation.triageSessionId.toString());
+      return (triage?.analysis?.redFlags?.length ?? 0) > 0;
+    });
+    const redFlagsConfirmed =
+      consultationsWithRedFlags.length > 0
+        ? Number(
+            (
+              (consultationsWithRedFlags.filter(
+                (consultation) => consultation.redFlagsConfirmed === true,
+              ).length /
+                consultationsWithRedFlags.length) *
+              100
+            ).toFixed(2),
+          )
+        : 0;
+
+    const closedConsultations = consultations.filter(
+      (consultation) => consultation.closedAt,
+    );
+    const followupRetention =
+      closedConsultations.length > 0
+        ? Number(
+            (
+              (closedConsultations.filter((consultation) => {
+                const followupDates =
+                  followupsByConsultation.get(consultation._id.toString()) ??
+                  [];
+                return followupDates.some(
+                  (submittedAt) =>
+                    consultation.closedAt &&
+                    submittedAt.getTime() <=
+                      consultation.closedAt.getTime() + 7 * 24 * 60 * 60 * 1000,
+                );
+              }).length /
+                closedConsultations.length) *
+              100
+            ).toFixed(2),
+          )
+        : 0;
+
+    return [
+      this.makeKpi(
+        'time_to_first_response',
+        'Tiempo a primera respuesta médica',
+        firstResponseMinutes,
+        30,
+        'min',
+        'Promedio(timestamp_primera_respuesta - timestamp_apertura)',
+        'Consultations',
+        true,
+      ),
+      this.makeKpi(
+        'summary_utility',
+        'Utilidad de resumen clínico',
+        summaryUtility,
+        75,
+        '%',
+        '% de consultas donde médico marca resumen como útil',
+        'Feedback médico',
+      ),
+      this.makeKpi(
+        'red_flags_confirmed',
+        'Red flags relevantes confirmadas',
+        redFlagsConfirmed,
+        60,
+        '%',
+        '% de red flags confirmadas por médico',
+        'Triage + validación médico',
+      ),
+      this.makeKpi(
+        'followup_retention_7d',
+        'Retención de seguimiento 7 días',
+        followupRetention,
+        50,
+        '%',
+        '% de pacientes que completan seguimiento en 7 días',
+        'FollowUp records',
+      ),
+    ];
+  }
+
+  private makeKpi(
+    key: string,
+    label: string,
+    value: number,
+    target: number,
+    unit: string,
+    formula: string,
+    source: string,
+    lowerIsBetter = false,
+  ) {
+    let state: 'OK' | 'WARNING' | 'CRITICAL' = 'OK';
+    if (lowerIsBetter) {
+      if (value > target) {
+        state = value > target * 1.5 ? 'CRITICAL' : 'WARNING';
+      }
+    } else if (value < target) {
+      state = value < target * 0.8 ? 'CRITICAL' : 'WARNING';
+    }
+
+    return {
+      key,
+      label,
+      value,
+      target,
+      unit,
+      formula,
+      source,
+      state,
     };
   }
 }

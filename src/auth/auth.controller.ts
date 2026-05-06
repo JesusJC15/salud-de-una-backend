@@ -18,13 +18,13 @@ import { Throttle } from '@nestjs/throttler';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Public } from '../common/decorators/public.decorator';
+import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { UserRole } from '../common/enums/user-role.enum';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
-import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
-import { UserRole } from '../common/enums/user-role.enum';
-import { AuthMeResponseDto } from './dto/auth-me.response.dto';
 import { AuthService } from './auth.service';
+import { AuthMeResponseDto } from './dto/auth-me.response.dto';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { ProvisionDoctorDto } from './dto/provision-doctor.dto';
@@ -50,11 +50,6 @@ export class AuthController {
     private readonly doctorModel: Model<DoctorDocument>,
   ) {}
 
-  // ── Provisioning endpoints ─────────────────────────────────────────────────
-  // Called by the client after Auth0 signup to create the MongoDB profile.
-  // Protected by jwt-provision strategy (validates Auth0 token without db_id).
-  // These are @Public() to bypass the global JwtAuthGuard (which requires db_id).
-
   @Post('provision/patient')
   @Public()
   @UseGuards(AuthGuard('jwt-provision'))
@@ -78,8 +73,6 @@ export class AuthController {
       .exec();
 
     if (existing) {
-      // Patient already in MongoDB — link the Auth0 user to the existing profile
-      // and ensure the role is assigned in Auth0 (idempotent).
       await this.provisioningService.setUserDbId(
         auth0UserId,
         existing._id?.toString() ?? (existing as { id?: string }).id ?? '',
@@ -131,8 +124,6 @@ export class AuthController {
       .exec();
 
     if (existing) {
-      // Doctor already in MongoDB — link the Auth0 user to the existing profile
-      // and ensure the DOCTOR role is assigned in Auth0 (idempotent).
       await this.provisioningService.setUserDbId(
         auth0UserId,
         existing._id?.toString() ?? (existing as { id?: string }).id ?? '',
@@ -141,7 +132,6 @@ export class AuthController {
       return this.toDoctorProvisionResponse(existing);
     }
 
-    // Creating a new doctor profile — all fields are required.
     if (
       !dto.firstName ||
       !dto.lastName ||
@@ -185,10 +175,6 @@ export class AuthController {
 
     return this.toDoctorProvisionResponse(doctor);
   }
-
-  // ── Auth0 migration: password verification endpoint ───────────────────────
-  // Used by Auth0 Custom Database Connection to migrate existing users.
-  // Protected by a shared secret header — NOT by JWT.
 
   @Post('migrate-check')
   @Public()
@@ -243,15 +229,10 @@ export class AuthController {
     throw new NotFoundException('User not found');
   }
 
-  // ── Standard endpoint ──────────────────────────────────────────────────────
-
   @Get('me')
   me(@Req() request: RequestContext): AuthMeResponseDto {
     return this.authService.me(request.user!);
   }
-
-  // ── Legacy endpoints — kept during cutover window ─────────────────────────
-  // Remove once all existing mobile/web clients have migrated to Auth0.
 
   @Post('patient/register')
   @Public()
@@ -305,8 +286,6 @@ export class AuthController {
     await this.authService.revokeRefreshSession(dto.refreshToken);
     return { message: 'Sesion cerrada' };
   }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
 
   private buildAuthResponse(session: {
     accessToken: string;

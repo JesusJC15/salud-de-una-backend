@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsController } from './notifications.controller';
+import { UserRole } from '../common/enums/user-role.enum';
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsController', () => {
@@ -33,10 +34,10 @@ describe('NotificationsController', () => {
         user: {
           userId: 'u1',
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
-      },
+      } as unknown as any,
       { unreadOnly: true, limit: 10 },
     );
 
@@ -56,10 +57,10 @@ describe('NotificationsController', () => {
         user: {
           userId: 'u1',
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
-      },
+      } as unknown as any,
       {},
     );
 
@@ -78,10 +79,10 @@ describe('NotificationsController', () => {
         user: {
           userId: 'u1',
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
-      },
+      } as unknown as any,
       'n1',
     );
 
@@ -99,10 +100,10 @@ describe('NotificationsController', () => {
       user: {
         userId: 'u1',
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       },
-    });
+    } as unknown as any);
 
     expect(service.markAllAsRead).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1' }),

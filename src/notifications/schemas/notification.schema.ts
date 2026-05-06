@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 
 export type NotificationDocument = HydratedDocument<Notification>;
 
@@ -19,6 +19,15 @@ export class Notification {
 
   @Prop({ unique: true, sparse: true, index: true })
   sourceEventId?: string;
+
+  @Prop()
+  resourceId?: string;
+
+  @Prop()
+  deepLink?: string;
+
+  @Prop({ type: SchemaTypes.Mixed })
+  metadata?: Record<string, unknown>;
 
   @Prop({ default: false })
   read!: boolean;

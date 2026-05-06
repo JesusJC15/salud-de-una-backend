@@ -1,7 +1,6 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
-import type { ExecutionContext } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
@@ -10,48 +9,79 @@ describe('JwtAuthGuard', () => {
 
   beforeEach(async () => {
     reflector = { getAllAndOverride: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [JwtAuthGuard, { provide: Reflector, useValue: reflector }],
     }).compile();
+
     guard = module.get<JwtAuthGuard>(JwtAuthGuard);
   });
 
-  function createContext(): ExecutionContext {
+  function createContext(authorization?: string): ExecutionContext {
+    const request = {
+      headers: authorization ? { authorization } : {},
+    };
+    const response = {};
+
     return {
-      getHandler: () => ({}),
-      getClass: () => ({}),
-      switchToHttp: () => ({ getRequest: () => ({}) }),
+      getHandler: jest.fn(),
+      getClass: jest.fn(),
+      switchToHttp: () => ({
+        getRequest: () => request,
+        getResponse: () => response,
+      }),
     } as unknown as ExecutionContext;
   }
 
-  it('should allow public routes without calling passport', () => {
+  it('allows public routes without delegating to passport', () => {
     reflector.getAllAndOverride.mockReturnValue(true);
-    const result = guard.canActivate(createContext());
-    expect(result).toBe(true);
+    const parentCanActivate = jest.spyOn(
+      Object.getPrototypeOf(JwtAuthGuard.prototype) as {
+        canActivate: (context: ExecutionContext) => unknown;
+      },
+      'canActivate',
+    );
+
+    expect(guard.canActivate(createContext())).toBe(true);
+    expect(parentCanActivate).not.toHaveBeenCalled();
   });
 
-  it('should delegate to passport for non-public routes', () => {
+  it('delegates non-public routes to passport auth guard', async () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    const parent = Object.getPrototypeOf(JwtAuthGuard.prototype) as {
-      canActivate: (context: ExecutionContext) => boolean;
-    };
-    const spy = jest.spyOn(parent, 'canActivate').mockReturnValue(true);
+    const parentCanActivate = jest
+      .spyOn(
+        Object.getPrototypeOf(JwtAuthGuard.prototype) as {
+          canActivate: (context: ExecutionContext) => unknown;
+        },
+        'canActivate',
+      )
+      .mockResolvedValue(true);
 
-    const result = guard.canActivate(createContext());
-
-    expect(spy).toHaveBeenCalled();
-    expect(result).toBe(true);
-    spy.mockRestore();
+    await expect(
+      Promise.resolve(guard.canActivate(createContext('Bearer token-123'))),
+    ).resolves.toBe(true);
+    expect(parentCanActivate).toHaveBeenCalledTimes(1);
   });
 
-  it('handleRequest should throw when user is missing', () => {
+  it('returns the authenticated user when passport resolves it', () => {
+    const user = {
+      userId: 'u1',
+      email: 'doctor@example.com',
+      role: 'DOCTOR',
+    };
+
+    expect(guard.handleRequest(null, user, null)).toBe(user);
+  });
+
+  it('throws UnauthorizedException when passport returns no user', () => {
     expect(() => guard.handleRequest(null, null, null)).toThrow(
       UnauthorizedException,
     );
   });
 
-  it('handleRequest should return user when present', () => {
-    const user = { id: 'u1' };
-    expect(guard.handleRequest(null, user, null)).toBe(user);
+  it('rethrows passport errors for missing or invalid tokens', () => {
+    const error = new UnauthorizedException('No autorizado');
+
+    expect(() => guard.handleRequest(error, null, null)).toThrow(error);
   });
 });

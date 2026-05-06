@@ -221,7 +221,7 @@ export class TriageService {
     const patientId = new Types.ObjectId(user.userId);
     const query = {
       patientId,
-      status: 'IN_PROGRESS',
+      status: 'IN_PROGRESS' as TriageSessionStatus,
       ...(specialty ? { specialty } : {}),
     };
 

@@ -31,6 +31,7 @@ type BaseMockModel = {
 
 type UserMockModel = BaseMockModel & {
   findById: jest.Mock;
+  updateOne: jest.Mock;
 };
 
 type RefreshSessionMockModel = BaseMockModel & {
@@ -89,6 +90,13 @@ type AuthServiceInternals = {
     role: UserRole,
     keepSessionId: string,
   ): Promise<void>;
+  getJoseModule(): Promise<{
+    jwtVerify: jest.Mock;
+    createRemoteJWKSet: jest.Mock;
+  }>;
+  parseUserRole(value: unknown): UserRole | null;
+  resolveAuth0Issuer(): string | null;
+  extractBearerToken(authorizationHeader?: string): string;
 };
 
 describe('AuthService', () => {
@@ -109,18 +117,21 @@ describe('AuthService', () => {
       create: jest.fn(),
       findOne: jest.fn(),
       findById: jest.fn(),
+      updateOne: jest.fn(),
     };
 
     doctorModel = {
       create: jest.fn(),
       findOne: jest.fn(),
       findById: jest.fn(),
+      updateOne: jest.fn(),
     };
 
     adminModel = {
       create: jest.fn(),
       findOne: jest.fn(),
       findById: jest.fn(),
+      updateOne: jest.fn(),
     };
 
     refreshSessionModel = {
@@ -991,5 +1002,677 @@ describe('AuthService', () => {
     );
 
     expect(refreshSessionModel.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('authenticateAccessToken should resolve a valid local access token', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'p1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'access',
+    });
+    patientModel.findById.mockReturnValue(
+      createFindOneChain({
+        _id: { toString: () => 'p1' },
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      }),
+    );
+
+    await expect(service.authenticateAccessToken('token')).resolves.toEqual({
+      userId: 'p1',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    });
+  });
+
+  it('authenticateAccessToken should reject local non-access tokens', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'p1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+    });
+
+    await expect(
+      service.authenticateAccessToken('token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('authenticateAccessToken should fall back to Auth0 when local verification fails', async () => {
+    jwtService.verifyAsync.mockRejectedValue(new Error('invalid local token'));
+    const jwtVerify = jest.fn().mockResolvedValue({
+      payload: {
+        sub: 'auth0|abc',
+        email: 'ana@example.com',
+      },
+    });
+    jest.spyOn(getInternals(), 'getJoseModule').mockResolvedValue({
+      jwtVerify,
+      createRemoteJWKSet: jest.fn().mockReturnValue('jwks'),
+    });
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'auth.auth0Audience') {
+        return 'api-audience';
+      }
+      if (key === 'auth.auth0Domain') {
+        return 'tenant.auth0.com';
+      }
+      if (key === 'web.refreshMaxActiveSessions') {
+        return 3;
+      }
+      return undefined;
+    });
+    patientModel.findOne
+      .mockReturnValueOnce(createFindOneChain(null))
+      .mockReturnValueOnce(
+        createFindOneChain({
+          _id: { toString: () => 'p1' },
+          email: 'ana@example.com',
+          role: UserRole.PATIENT,
+          isActive: true,
+          auth0Subject: null,
+        }),
+      );
+    doctorModel.findOne
+      .mockReturnValueOnce(createFindOneChain(null))
+      .mockReturnValueOnce(createFindOneChain(null));
+    adminModel.findOne
+      .mockReturnValueOnce(createFindOneChain(null))
+      .mockReturnValueOnce(createFindOneChain(null));
+    patientModel.updateOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    await expect(service.authenticateAccessToken('token')).resolves.toEqual({
+      userId: 'p1',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    });
+    expect(patientModel.updateOne).toHaveBeenCalledWith(
+      { _id: 'p1' },
+      { $set: { auth0Subject: 'auth0|abc' } },
+    );
+  });
+
+  it('provisionPatientWithAuth0 should return existing linked patient', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|patient-1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        dbId: 'p1',
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue({
+        userId: 'p1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      });
+    patientModel.findById.mockReturnValue(
+      createFindOneChain({
+        id: 'p1',
+        firstName: 'Ana',
+        lastName: 'Lopez',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        createdAt: new Date('2025-01-01T00:00:00.000Z'),
+      }),
+    );
+
+    const result = await service.provisionPatientWithAuth0(
+      {
+        firstName: 'Ana',
+        lastName: 'Lopez',
+      },
+      'Bearer token',
+    );
+
+    expect(result.id).toBe('p1');
+    expect(patientModel.create).not.toHaveBeenCalled();
+  });
+
+  it('provisionDoctorWithAuth0 should reject when personalId is missing', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|doctor-1',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        dbId: null,
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue(null);
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.provisionDoctorWithAuth0(
+        {
+          firstName: 'Laura',
+          lastName: 'Medina',
+          specialty: Specialty.GENERAL_MEDICINE,
+          phoneNumber: '3001234567',
+        },
+        'Bearer token',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('registerDoctor should rethrow unknown persistence errors', async () => {
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.create.mockRejectedValue(new Error('db unavailable'));
+
+    await expect(
+      service.registerDoctor({
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: 'doc@example.com',
+        password: 'StrongP@ss1',
+        specialty: Specialty.GENERAL_MEDICINE,
+        personalId: 'CC-123',
+        phoneNumber: '3001234567',
+        professionalLicense: 'P-123',
+      }),
+    ).rejects.toThrow('db unavailable');
+  });
+
+  it('refreshTokens should fail when the resolved user is inactive', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+      jti: 'session-1',
+    });
+    refreshSessionModel.findOne.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+        userId: 'u1',
+        role: UserRole.PATIENT,
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    );
+    refreshSessionModel.findOneAndUpdate.mockReturnValue(
+      createFindOneChain({
+        sessionId: 'session-1',
+      }),
+    );
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    patientModel.findById.mockReturnValue(
+      createFindOneChain({
+        _id: 'u1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: false,
+      }),
+    );
+
+    await expect(service.refreshTokens('token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('revokeRefreshSession should ignore tokens without jti', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'u1',
+      role: UserRole.PATIENT,
+      email: 'ana@example.com',
+      tokenType: 'refresh',
+    });
+
+    await expect(
+      service.revokeRefreshSession('token'),
+    ).resolves.toBeUndefined();
+    expect(refreshSessionModel.updateOne).not.toHaveBeenCalled();
+  });
+
+  it('authenticateAccessToken should reject when Auth0 user cannot be resolved', async () => {
+    jwtService.verifyAsync.mockRejectedValue(new Error('invalid local token'));
+    jest.spyOn(getInternals(), 'getJoseModule').mockResolvedValue({
+      jwtVerify: jest.fn().mockResolvedValue({
+        payload: {
+          sub: 'auth0|ghost',
+          email: 'ghost@example.com',
+        },
+      }),
+      createRemoteJWKSet: jest.fn().mockReturnValue('jwks'),
+    });
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'auth.auth0Audience') {
+        return 'api-audience';
+      }
+      if (key === 'auth.auth0Domain') {
+        return 'tenant.auth0.com';
+      }
+      if (key === 'web.refreshMaxActiveSessions') {
+        return 3;
+      }
+      return undefined;
+    });
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.authenticateAccessToken('token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('provisionPatientWithAuth0 should reject when linked Auth0 role is not patient', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|abc',
+        email: 'ana@example.com',
+        role: UserRole.DOCTOR,
+        dbId: null,
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue({
+        userId: 'd1',
+        email: 'ana@example.com',
+        role: UserRole.DOCTOR,
+        isActive: true,
+      });
+
+    await expect(
+      service.provisionPatientWithAuth0(
+        { firstName: 'Ana', lastName: 'Lopez' },
+        'Bearer token',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('provisionPatientWithAuth0 should reject when linked patient no longer exists', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|abc',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        dbId: 'p1',
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue({
+        userId: 'p1',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      });
+    patientModel.findById.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.provisionPatientWithAuth0(
+        { firstName: 'Ana', lastName: 'Lopez' },
+        'Bearer token',
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('provisionPatientWithAuth0 should create a new patient when no link exists', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|new-patient',
+        email: 'new@example.com',
+        role: null,
+        dbId: null,
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue(null);
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+    (bcrypt.hash as jest.Mock).mockResolvedValue('external-hash');
+    patientModel.create.mockResolvedValue({
+      id: 'p-new',
+      firstName: 'Ana',
+      lastName: 'Lopez',
+      email: 'new@example.com',
+      role: UserRole.PATIENT,
+      createdAt: new Date('2025-01-01T00:00:00.000Z'),
+    });
+
+    const result = await service.provisionPatientWithAuth0(
+      { firstName: 'Ana', lastName: 'Lopez', birthDate: '1998-03-10' },
+      'Bearer token',
+    );
+
+    expect(patientModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'new@example.com',
+        auth0Subject: 'auth0|new-patient',
+      }),
+    );
+    expect(result.id).toBe('p-new');
+  });
+
+  it('provisionDoctorWithAuth0 should reject when linked Auth0 role is not doctor', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|doc',
+        email: 'doc@example.com',
+        role: UserRole.PATIENT,
+        dbId: null,
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue({
+        userId: 'p1',
+        email: 'doc@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      });
+
+    await expect(
+      service.provisionDoctorWithAuth0(
+        {
+          firstName: 'Laura',
+          lastName: 'Medina',
+          specialty: Specialty.GENERAL_MEDICINE,
+          personalId: 'CC123',
+          phoneNumber: '3001234567',
+        },
+        'Bearer token',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('provisionDoctorWithAuth0 should reject when linked doctor no longer exists', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|doc',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        dbId: 'd1',
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue({
+        userId: 'd1',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        isActive: true,
+      });
+    doctorModel.findById.mockReturnValue(createFindOneChain(null));
+
+    await expect(
+      service.provisionDoctorWithAuth0(
+        {
+          firstName: 'Laura',
+          lastName: 'Medina',
+          specialty: Specialty.GENERAL_MEDICINE,
+          personalId: 'CC123',
+          phoneNumber: '3001234567',
+        },
+        'Bearer token',
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('provisionDoctorWithAuth0 should create a new doctor when no link exists', async () => {
+    jest
+      .spyOn(
+        service as unknown as {
+          verifyAuth0FromAuthorizationHeader: (header?: string) => Promise<{
+            subject: string;
+            email: string;
+            role: UserRole | null;
+            dbId: string | null;
+          }>;
+        },
+        'verifyAuth0FromAuthorizationHeader',
+      )
+      .mockResolvedValue({
+        subject: 'auth0|new-doc',
+        email: 'doc@example.com',
+        role: null,
+        dbId: null,
+      });
+    jest
+      .spyOn(
+        service as unknown as {
+          findRequestUserByAuth0Subject: (
+            subject: string,
+          ) => Promise<RequestUser | null>;
+        },
+        'findRequestUserByAuth0Subject',
+      )
+      .mockResolvedValue(null);
+    patientModel.findOne.mockReturnValue(createFindOneChain(null));
+    doctorModel.findOne.mockReturnValue(createFindOneChain(null));
+    adminModel.findOne.mockReturnValue(createFindOneChain(null));
+    (bcrypt.hash as jest.Mock).mockResolvedValue('external-hash');
+    doctorModel.create.mockResolvedValue({
+      id: 'd-new',
+      firstName: 'Laura',
+      lastName: 'Medina',
+      email: 'doc@example.com',
+      role: UserRole.DOCTOR,
+      specialty: Specialty.GENERAL_MEDICINE,
+      doctorStatus: 'PENDING',
+      createdAt: new Date('2025-01-01T00:00:00.000Z'),
+    });
+
+    const result = await service.provisionDoctorWithAuth0(
+      {
+        firstName: 'Laura',
+        lastName: 'Medina',
+        specialty: Specialty.GENERAL_MEDICINE,
+        personalId: 'CC123',
+        phoneNumber: '3001234567',
+      },
+      'Bearer token',
+    );
+
+    expect(doctorModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'doc@example.com',
+        auth0Subject: 'auth0|new-doc',
+      }),
+    );
+    expect(result.id).toBe('d-new');
+  });
+
+  it('findAuthUserById should return null for inactive admin', async () => {
+    adminModel.findById.mockReturnValue(
+      createFindOneChain({
+        _id: 'a1',
+        email: 'admin@example.com',
+        role: UserRole.ADMIN,
+        isActive: false,
+      }),
+    );
+
+    const result = await getInternals().findAuthUserById('a1', UserRole.ADMIN);
+
+    expect(result).toBeNull();
+  });
+
+  it('parseUserRole should resolve known roles and ignore invalid values', () => {
+    expect(getInternals().parseUserRole('patient')).toBe(UserRole.PATIENT);
+    expect(getInternals().parseUserRole('DOCTOR')).toBe(UserRole.DOCTOR);
+    expect(getInternals().parseUserRole(' ADMIN ')).toBe(UserRole.ADMIN);
+    expect(getInternals().parseUserRole('manager')).toBeNull();
+    expect(getInternals().parseUserRole(123)).toBeNull();
+  });
+
+  it('resolveAuth0Issuer should prioritize explicit issuer and normalize trailing slash', () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'auth.auth0Issuer') {
+        return 'https://issuer.example.com';
+      }
+      return undefined;
+    });
+
+    expect(getInternals().resolveAuth0Issuer()).toBe(
+      'https://issuer.example.com/',
+    );
+  });
+
+  it('resolveAuth0Issuer should derive issuer from auth0Domain and return null when absent', () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'auth.auth0Domain') {
+        return 'tenant.auth0.com';
+      }
+      return undefined;
+    });
+    expect(getInternals().resolveAuth0Issuer()).toBe(
+      'https://tenant.auth0.com/',
+    );
+
+    configService.get.mockReturnValue(undefined);
+    expect(getInternals().resolveAuth0Issuer()).toBeNull();
+  });
+
+  it('extractBearerToken should return the trimmed bearer token and reject invalid headers', () => {
+    expect(getInternals().extractBearerToken('Bearer token-123')).toBe(
+      'token-123',
+    );
+    expect(getInternals().extractBearerToken(' bearer token-xyz ')).toBe(
+      'token-xyz',
+    );
+    expect(() => getInternals().extractBearerToken('Basic abc')).toThrow(
+      UnauthorizedException,
+    );
+    expect(() => getInternals().extractBearerToken('Bearer    ')).toThrow(
+      UnauthorizedException,
+    );
   });
 });

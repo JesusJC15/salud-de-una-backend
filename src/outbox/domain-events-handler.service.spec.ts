@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { DomainEventsHandlerService } from './domain-events-handler.service';
 import { OutboxService } from './outbox.service';
+import { FollowupsService } from '../followups/followups.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 describe('DomainEventsHandlerService', () => {
@@ -14,6 +15,9 @@ describe('DomainEventsHandlerService', () => {
   const notificationsService = {
     createDoctorStatusChange: jest.fn(),
   };
+  const followupsService = {
+    handleConsultationClosedEvent: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -23,6 +27,7 @@ describe('DomainEventsHandlerService', () => {
         DomainEventsHandlerService,
         { provide: OutboxService, useValue: outboxService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: FollowupsService, useValue: followupsService },
       ],
     }).compile();
 
@@ -58,9 +63,13 @@ describe('DomainEventsHandlerService', () => {
   it('should return silently when event does not exist', async () => {
     outboxService.findById.mockResolvedValue(null);
 
-    await expect(service.processOutboxEventById('missing')).resolves.toBeUndefined();
+    await expect(
+      service.processOutboxEventById('missing'),
+    ).resolves.toBeUndefined();
 
-    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(
+      notificationsService.createDoctorStatusChange,
+    ).not.toHaveBeenCalled();
     expect(outboxService.markProcessed).not.toHaveBeenCalled();
   });
 
@@ -82,7 +91,9 @@ describe('DomainEventsHandlerService', () => {
       'Unhandled outbox event type: doctor.unknown.v1',
     );
 
-    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(
+      notificationsService.createDoctorStatusChange,
+    ).not.toHaveBeenCalled();
     expect(outboxService.markProcessed).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -131,7 +142,9 @@ describe('DomainEventsHandlerService', () => {
       'Invalid payload for outbox event event-4',
     );
 
-    expect(notificationsService.createDoctorStatusChange).not.toHaveBeenCalled();
+    expect(
+      notificationsService.createDoctorStatusChange,
+    ).not.toHaveBeenCalled();
     expect(outboxService.markProcessed).not.toHaveBeenCalled();
     expect(outboxService.reschedule).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(

@@ -2,31 +2,39 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
-import { randomUUID } from 'crypto';
-import { Specialty } from '../common/enums/specialty.enum';
 import { AiService } from '../ai/ai.service';
+import { ChatService } from '../chat/chat.service';
+import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { UserRole } from '../common/enums/user-role.enum';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
-import { TriagePriority } from '../triage/schemas/triage-session.schema';
 import {
   TriageSession,
   TriageSessionDocument,
 } from '../triage/schemas/triage-session.schema';
-import {
-  ConsultationMessage,
-  ConsultationMessageDocument,
-} from '../chat/schemas/consultation-message.schema';
+import { CloseConsultationDto } from './dto/close-consultation.dto';
+import { ListConsultationsHistoryDto } from './dto/list-consultations-history.dto';
+import { RateConsultationDto } from './dto/rate-consultation.dto';
+import { SummaryFeedbackDto } from './dto/summary-feedback.dto';
+import { Specialty } from '../common/enums/specialty.enum';
+import { TriagePriority } from '../triage/schemas/triage-session.schema';
+import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import {
   Consultation,
   ConsultationDocument,
 } from './schemas/consultation.schema';
-import { RateConsultationDto } from './dto/rate-consultation.dto';
 
 type CreateConsultationFromTriageInput = {
   patientId: string | Types.ObjectId;
@@ -57,14 +65,18 @@ export class ConsultationsService {
   constructor(
     @InjectModel(Consultation.name)
     private readonly consultationModel: Model<ConsultationDocument>,
-    @InjectModel(TriageSession.name)
-    private readonly triageSessionModel: Model<TriageSessionDocument>,
-    @InjectModel(ConsultationMessage.name)
-    private readonly messageModel: Model<ConsultationMessageDocument>,
+    @InjectModel(Doctor.name)
+    private readonly doctorModel: Model<DoctorDocument>,
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
+    @InjectModel(TriageSession.name)
+    private readonly triageSessionModel: Model<TriageSessionDocument>,
     private readonly aiService: AiService,
     private readonly notificationsService: NotificationsService,
+    private readonly outboxService: OutboxService,
+    @Inject(forwardRef(() => OutboxDispatcherService))
+    private readonly outboxDispatcherService: OutboxDispatcherService,
+    private readonly chatService: ChatService,
   ) {}
 
   async createFromTriage(
@@ -87,6 +99,27 @@ export class ConsultationsService {
     return doc._id.toString();
   }
 
+  async createFollowupEscalationConsultation(input: {
+    patientId: string | Types.ObjectId;
+    triageSessionId: string | Types.ObjectId;
+    specialty: Specialty;
+    priority: TriagePriority;
+    sourceFollowupId: Types.ObjectId;
+  }) {
+    const [consultation] = await this.consultationModel.create([
+      {
+        patientId: this.toObjectId(input.patientId),
+        triageSessionId: this.toObjectId(input.triageSessionId),
+        specialty: input.specialty,
+        priority: input.priority,
+        status: 'PENDING',
+        sourceFollowupId: input.sourceFollowupId,
+      },
+    ]);
+
+    return consultation;
+  }
+
   async getQueue(options: { limit?: number; page?: number } = {}) {
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 100);
     const page = Math.max(options.page ?? 1, 1);
@@ -100,16 +133,23 @@ export class ConsultationsService {
       .lean()
       .exec()) as QueueRow[];
 
-    const sorted = [...pendingConsultations].sort((a, b) => {
-      const rankDiff =
+    const sortedPendingConsultations = [...pendingConsultations];
+    sortedPendingConsultations.sort((a, b) => {
+      const priorityRankDifference =
         this.getPriorityRank(a.priority) - this.getPriorityRank(b.priority);
-      if (rankDiff !== 0) return rankDiff;
-      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return tA - tB;
+
+      if (priorityRankDifference !== 0) {
+        return priorityRankDifference;
+      }
+
+      const createdAtA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const createdAtB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return createdAtA - createdAtB;
     });
 
-    const items = sorted.slice(skip, skip + limit).map((row) => ({
+    const queueRows = sortedPendingConsultations.slice(skip, skip + limit);
+
+    const items = queueRows.map((row) => ({
       id: row._id.toString(),
       patientId: row.patientId.toString(),
       triageSessionId: row.triageSessionId.toString(),
@@ -122,26 +162,14 @@ export class ConsultationsService {
     return { items };
   }
 
-  async getById(consultationId: string, doctorId: string) {
-    const consultation = await this.consultationModel
-      .findById(consultationId)
-      .lean()
-      .exec();
-
-    if (!consultation) {
-      throw new NotFoundException('Consulta no encontrada');
-    }
-
-    if (
-      consultation.assignedDoctorId &&
-      consultation.assignedDoctorId.toString() !== doctorId
-    ) {
-      throw new ForbiddenException('Esta consulta está asignada a otro médico');
-    }
-
-    const triageSession = await this.triageSessionModel
+  async getById(consultationId: string, user: RequestUser) {
+    const consultation = await this.findOwnedOrAccessibleConsultation(
+      consultationId,
+      user,
+    );
+    const triage = await this.triageSessionModel
       .findById(consultation.triageSessionId)
-      .select('specialty status answers analysis priority')
+      .select('status answers analysis')
       .lean()
       .exec();
 
@@ -154,93 +182,185 @@ export class ConsultationsService {
       status: consultation.status,
       assignedDoctorId: consultation.assignedDoctorId?.toString(),
       clinicalSummary: consultation.clinicalSummary,
-      closedAt: consultation.closedAt,
-      createdAt: consultation.createdAt,
-      updatedAt: consultation.updatedAt,
-      triage: triageSession
+      closedAt: consultation.closedAt?.toISOString(),
+      updatedAt: consultation.updatedAt?.toISOString(),
+      triage: triage
         ? {
-            status: triageSession.status,
-            answers: triageSession.answers,
-            analysis: triageSession.analysis,
+            status: triage.status,
+            answers: triage.answers?.map((answer) => ({
+              questionId: answer.questionId,
+              questionText: answer.questionText,
+              answerValue: answer.answerValue,
+            })),
+            analysis: triage.analysis
+              ? {
+                  priority: triage.analysis.priority,
+                  redFlags: triage.analysis.redFlags,
+                  aiSummary: triage.analysis.aiSummary,
+                }
+              : null,
+          }
+        : null,
+      summaryFeedback: consultation.summaryFeedback
+        ? {
+            value: consultation.summaryFeedback.value,
+            comment: consultation.summaryFeedback.comment ?? null,
+            createdAt: consultation.summaryFeedback.createdAt.toISOString(),
           }
         : null,
     };
   }
 
-  async assign(consultationId: string, doctorId: string) {
+  async assign(consultationId: string, user: RequestUser) {
+    if (!Types.ObjectId.isValid(user.userId)) {
+      throw new BadRequestException('doctorId invalido');
+    }
+
+    const doctor = await this.doctorModel
+      .findById(user.userId)
+      .select('doctorStatus availabilityStatus')
+      .lean()
+      .exec();
+
+    if (!doctor || doctor.doctorStatus !== DoctorStatus.VERIFIED) {
+      throw new ForbiddenException(
+        'Acceso restringido: verificacion pendiente',
+      );
+    }
+
+    if (doctor.availabilityStatus === 'PAUSED') {
+      throw new ForbiddenException('Debes reanudar tu disponibilidad');
+    }
+
     const consultation = await this.consultationModel
       .findById(consultationId)
       .exec();
-
     if (!consultation) {
       throw new NotFoundException('Consulta no encontrada');
     }
 
     if (consultation.status !== 'PENDING') {
-      throw new ConflictException(
-        `La consulta ya está en estado ${consultation.status}`,
+      throw new BadRequestException(
+        'Solo se pueden asignar consultas pendientes',
       );
     }
 
     consultation.status = 'IN_ATTENTION';
-    consultation.assignedDoctorId = new Types.ObjectId(doctorId);
+    consultation.assignedDoctorId = new Types.ObjectId(user.userId);
+    consultation.assignedAt = new Date();
     await consultation.save();
 
-    this.notifyPatient(
-      consultation.patientId.toString(),
-      'Consulta aceptada',
-      'Un médico está atendiendo tu consulta ahora.',
-    );
+    await this.notificationsService.createUserNotification({
+      userId: consultation.patientId.toString(),
+      type: 'CONSULTATION_ASSIGNED',
+      status: consultation.status,
+      message: 'Un médico está atendiendo tu consulta ahora.',
+      resourceId: consultation.id,
+      deepLink: `/triage/chat/${consultation.id}`,
+      metadata: {
+        consultationId: consultation.id,
+      },
+    });
 
     return {
-      id: consultation._id.toString(),
+      id: consultation.id,
       status: consultation.status,
-      assignedDoctorId: doctorId,
-      updatedAt: consultation.updatedAt,
+      assignedDoctorId: consultation.assignedDoctorId.toString(),
+      updatedAt:
+        consultation.updatedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
 
-  async generateSummary(consultationId: string, doctorId: string) {
+  async close(
+    consultationId: string,
+    user: RequestUser,
+    dto: CloseConsultationDto,
+    correlationId?: string,
+  ) {
     const consultation = await this.consultationModel
       .findById(consultationId)
       .exec();
-
     if (!consultation) {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    if (consultation.assignedDoctorId?.toString() !== doctorId) {
-      throw new ForbiddenException(
-        'Solo el médico asignado puede generar el resumen',
+    this.assertAssignedDoctor(consultation, user);
+
+    if (consultation.status !== 'IN_ATTENTION') {
+      throw new BadRequestException(
+        'Solo se pueden cerrar consultas en atencion',
       );
     }
 
+    consultation.status = 'CLOSED';
+    consultation.closedAt = new Date();
+    consultation.baselineSymptomSeverity = dto.baselineSymptomSeverity;
+    consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
+    await consultation.save();
+
+    await this.notificationsService.createUserNotification({
+      userId: consultation.patientId.toString(),
+      type: 'CONSULTATION_CLOSED',
+      status: consultation.status,
+      message: 'Tu consulta finalizó. Puedes calificar la atención recibida.',
+      resourceId: consultation.id,
+      deepLink: `/consultations/${consultation.id}`,
+      metadata: {
+        consultationId: consultation.id,
+      },
+    });
+
+    await this.outboxService.createConsultationClosedEvent(
+      {
+        consultationId: consultation.id,
+      },
+      correlationId,
+    );
+    await this.outboxDispatcherService.dispatchPendingEvents();
+
+    return {
+      id: consultation.id,
+      status: consultation.status,
+      closedAt: consultation.closedAt.toISOString(),
+    };
+  }
+
+  async generateSummary(consultationId: string, user: RequestUser) {
+    const consultation = await this.consultationModel
+      .findById(consultationId)
+      .exec();
+    if (!consultation) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
+    this.assertAssignedDoctor(consultation, user);
+
     const triageSession = await this.triageSessionModel
       .findById(consultation.triageSessionId)
+      .select('specialty answers analysis')
       .lean()
       .exec();
 
     if (!triageSession) {
-      throw new NotFoundException('Sesión de triage no encontrada');
+      throw new NotFoundException('Triage asociado no encontrado');
     }
 
-    // Build triage context text for Gemini
     const answersText = triageSession.answers
       .map(
-        (a) =>
-          `Pregunta: ${a.questionText}\nRespuesta: ${String(a.answerValue)}`,
+        (answer) =>
+          `Pregunta: ${answer.questionText}\nRespuesta: ${this.formatAnswerValue(answer.answerValue)}`,
       )
       .join('\n\n');
 
     const redFlagsText = triageSession.analysis?.redFlags?.length
       ? `\nSignos de alarma detectados:\n${triageSession.analysis.redFlags
-          .map((rf) => `- [${rf.severity}] ${rf.evidence}`)
+          .map((redFlag) => `- [${redFlag.severity}] ${redFlag.evidence}`)
           .join('\n')}`
       : '\nNo se detectaron signos de alarma.';
 
     const inputText =
       `Especialidad: ${triageSession.specialty}\n` +
-      `Prioridad asignada: ${triageSession.analysis?.priority ?? 'SIN ANALIZAR'}\n\n` +
+      `Prioridad asignada: ${triageSession.analysis?.priority ?? consultation.priority}\n\n` +
       `Respuestas del triage:\n${answersText}` +
       redFlagsText;
 
@@ -254,81 +374,112 @@ export class ConsultationsService {
         correlationId: randomUUID(),
       });
 
-      const summary = result.text?.trim() ?? '';
-      consultation.clinicalSummary = summary;
-      await consultation.save();
-
-      return {
-        consultationId,
-        summary,
-        generatedAt: new Date().toISOString(),
-      };
+      consultation.clinicalSummary = result.text?.trim() ?? '';
     } catch {
-      throw new ServiceUnavailableException(
-        'No fue posible generar el resumen clínico en este momento',
-      );
+      const summaryLines = [
+        `Especialidad: ${triageSession.specialty}`,
+        `Prioridad: ${triageSession.analysis?.priority ?? consultation.priority}`,
+        triageSession.analysis?.aiSummary
+          ? `Resumen IA: ${triageSession.analysis.aiSummary}`
+          : null,
+        triageSession.answers.length > 0
+          ? `Motivo principal: ${this.formatAnswerValue(triageSession.answers[0]?.answerValue)}`
+          : null,
+      ].filter(Boolean);
+
+      consultation.clinicalSummary = summaryLines.join('\n');
+      if (!consultation.clinicalSummary) {
+        throw new ServiceUnavailableException(
+          'No fue posible generar el resumen clínico en este momento',
+        );
+      }
     }
+
+    await consultation.save();
+
+    return {
+      consultationId: consultation.id,
+      summary: consultation.clinicalSummary,
+      generatedAt:
+        consultation.updatedAt?.toISOString() ?? new Date().toISOString(),
+    };
   }
 
-  async close(consultationId: string, doctorId: string) {
+  async submitSummaryFeedback(
+    consultationId: string,
+    user: RequestUser,
+    dto: SummaryFeedbackDto,
+  ) {
     const consultation = await this.consultationModel
       .findById(consultationId)
       .exec();
-
     if (!consultation) {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    if (consultation.assignedDoctorId?.toString() !== doctorId) {
-      throw new ForbiddenException(
-        'Solo el médico asignado puede cerrar la consulta',
-      );
-    }
+    this.assertAssignedDoctor(consultation, user);
 
-    if (consultation.status !== 'IN_ATTENTION') {
-      throw new ConflictException(
-        `La consulta ya está en estado ${consultation.status}`,
-      );
-    }
-
-    consultation.status = 'CLOSED';
-    consultation.closedAt = new Date();
+    consultation.summaryFeedback = {
+      value: dto.value,
+      comment: dto.comment,
+      createdBy: user.userId,
+      createdAt: new Date(),
+    };
     await consultation.save();
 
-    this.notifyPatient(
-      consultation.patientId.toString(),
-      'Consulta finalizada',
-      '¿Cómo fue tu atención? Califica tu experiencia.',
-    );
-
     return {
-      id: consultation._id.toString(),
-      status: consultation.status,
-      closedAt: consultation.closedAt,
+      id: consultation.id,
+      summaryFeedback: {
+        value: consultation.summaryFeedback.value,
+        comment: consultation.summaryFeedback.comment ?? null,
+      },
     };
   }
 
-  async rateConsultation(
+  async getMessages(consultationId: string, user: RequestUser, limit?: number) {
+    return this.chatService.getMessages(consultationId, user, limit);
+  }
+
+  async getDoctorHistory(
+    user: RequestUser,
+    query: ListConsultationsHistoryDto,
+  ) {
+    return this.getHistory(
+      {
+        assignedDoctorId: new Types.ObjectId(user.userId),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      query,
+    );
+  }
+
+  async getPatientHistory(
+    user: RequestUser,
+    query: ListConsultationsHistoryDto,
+  ) {
+    return this.getHistory(
+      {
+        patientId: new Types.ObjectId(user.userId),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      query,
+    );
+  }
+
+  async rate(
     consultationId: string,
-    patientId: string,
+    user: RequestUser,
     dto: RateConsultationDto,
   ) {
     const consultation = await this.consultationModel
       .findById(consultationId)
       .exec();
-
-    if (!consultation) {
+    if (!consultation || consultation.patientId.toString() !== user.userId) {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    if (consultation.patientId.toString() !== patientId) {
-      throw new ForbiddenException('No tienes acceso a esta consulta');
-    }
-
     if (consultation.status !== 'CLOSED') {
-      throw new BadRequestException(
-        'Solo se pueden calificar consultas cerradas',
-      );
+      throw new BadRequestException('Solo puedes calificar consultas cerradas');
     }
 
     if (consultation.rating !== undefined) {
@@ -336,175 +487,145 @@ export class ConsultationsService {
     }
 
     consultation.rating = dto.rating;
-    if (dto.ratingComment) {
-      consultation.ratingComment = dto.ratingComment;
-    }
+    consultation.ratingComment = dto.ratingComment;
     await consultation.save();
 
     return {
-      id: consultation._id.toString(),
+      id: consultation.id,
       rating: consultation.rating,
-      ratingComment: consultation.ratingComment,
+      ratingComment: consultation.ratingComment ?? null,
     };
   }
 
-  async getMessages(consultationId: string, doctorId: string, limit = 50) {
+  async findByIdUnsafe(consultationId: string) {
+    return this.consultationModel.findById(consultationId).exec();
+  }
+
+  private getPriorityRank(priority: TriagePriority): number {
+    if (priority === 'HIGH') {
+      return 0;
+    }
+    if (priority === 'MODERATE') {
+      return 1;
+    }
+    if (priority === 'LOW') {
+      return 2;
+    }
+
+    return 99;
+  }
+
+  private async getHistory(
+    filter: Record<string, unknown>,
+    query: ListConsultationsHistoryDto,
+  ) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.consultationModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.consultationModel.countDocuments(filter),
+    ]);
+
+    return {
+      items: items.map((item) => ({
+        id: item._id.toString(),
+        patientId: item.patientId?.toString(),
+        specialty: item.specialty,
+        priority: item.priority,
+        status: item.status,
+        clinicalSummary: item.clinicalSummary ?? null,
+        rating: item.rating ?? null,
+        ratingComment: item.ratingComment ?? null,
+        createdAt: item.createdAt?.toISOString() ?? null,
+        closedAt: item.closedAt?.toISOString() ?? null,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  private async findOwnedOrAccessibleConsultation(
+    consultationId: string,
+    user: RequestUser,
+  ) {
+    if (!Types.ObjectId.isValid(consultationId)) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
     const consultation = await this.consultationModel
       .findById(consultationId)
-      .lean()
       .exec();
-
     if (!consultation) {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    if (
-      consultation.assignedDoctorId &&
-      consultation.assignedDoctorId.toString() !== doctorId
-    ) {
-      throw new ForbiddenException('Sin acceso a esta consulta');
+    if (user.role === UserRole.ADMIN) {
+      return consultation;
     }
 
-    const messages = await this.messageModel
-      .find({ consultationId: new Types.ObjectId(consultationId) })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean()
-      .exec();
+    if (user.role === UserRole.PATIENT) {
+      if (consultation.patientId.toString() !== user.userId) {
+        throw new ForbiddenException('No puedes acceder a esta consulta');
+      }
+      return consultation;
+    }
 
-    return {
-      items: messages.reverse().map((m) => ({
-        id: m._id.toString(),
-        consultationId: m.consultationId.toString(),
-        senderId: m.senderId.toString(),
-        senderRole: m.senderRole,
-        content: m.content,
-        type: m.type,
-        createdAt: m.createdAt,
-      })),
-      total: messages.length,
-    };
+    if (
+      user.role === UserRole.DOCTOR &&
+      consultation.assignedDoctorId?.toString() !== user.userId
+    ) {
+      throw new ForbiddenException('No puedes acceder a esta consulta');
+    }
+
+    return consultation;
   }
 
-  async getPatientHistory(
-    patientId: string,
-    options: { limit?: number; page?: number; status?: string } = {},
+  private assertAssignedDoctor(
+    consultation: ConsultationDocument,
+    user: RequestUser,
   ) {
-    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
-    const page = Math.max(options.page ?? 1, 1);
-    const skip = (page - 1) * limit;
-
-    const filter: Record<string, unknown> = {
-      patientId: this.toObjectId(patientId),
-    };
-    if (options.status) filter.status = options.status;
-
-    const [items, total] = await Promise.all([
-      this.consultationModel
-        .find(filter)
-        .select(
-          '_id specialty priority status clinicalSummary rating ratingComment createdAt closedAt updatedAt',
-        )
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .exec(),
-      this.consultationModel.countDocuments(filter).exec(),
-    ]);
-
-    return {
-      items: items.map((c) => ({
-        id: c._id.toString(),
-        specialty: c.specialty,
-        priority: c.priority,
-        status: c.status,
-        clinicalSummary: c.clinicalSummary,
-        rating: c.rating,
-        ratingComment: c.ratingComment,
-        createdAt: c.createdAt,
-        closedAt: c.closedAt,
-      })),
-      total,
-      page,
-      limit,
-    };
-  }
-
-  async getDoctorHistory(
-    doctorId: string,
-    options: { limit?: number; page?: number; status?: string } = {},
-  ) {
-    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
-    const page = Math.max(options.page ?? 1, 1);
-    const skip = (page - 1) * limit;
-
-    const filter: Record<string, unknown> = {
-      assignedDoctorId: this.toObjectId(doctorId),
-    };
-    if (options.status) filter.status = options.status;
-
-    const [items, total] = await Promise.all([
-      this.consultationModel
-        .find(filter)
-        .select(
-          '_id patientId specialty priority status clinicalSummary createdAt closedAt',
-        )
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .exec(),
-      this.consultationModel.countDocuments(filter).exec(),
-    ]);
-
-    return {
-      items: items.map((c) => ({
-        id: c._id.toString(),
-        patientId: c.patientId.toString(),
-        specialty: c.specialty,
-        priority: c.priority,
-        status: c.status,
-        clinicalSummary: c.clinicalSummary,
-        createdAt: c.createdAt,
-        closedAt: c.closedAt,
-      })),
-      total,
-      page,
-      limit,
-    };
-  }
-
-  private notifyPatient(patientId: string, title: string, body: string): void {
-    this.patientModel
-      .findById(patientId)
-      .select('expoPushToken')
-      .lean()
-      .exec()
-      .then((patient) => {
-        if (patient?.expoPushToken) {
-          this.notificationsService.sendExpoPush(
-            patient.expoPushToken,
-            title,
-            body,
-          );
-        }
-      })
-      .catch(() => undefined);
-  }
-
-  private getPriorityRank(priority: TriagePriority): number {
-    if (priority === 'HIGH') return 0;
-    if (priority === 'MODERATE') return 1;
-    if (priority === 'LOW') return 2;
-    return 99;
+    if (consultation.assignedDoctorId?.toString() !== user.userId) {
+      throw new ForbiddenException(
+        'Solo el medico asignado puede modificar la consulta',
+      );
+    }
   }
 
   private toObjectId(value: string | Types.ObjectId): Types.ObjectId {
-    if (value instanceof Types.ObjectId) return value;
-    if (!Types.ObjectId.isValid(value)) {
-      throw new BadRequestException('Invalid ObjectId');
+    if (value instanceof Types.ObjectId) {
+      return value;
     }
+
     return new Types.ObjectId(value);
+  }
+
+  private formatAnswerValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return 'No informado';
+    }
+
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint'
+    ) {
+      return String(value);
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'No informado';
+    }
   }
 }

@@ -260,7 +260,7 @@ describe('main bootstrap', () => {
     const [middleware] = app.use.mock.calls[0];
     const res = { setHeader: jest.fn() };
     const next = jest.fn();
-    middleware({} as unknown, res as unknown, next);
+    middleware({} as unknown, res as any, next);
     expect(res.setHeader).toHaveBeenCalledWith(
       'X-Content-Type-Options',
       'nosniff',
