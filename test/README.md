@@ -2,68 +2,112 @@
 
 ## Objetivo
 
-Estrategia E2E para validar comportamiento real de la API y contratos HTTP.
+Arquitectura E2E modular para validar contratos HTTP y flujos cross-module sin mezclar dominios en specs monoliticos.
 
-## Archivos actuales
+## Estructura
 
-- e1.e2e-spec.ts
-- jest-e2e.json
-
-## Dependencias relacionadas
-
-- Supertest + mongodb-memory-server
-- jest-e2e config
-
-## Responsabilidades y limites
-
-- Delimitar alcance tecnico de la carpeta.
-- Mantener contratos y fronteras claras con otros modulos.
-- Reducir errores de implementacion por falta de contexto.
-
-## Que debe ir aqui
-
-- Pruebas E2E por flujo critico y por rol.
-- Casos de error por permisos y validacion.
-- Setup/teardown reproducible.
-
-## Que no debe ir aqui
-
-- Dependencias externas reales en E2E.
-- Asserts ambiguos sin validar contrato.
-- Fixtures gigantes no mantenibles.
-
-## Recomendaciones
-
-- Actualizar este README cuando cambie contrato, limite o flujo.
-- Agregar al menos un ejemplo util por cambio importante.
-- Mantener texto accionable y evitar contenido vacio.
-
-## Matriz de endpoints (si aplica)
-
-- No aplica en este nivel. Si hay endpoints, documentarlos en el modulo padre.
-
-## Ejemplos de codigo/payload
-
-```ts
-// ejemplo minimo de referencia
-export class Example {}
+```text
+test/
+├── e2e/
+│   ├── admin/
+│   ├── auth/
+│   ├── clinical-ai/
+│   ├── consultations/
+│   ├── dashboard/
+│   ├── doctors/
+│   ├── notifications/
+│   ├── patients/
+│   ├── system/
+│   ├── triage/
+│   └── support/
+├── jest-e2e.json
+├── jest.setup.ts
+└── README.md
 ```
+
+## Principios de organizacion
+
+- Un archivo E2E debe pertenecer a un solo bounded context o flujo transversal claramente delimitado.
+- `test/e2e/support/` concentra bootstrap, limpieza de base, builders, contratos y flows reutilizables.
+- Los datos de prueba deben construirse con builders o helpers; no repetir payloads grandes en cada suite.
+- Cada suite debe poder ejecutarse de forma aislada sin depender del orden de otros archivos.
+- La limpieza de estado debe ocurrir en `beforeEach`; el bootstrap de Nest y Mongo solo en `beforeAll`.
+
+## Dominios cubiertos hoy
+
+- `auth/`: registro, login, refresh, logout y `auth/me`.
+- `admin/`: usuarios y controles administrativos.
+- `doctors/`: onboarding, verificacion y reenvio de REThUS.
+- `patients/`: perfil y cambios sensibles de credenciales.
+- `triage/`: sesiones, reanudacion, cancelacion, analisis y fallback IA/rules.
+- `consultations/`: acceso a cola por estado del medico.
+- `notifications/`: inbox y marcacion de lectura.
+- `dashboard/`: metricas de negocio y tecnicas.
+- `clinical-ai/`: health-check administrativo de IA.
+- `system/`: readiness del servicio.
+
+## Dominios pendientes
+
+- `chat/`
+- `followups/`
+- cualquier modulo nuevo debe crear su carpeta dedicada dentro de `test/e2e/`
+
+## Naming conventions
+
+- Carpeta: nombre del dominio o subdominio, en kebab-case.
+- Archivo: `<bounded-context>-<flow>.e2e-spec.ts`.
+- `describe`: `E2E <Domain> / <Capability>`.
+- `it`: comportamiento observable y resultado esperado, sin prefijos redundantes de endpoint cuando no aportan contexto.
+
+## Setup y aislamiento
+
+- `E2eTestContext` encapsula:
+  - `mongodb-memory-server`
+  - bootstrap de Nest
+  - override del `ThrottlerGuard`
+  - restauracion de variables de entorno
+  - limpieza de colecciones
+- `resetState({ seedDefaultAdmin: true })` permite seeds pequeños, deterministas y por necesidad.
+- Evitar fixtures globales gigantes. Sembrar solo los actores requeridos para cada caso.
+
+## Ejecucion parcial
+
+- Suite completa: `npm run test:e2e -- --runInBand`
+- Por dominio:
+  - `npm run test:e2e:auth`
+  - `npm run test:e2e:triage`
+  - `npm run test:e2e:doctors`
+- Ad hoc por carpeta o archivo:
+  - `npm run test:e2e -- test/e2e/triage`
+  - `npm run test:e2e -- test/e2e/patients/patient-profile.e2e-spec.ts`
+
+## Buenas practicas
+
+- Mantener `response.body` tipado en helpers compartidos para evitar `any`.
+- Esperar side effects asincronos con helpers de polling acotados, no con `setTimeout` suelto.
+- No validar detalles internos del framework si el contrato HTTP ya cubre el comportamiento observable.
+- Cuando un flujo depende de IA, usar override del provider a nivel de suite para evitar flakiness.
+- Reservar una suite separada para fallback, otra para IA asistida y otra para lifecycle del dominio.
+
+## CI/CD
+
+- Ejecutar `npx eslint "test/e2e/**/*.ts"` como gate rapido del refactor E2E.
+- Ejecutar `npm run test:e2e -- --runInBand` en entornos con recursos limitados o Windows runners inestables.
+- Para runners mas grandes, paralelizar por dominio con jobs separados (`auth`, `triage`, `patients`, etc.) en lugar de un solo proceso gigantesco.
+- Publicar reportes por carpeta para identificar facilmente el bounded context que falla.
+- Si una suite usa `mongodb-memory-server`, cachear binarios del motor o preparar la descarga en la imagen base del runner para reducir tiempos de cold start.
 
 ## Errores comunes y mitigacion
 
-- Cambiar contrato sin actualizar README y pruebas.
-- Dejar secciones genericas sin contexto.
-- No revisar impacto hacia carpetas consumidoras.
+- Mezclar multiples dominios en un solo spec: mover el caso al bounded context correcto.
+- Repetir bootstrap o seeds manuales: extraer a `support/`.
+- Usar datos estaticos compartidos entre tests: reemplazar con builders `uniqueValue(...)`.
+- Introducir waits arbitrarios: usar polling controlado y con timeout explicito.
 
 ## Checklist de PR
 
-- [ ] Se actualizo README si hubo cambio de alcance/contrato.
-- [ ] Secciones obligatorias completas.
-- [ ] Riesgos y mitigaciones documentados.
-- [ ] Comandos de verificacion ejecutados o validados.
-
-## Comandos de pruebas/lint
-
-- `npm run lint`
-- `npm run test -- --runInBand`
-- `npm run test:e2e -- --runInBand`
+- [ ] La suite nueva vive en la carpeta de dominio correcta.
+- [ ] Se reutilizaron builders/helpers existentes antes de crear otros nuevos.
+- [ ] El caso limpia su estado via `resetState`.
+- [ ] Se documento el dominio si cambia el alcance de cobertura E2E.
+- [ ] Se ejecutaron los comandos de validacion relevantes o se dejo constancia de bloqueo.

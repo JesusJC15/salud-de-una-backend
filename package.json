@@ -19,7 +19,17 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e:auth": "jest --config ./test/jest-e2e.json test/e2e/auth",
+    "test:e2e:admin": "jest --config ./test/jest-e2e.json test/e2e/admin",
+    "test:e2e:doctors": "jest --config ./test/jest-e2e.json test/e2e/doctors",
+    "test:e2e:patients": "jest --config ./test/jest-e2e.json test/e2e/patients",
+    "test:e2e:triage": "jest --config ./test/jest-e2e.json test/e2e/triage",
+    "test:e2e:consultations": "jest --config ./test/jest-e2e.json test/e2e/consultations",
+    "test:e2e:notifications": "jest --config ./test/jest-e2e.json test/e2e/notifications",
+    "test:e2e:dashboard": "jest --config ./test/jest-e2e.json test/e2e/dashboard",
+    "test:e2e:clinical-ai": "jest --config ./test/jest-e2e.json test/e2e/clinical-ai",
+    "test:e2e:system": "jest --config ./test/jest-e2e.json test/e2e/system"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",
