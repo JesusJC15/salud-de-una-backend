@@ -25,6 +25,11 @@ function createFindChain(result: unknown) {
   };
 }
 
+type FetchMock = jest.MockedFunction<typeof fetch>;
+type SendToUserMock = jest.MockedFunction<
+  PushNotificationsService['sendToUser']
+>;
+
 describe('NotificationsService', () => {
   let service: NotificationsService;
   const notificationModel = {
@@ -34,7 +39,7 @@ describe('NotificationsService', () => {
     findOneAndUpdate: jest.fn(),
     updateMany: jest.fn(),
   };
-  const pushNotificationsService = {
+  const pushNotificationsService: { sendToUser: SendToUserMock } = {
     sendToUser: jest.fn(),
   };
 
@@ -110,6 +115,82 @@ describe('NotificationsService', () => {
         'VERIFIED',
       ),
     ).rejects.toThrow('db down');
+  });
+
+  it('createUserNotification should persist and send push when payload includes push data', async () => {
+    notificationModel.create.mockResolvedValue([{}]);
+    pushNotificationsService.sendToUser.mockResolvedValue({
+      sent: 1,
+      removedTokens: [],
+    });
+
+    await service.createUserNotification({
+      userId: new Types.ObjectId().toString(),
+      type: 'CHAT_MESSAGE',
+      status: 'NEW',
+      message: 'Nuevo mensaje',
+      resourceId: 'consultation-1',
+      deepLink: '/consultations/1',
+      push: {
+        title: 'Nuevo mensaje',
+        body: 'Tienes un mensaje',
+        data: { consultationId: 'consultation-1' },
+      },
+    });
+
+    expect(notificationModel.create).toHaveBeenCalled();
+    expect(pushNotificationsService.sendToUser).toHaveBeenCalledTimes(1);
+    const pushCall = pushNotificationsService.sendToUser.mock.calls[0]?.[0];
+    expect(pushCall).toBeDefined();
+    expect(pushCall).toMatchObject({
+      title: 'Nuevo mensaje',
+      body: 'Tienes un mensaje',
+      data: { consultationId: 'consultation-1' },
+    });
+    expect(pushCall?.userId).toEqual(expect.any(String));
+  });
+
+  it('createUserNotification should skip push delivery when push payload is absent', async () => {
+    notificationModel.create.mockResolvedValue([{}]);
+
+    await service.createUserNotification({
+      userId: new Types.ObjectId().toString(),
+      type: 'SYSTEM',
+      status: 'INFO',
+      message: 'Solo inbox',
+    });
+
+    expect(pushNotificationsService.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('createUserNotification should ignore duplicate source event errors', async () => {
+    notificationModel.create.mockRejectedValue({
+      code: 11000,
+      keyPattern: { sourceEventId: 1 },
+    });
+
+    await expect(
+      service.createUserNotification({
+        userId: new Types.ObjectId().toString(),
+        type: 'SYSTEM',
+        status: 'INFO',
+        message: 'Duplicada',
+        sourceEventId: 'event-1',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('createUserNotification should rethrow non-duplicate persistence errors', async () => {
+    notificationModel.create.mockRejectedValue(new Error('db fail'));
+
+    await expect(
+      service.createUserNotification({
+        userId: new Types.ObjectId().toString(),
+        type: 'SYSTEM',
+        status: 'INFO',
+        message: 'Duplicada',
+      }),
+    ).rejects.toThrow('db fail');
   });
 
   it('getMine should return notifications with unread count', async () => {
@@ -318,21 +399,25 @@ describe('NotificationsService', () => {
       globalThis.fetch = originalFetch;
     });
 
-    it('fires a POST to the Expo push endpoint', async () => {
-      globalThis.fetch = jest.fn().mockResolvedValue({ ok: true } as Response);
+    it('fires a POST to the Expo push endpoint', () => {
+      const fetchMock = jest
+        .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+        .mockResolvedValue({ ok: true } as Response);
+      globalThis.fetch = fetchMock as FetchMock;
 
       service.sendExpoPush('ExponentPushToken[abc]', 'Title', 'Body');
 
-      expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://exp.host/push/send',
         expect.objectContaining({ method: 'POST' }),
       );
     });
 
     it('logs a warning when the fetch fails', async () => {
-      globalThis.fetch = jest
-        .fn()
+      const fetchMock = jest
+        .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
         .mockRejectedValue(new Error('network error'));
+      globalThis.fetch = fetchMock as FetchMock;
       const warnSpy = jest
         .spyOn(service['logger'], 'warn')
         .mockImplementation(() => undefined);

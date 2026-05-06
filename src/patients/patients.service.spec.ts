@@ -317,4 +317,73 @@ describe('PatientsService', () => {
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('updatePushToken should append tokens without duplicates', async () => {
+    const patient = createPatientDocument({
+      pushTokens: ['ExponentPushToken[old]'],
+      save: jest.fn().mockResolvedValue(undefined),
+    });
+    patientModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(patient),
+    });
+
+    const result = await service.updatePushToken(
+      {
+        userId: patient.id,
+        email: patient.email,
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      { token: 'ExponentPushToken[new]' },
+    );
+
+    expect(patient.save).toHaveBeenCalled();
+    expect(result).toEqual({
+      updated: true,
+      tokensCount: 2,
+    });
+  });
+
+  it('updatePushToken should throw when patient does not exist', async () => {
+    patientModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.updatePushToken(
+        {
+          userId: 'missing',
+          email: 'missing@example.com',
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        { token: 'ExponentPushToken[new]' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('getTimeline should delegate to patient timeline service', async () => {
+    patientTimelineService.getTimeline.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    const user = {
+      userId: '507f1f77bcf86cd799439011',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    };
+
+    const result = await service.getTimeline(user, user.userId, { limit: 10 });
+
+    expect(patientTimelineService.getTimeline).toHaveBeenCalledWith(
+      user,
+      user.userId,
+      { limit: 10 },
+    );
+    expect(result).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
 });

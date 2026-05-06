@@ -1,5 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import * as bcrypt from 'bcrypt';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Patient } from '../patients/schemas/patient.schema';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -11,6 +12,16 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
 import { ProvisioningService } from './provisioning.service';
+import {
+  ConflictException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+
+jest.mock('bcrypt', () => ({
+  hash: jest.fn(),
+  compare: jest.fn(),
+}));
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -95,10 +106,10 @@ describe('AuthController', () => {
   });
 
   it('loginPatient should map session payload', async () => {
-    const dto = {
+    const dto: LoginDto = {
       email: 'ana@example.com',
       password: 'StrongP@ss1',
-    } as LoginDto;
+    };
     authService.loginPatient.mockResolvedValue({
       accessToken: 'a',
       refreshToken: 'r',
@@ -119,10 +130,10 @@ describe('AuthController', () => {
   });
 
   it('loginStaff should map session payload', async () => {
-    const dto = {
+    const dto: LoginDto = {
       email: 'admin@example.com',
       password: 'AdminP@ss1',
-    } as LoginDto;
+    };
     authService.loginStaff.mockResolvedValue({
       accessToken: 'a',
       refreshToken: 'r',
@@ -143,7 +154,7 @@ describe('AuthController', () => {
   });
 
   it('refresh should call service and map session', async () => {
-    const dto = { refreshToken: 'rt' } as RefreshTokenDto;
+    const dto: RefreshTokenDto = { refreshToken: 'rt' };
     authService.refreshTokens.mockResolvedValue({
       accessToken: 'a2',
       refreshToken: 'r2',
@@ -230,6 +241,17 @@ describe('AuthController', () => {
     });
   });
 
+  it('provisionPatient should fail when Auth0 token has no email', async () => {
+    await expect(
+      controller.provisionPatient(
+        {
+          user: { auth0UserId: 'auth0|abc123', email: undefined },
+        } as never,
+        { firstName: 'Ana', lastName: 'Lopez' },
+      ),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
   it('provisionPatient should return existing patient if already provisioned (idempotent)', async () => {
     const auth0UserId = 'auth0|abc123';
     const email = 'ana@example.com';
@@ -262,5 +284,336 @@ describe('AuthController', () => {
       UserRole.PATIENT,
     );
     expect(result).toMatchObject({ id: 'existing-id' });
+  });
+
+  it('provisionDoctor should reject incomplete doctor payloads', async () => {
+    doctorModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      controller.provisionDoctor(
+        {
+          user: { auth0UserId: 'auth0|doc', email: 'doc@example.com' },
+        } as never,
+        {
+          firstName: 'Laura',
+          lastName: 'Medina',
+        },
+      ),
+    ).rejects.toThrow(
+      'firstName, lastName, specialty, personalId y phoneNumber',
+    );
+  });
+
+  it('provisionDoctor should fail when Auth0 token has no email', async () => {
+    await expect(
+      controller.provisionDoctor(
+        {
+          user: { auth0UserId: 'auth0|doc', email: undefined },
+        } as never,
+        {
+          firstName: 'Laura',
+          lastName: 'Medina',
+          specialty: 'GENERAL_MEDICINE',
+          personalId: 'CC-123',
+          phoneNumber: '3001234567',
+        },
+      ),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('provisionDoctor should return existing doctor when already provisioned', async () => {
+    doctorModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'doctor-existing' },
+        email: 'doc@example.com',
+        firstName: 'Laura',
+        lastName: 'Medina',
+        role: UserRole.DOCTOR,
+        specialty: 'GENERAL_MEDICINE',
+        doctorStatus: 'PENDING',
+      }),
+    });
+
+    const result = await controller.provisionDoctor(
+      {
+        user: { auth0UserId: 'auth0|doc', email: 'doc@example.com' },
+      } as never,
+      {
+        firstName: 'Laura',
+        lastName: 'Medina',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: 'CC-123',
+        phoneNumber: '3001234567',
+      },
+    );
+
+    expect(provisioningService.setUserDbId).toHaveBeenCalledWith(
+      'auth0|doc',
+      'doctor-existing',
+      UserRole.DOCTOR,
+    );
+    expect(doctorModel.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      id: 'doctor-existing',
+      role: UserRole.DOCTOR,
+      specialty: 'GENERAL_MEDICINE',
+    });
+  });
+
+  it('provisionDoctor should reject duplicated personalId', async () => {
+    doctorModel.findOne
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      })
+      .mockReturnValueOnce({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue({ _id: 'existing' }),
+      });
+    authService.ensureEmailIsAvailable.mockResolvedValue(undefined);
+
+    await expect(
+      controller.provisionDoctor(
+        {
+          user: { auth0UserId: 'auth0|doc', email: 'doc@example.com' },
+        } as never,
+        {
+          firstName: 'Laura',
+          lastName: 'Medina',
+          specialty: 'GENERAL_MEDICINE',
+          personalId: 'CC-123',
+          phoneNumber: '3001234567',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('provisionDoctor should create doctor and link Auth0 user', async () => {
+    doctorModel.findOne
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      })
+      .mockReturnValueOnce({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      });
+    authService.ensureEmailIsAvailable.mockResolvedValue(undefined);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-auth0');
+    doctorModel.create.mockResolvedValue({
+      id: 'doctor-1',
+      email: 'doc@example.com',
+      firstName: 'Laura',
+      lastName: 'Medina',
+      role: UserRole.DOCTOR,
+      specialty: 'GENERAL_MEDICINE',
+      doctorStatus: 'PENDING',
+    });
+
+    const result = await controller.provisionDoctor(
+      {
+        user: { auth0UserId: 'auth0|doc', email: 'doc@example.com' },
+      } as never,
+      {
+        firstName: 'Laura',
+        lastName: 'Medina',
+        specialty: 'GENERAL_MEDICINE',
+        personalId: 'CC-123',
+        phoneNumber: '3001234567',
+      },
+    );
+
+    expect(provisioningService.setUserDbId).toHaveBeenCalledWith(
+      'auth0|doc',
+      'doctor-1',
+      UserRole.DOCTOR,
+    );
+    expect(result).toMatchObject({
+      id: 'doctor-1',
+      specialty: 'GENERAL_MEDICINE',
+      role: UserRole.DOCTOR,
+    });
+  });
+
+  it('migrateCheck should reject requests without the migration key', async () => {
+    const previous = process.env.AUTH0_MIGRATION_KEY;
+    process.env.AUTH0_MIGRATION_KEY = 'expected-key';
+
+    await expect(
+      controller.migrateCheck(
+        {
+          headers: { 'x-migration-key': 'wrong-key' },
+        } as never,
+        { email: 'ana@example.com', password: 'StrongP@ss1' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    process.env.AUTH0_MIGRATION_KEY = previous;
+  });
+
+  it('migrateCheck should return the patient payload when credentials match', async () => {
+    const previous = process.env.AUTH0_MIGRATION_KEY;
+    process.env.AUTH0_MIGRATION_KEY = 'expected-key';
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'patient-1' },
+        email: 'ana@example.com',
+        passwordHash: 'hash',
+        firstName: 'Ana',
+        lastName: 'Lopez',
+      }),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    const result = await controller.migrateCheck(
+      {
+        headers: { 'x-migration-key': 'expected-key' },
+      } as never,
+      { email: 'ana@example.com', password: 'StrongP@ss1' },
+    );
+
+    expect(result).toEqual({
+      user_id: 'patient-1',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      firstName: 'Ana',
+      lastName: 'Lopez',
+    });
+    process.env.AUTH0_MIGRATION_KEY = previous;
+  });
+
+  it('migrateCheck should reject invalid patient credentials', async () => {
+    const previous = process.env.AUTH0_MIGRATION_KEY;
+    process.env.AUTH0_MIGRATION_KEY = 'expected-key';
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'patient-1' },
+        email: 'ana@example.com',
+        passwordHash: 'hash',
+        firstName: 'Ana',
+        lastName: 'Lopez',
+      }),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(
+      controller.migrateCheck(
+        {
+          headers: { 'x-migration-key': 'expected-key' },
+        } as never,
+        { email: 'ana@example.com', password: 'WrongPass' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    process.env.AUTH0_MIGRATION_KEY = previous;
+  });
+
+  it('migrateCheck should reject invalid doctor credentials', async () => {
+    const previous = process.env.AUTH0_MIGRATION_KEY;
+    process.env.AUTH0_MIGRATION_KEY = 'expected-key';
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    doctorModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'doctor-1' },
+        email: 'doc@example.com',
+        passwordHash: 'hash',
+        firstName: 'Laura',
+        lastName: 'Medina',
+      }),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(
+      controller.migrateCheck(
+        {
+          headers: { 'x-migration-key': 'expected-key' },
+        } as never,
+        { email: 'doc@example.com', password: 'WrongPass' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    process.env.AUTH0_MIGRATION_KEY = previous;
+  });
+
+  it('migrateCheck should return the doctor payload when patient is not found and doctor matches', async () => {
+    const previous = process.env.AUTH0_MIGRATION_KEY;
+    process.env.AUTH0_MIGRATION_KEY = 'expected-key';
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    doctorModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'doctor-1' },
+        email: 'doc@example.com',
+        passwordHash: 'hash',
+        firstName: 'Laura',
+        lastName: 'Medina',
+      }),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    const result = await controller.migrateCheck(
+      {
+        headers: { 'x-migration-key': 'expected-key' },
+      } as never,
+      { email: 'doc@example.com', password: 'StrongP@ss1' },
+    );
+
+    expect(result).toEqual({
+      user_id: 'doctor-1',
+      email: 'doc@example.com',
+      role: UserRole.DOCTOR,
+      firstName: 'Laura',
+      lastName: 'Medina',
+    });
+    process.env.AUTH0_MIGRATION_KEY = previous;
+  });
+
+  it('migrateCheck should fail when neither patient nor doctor exists', async () => {
+    const previous = process.env.AUTH0_MIGRATION_KEY;
+    process.env.AUTH0_MIGRATION_KEY = 'expected-key';
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    doctorModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      controller.migrateCheck(
+        {
+          headers: { 'x-migration-key': 'expected-key' },
+        } as never,
+        { email: 'ghost@example.com', password: 'StrongP@ss1' },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    process.env.AUTH0_MIGRATION_KEY = previous;
   });
 });

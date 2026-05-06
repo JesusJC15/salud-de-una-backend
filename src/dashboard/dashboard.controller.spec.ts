@@ -7,12 +7,16 @@ describe('DashboardController', () => {
   let service: {
     getTechnicalMetrics: jest.Mock;
     getBusinessMetrics: jest.Mock;
+    getConsultationMetrics: jest.Mock;
+    getAlerts: jest.Mock;
   };
 
   beforeEach(async () => {
     service = {
       getTechnicalMetrics: jest.fn(),
       getBusinessMetrics: jest.fn(),
+      getConsultationMetrics: jest.fn(),
+      getAlerts: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -39,5 +43,23 @@ describe('DashboardController', () => {
 
     expect(service.getBusinessMetrics).toHaveBeenCalled();
     expect(result).toEqual({ kpis: {} });
+  });
+
+  it('getConsultations should call service', async () => {
+    service.getConsultationMetrics.mockResolvedValue({ totalConsultations: 2 });
+
+    const result = await controller.getConsultations();
+
+    expect(service.getConsultationMetrics).toHaveBeenCalled();
+    expect(result).toEqual({ totalConsultations: 2 });
+  });
+
+  it('getAlerts should call service', async () => {
+    service.getAlerts.mockResolvedValue({ items: [] });
+
+    const result = await controller.getAlerts();
+
+    expect(service.getAlerts).toHaveBeenCalled();
+    expect(result).toEqual({ items: [] });
   });
 });

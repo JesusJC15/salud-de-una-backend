@@ -1,3 +1,4 @@
+import { UserRole } from '../common/enums/user-role.enum';
 import { ConsultationsController } from './consultations.controller';
 
 const mockService = {
@@ -7,13 +8,25 @@ const mockService = {
   getById: jest.fn(),
   assign: jest.fn(),
   generateSummary: jest.fn(),
+  submitSummaryFeedback: jest.fn(),
   close: jest.fn(),
-  rateConsultation: jest.fn(),
+  rate: jest.fn(),
   getMessages: jest.fn(),
 };
 
-function makeReq(userId = 'user-1') {
-  return { user: { userId } } as never;
+function makeReq(
+  userId = 'user-1',
+  role: UserRole = UserRole.PATIENT,
+  correlationId = 'corr-1',
+) {
+  return {
+    user: {
+      userId,
+      role,
+      email: `${userId}@test.com`,
+    },
+    correlationId,
+  } as never;
 }
 
 describe('ConsultationsController', () => {
@@ -26,114 +39,145 @@ describe('ConsultationsController', () => {
 
   it('getQueue delegates to service', () => {
     mockService.getQueue.mockReturnValue({ items: [] });
+
     expect(controller.getQueue()).toEqual({ items: [] });
     expect(mockService.getQueue).toHaveBeenCalled();
   });
 
   describe('getPatientHistory', () => {
-    it('passes parsed query params when provided', () => {
-      controller.getPatientHistory('10', '2', 'CLOSED', makeReq('p1'));
-      expect(mockService.getPatientHistory).toHaveBeenCalledWith('p1', {
-        limit: 10,
-        page: 2,
-        status: 'CLOSED',
-      });
-    });
+    it('delegates req.user and query dto as received', () => {
+      const req = makeReq('p1', UserRole.PATIENT);
+      const query = { limit: 10, page: 2, status: 'CLOSED' };
 
-    it('passes undefined when query params are absent', () => {
-      controller.getPatientHistory(
-        undefined as never,
-        undefined as never,
-        undefined as never,
-        makeReq('p1'),
+      void controller.getPatientHistory(req, query);
+
+      expect(mockService.getPatientHistory).toHaveBeenCalledWith(
+        req.user,
+        query,
       );
-      expect(mockService.getPatientHistory).toHaveBeenCalledWith('p1', {
-        limit: undefined,
-        page: undefined,
-        status: undefined,
-      });
     });
 
-    it('passes undefined status when empty string', () => {
-      controller.getPatientHistory('5', '1', '', makeReq('p1'));
-      expect(mockService.getPatientHistory).toHaveBeenCalledWith('p1', {
-        limit: 5,
-        page: 1,
-        status: undefined,
-      });
+    it('passes an empty query object when no filters are provided', () => {
+      const req = makeReq('p1', UserRole.PATIENT);
+      const query = {};
+
+      void controller.getPatientHistory(req, query);
+
+      expect(mockService.getPatientHistory).toHaveBeenCalledWith(
+        req.user,
+        query,
+      );
     });
   });
 
   describe('getDoctorHistory', () => {
-    it('passes parsed query params when provided', () => {
-      controller.getDoctorHistory('20', '3', 'IN_ATTENTION', makeReq('d1'));
-      expect(mockService.getDoctorHistory).toHaveBeenCalledWith('d1', {
-        limit: 20,
-        page: 3,
-        status: 'IN_ATTENTION',
-      });
-    });
+    it('delegates req.user and query dto as received', () => {
+      const req = makeReq('d1', UserRole.DOCTOR);
+      const query = { limit: 20, page: 3, status: 'IN_ATTENTION' };
 
-    it('passes undefined when query params are absent', () => {
-      controller.getDoctorHistory(
-        undefined as never,
-        undefined as never,
-        undefined as never,
-        makeReq('d1'),
+      void controller.getDoctorHistory(req, query);
+
+      expect(mockService.getDoctorHistory).toHaveBeenCalledWith(
+        req.user,
+        query,
       );
-      expect(mockService.getDoctorHistory).toHaveBeenCalledWith('d1', {
-        limit: undefined,
-        page: undefined,
-        status: undefined,
-      });
     });
   });
 
-  it('getById delegates with id and userId', () => {
-    controller.getById('c1', makeReq('d1'));
-    expect(mockService.getById).toHaveBeenCalledWith('c1', 'd1');
+  it('getById delegates with consultationId and req.user', () => {
+    const req = makeReq('d1', UserRole.DOCTOR);
+
+    void controller.getById(req, 'c1');
+
+    expect(mockService.getById).toHaveBeenCalledWith('c1', req.user);
   });
 
-  it('assign delegates with id and userId', () => {
-    controller.assign('c1', makeReq('d1'));
-    expect(mockService.assign).toHaveBeenCalledWith('c1', 'd1');
+  it('assign delegates with consultationId and req.user', () => {
+    const req = makeReq('d1', UserRole.DOCTOR);
+
+    void controller.assign(req, 'c1');
+
+    expect(mockService.assign).toHaveBeenCalledWith('c1', req.user);
   });
 
-  it('generateSummary delegates with id and userId', () => {
-    controller.generateSummary('c1', makeReq('d1'));
-    expect(mockService.generateSummary).toHaveBeenCalledWith('c1', 'd1');
+  it('generateSummary delegates with consultationId and req.user', () => {
+    const req = makeReq('d1', UserRole.DOCTOR);
+
+    void controller.generateSummary(req, 'c1');
+
+    expect(mockService.generateSummary).toHaveBeenCalledWith('c1', req.user);
   });
 
-  it('close delegates with id and userId', () => {
-    controller.close('c1', makeReq('d1'));
-    expect(mockService.close).toHaveBeenCalledWith('c1', 'd1');
+  it('submitSummaryFeedback delegates with consultationId, req.user and dto', () => {
+    const req = makeReq('d1', UserRole.DOCTOR);
+    const dto = { value: 'accepted', comment: 'ok' };
+
+    void controller.submitSummaryFeedback(req, 'c1', dto);
+
+    expect(mockService.submitSummaryFeedback).toHaveBeenCalledWith(
+      'c1',
+      req.user,
+      dto,
+    );
   });
 
-  it('rateConsultation delegates with id, userId, and dto', () => {
-    const dto = { rating: 5 };
-    controller.rateConsultation('c1', dto as never, makeReq('p1'));
-    expect(mockService.rateConsultation).toHaveBeenCalledWith('c1', 'p1', dto);
+  it('close delegates with consultationId, req.user, dto and correlationId', () => {
+    const req = makeReq('d1', UserRole.DOCTOR, 'corr-close');
+    const dto = {
+      baselineSymptomSeverity: 3,
+      redFlagsConfirmed: true,
+    };
+
+    void controller.close(req, 'c1', dto);
+
+    expect(mockService.close).toHaveBeenCalledWith(
+      'c1',
+      req.user,
+      dto,
+      'corr-close',
+    );
+  });
+
+  it('rate delegates with consultationId, req.user and dto', () => {
+    const req = makeReq('p1', UserRole.PATIENT);
+    const dto = { rating: 5, ratingComment: 'Muy buena' };
+
+    void controller.rate(req, 'c1', dto);
+
+    expect(mockService.rate).toHaveBeenCalledWith('c1', req.user, dto);
   });
 
   describe('getMessages', () => {
-    it('passes parsed limit when provided', () => {
-      controller.getMessages('c1', '30', makeReq('d1'));
-      expect(mockService.getMessages).toHaveBeenCalledWith('c1', 'd1', 30);
+    it('passes through the provided limit string converted to number by the controller', () => {
+      const req = makeReq('d1', UserRole.DOCTOR);
+
+      void controller.getMessages(req, 'c1', '30');
+
+      expect(mockService.getMessages).toHaveBeenCalledWith('c1', req.user, 30);
     });
 
-    it('uses default limit 50 when absent', () => {
-      controller.getMessages('c1', undefined as never, makeReq('d1'));
-      expect(mockService.getMessages).toHaveBeenCalledWith('c1', 'd1', 50);
+    it('passes undefined when the limit query is absent', () => {
+      const req = makeReq('d1', UserRole.DOCTOR);
+
+      void controller.getMessages(req, 'c1');
+
+      expect(mockService.getMessages).toHaveBeenCalledWith(
+        'c1',
+        req.user,
+        undefined,
+      );
     });
 
-    it('clamps limit to 100', () => {
-      controller.getMessages('c1', '999', makeReq('d1'));
-      expect(mockService.getMessages).toHaveBeenCalledWith('c1', 'd1', 100);
-    });
+    it('passes NaN when the limit query is non-numeric', () => {
+      const req = makeReq('d1', UserRole.DOCTOR);
 
-    it('falls back to 50 when limit is non-numeric', () => {
-      controller.getMessages('c1', 'abc', makeReq('d1'));
-      expect(mockService.getMessages).toHaveBeenCalledWith('c1', 'd1', 50);
+      void controller.getMessages(req, 'c1', 'abc');
+
+      expect(mockService.getMessages).toHaveBeenCalledWith(
+        'c1',
+        req.user,
+        Number.NaN,
+      );
     });
   });
 });
