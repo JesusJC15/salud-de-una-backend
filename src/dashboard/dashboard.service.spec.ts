@@ -1,5 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Consultation } from '../consultations/schemas/consultation.schema';
 import { DashboardService } from './dashboard.service';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { Notification } from '../notifications/schemas/notification.schema';
@@ -11,6 +12,7 @@ describe('DashboardService', () => {
   const doctorModel = { aggregate: jest.fn() };
   const patientModel = { aggregate: jest.fn() };
   const notificationModel = { aggregate: jest.fn() };
+  const consultationModel = { aggregate: jest.fn(), countDocuments: jest.fn() };
   const technicalMetricsService = {
     record: jest.fn(),
     getSummary: jest.fn(),
@@ -25,6 +27,10 @@ describe('DashboardService', () => {
         {
           provide: getModelToken(Notification.name),
           useValue: notificationModel,
+        },
+        {
+          provide: getModelToken(Consultation.name),
+          useValue: consultationModel,
         },
         {
           provide: TechnicalMetricsService,

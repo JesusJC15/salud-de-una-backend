@@ -23,6 +23,7 @@ import {
   RefreshSession,
   RefreshSessionDocument,
 } from './schemas/refresh-session.schema';
+import { ProvisioningService } from './provisioning.service';
 
 type AuthUser = {
   id: string;
@@ -62,6 +63,7 @@ export class AuthService {
     private readonly refreshSessionModel: Model<RefreshSessionDocument>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly provisioningService: ProvisioningService,
   ) {}
 
   async registerPatient(dto: RegisterPatientDto) {
@@ -76,6 +78,14 @@ export class AuthService {
       birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
       gender: dto.gender,
     });
+
+    // Best-effort: mirror the patient in Auth0 so they can log in via
+    // Auth0 immediately after manual registration. Never blocks the response.
+    await this.provisioningService.createAuth0UserFromManualRegistration(
+      patient.email,
+      dto.password,
+      patient.id,
+    );
 
     return {
       id: patient.id,

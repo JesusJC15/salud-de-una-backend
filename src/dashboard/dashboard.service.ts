@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import {
+  Consultation,
+  ConsultationDocument,
+} from '../consultations/schemas/consultation.schema';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import {
@@ -20,6 +24,8 @@ export class DashboardService {
     private readonly doctorModel: Model<DoctorDocument>,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    @InjectModel(Consultation.name)
+    private readonly consultationModel: Model<ConsultationDocument>,
     private readonly technicalMetricsService: TechnicalMetricsService,
   ) {}
 
@@ -29,6 +35,151 @@ export class DashboardService {
 
   async getTechnicalMetrics() {
     return this.technicalMetricsService.getSummary();
+  }
+
+  async getConsultationMetrics() {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const SLA_LIMIT_MS = 120 * 60 * 1000; // 2 hours
+
+    const [statusAgg, closedLast7Agg, timingAgg, specialtyAgg, topDoctorsAgg] =
+      await Promise.all([
+        // 1 — count by status
+        this.consultationModel.aggregate([
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]),
+
+        // 2 — closed consultations in last 7 days
+        this.consultationModel.countDocuments({
+          status: 'CLOSED',
+          closedAt: { $gte: sevenDaysAgo },
+        }),
+
+        // 3 — avg attention time + SLA compliance (only CLOSED with closedAt)
+        this.consultationModel.aggregate([
+          {
+            $match: {
+              status: 'CLOSED',
+              closedAt: { $exists: true, $ne: null },
+            },
+          },
+          {
+            $project: {
+              durationMs: { $subtract: ['$closedAt', '$createdAt'] },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              avgMs: { $avg: '$durationMs' },
+              total: { $sum: 1 },
+              slaOk: {
+                $sum: {
+                  $cond: [{ $lte: ['$durationMs', SLA_LIMIT_MS] }, 1, 0],
+                },
+              },
+            },
+          },
+        ]),
+
+        // 4 — total + closed by specialty
+        this.consultationModel.aggregate([
+          {
+            $group: {
+              _id: '$specialty',
+              total: { $sum: 1 },
+              closed: {
+                $sum: { $cond: [{ $eq: ['$status', 'CLOSED'] }, 1, 0] },
+              },
+            },
+          },
+          { $sort: { total: -1 } },
+        ]),
+
+        // 5 — top 5 doctors by closed consultations
+        this.consultationModel.aggregate([
+          {
+            $match: {
+              status: 'CLOSED',
+              assignedDoctorId: { $exists: true, $ne: null },
+            },
+          },
+          { $group: { _id: '$assignedDoctorId', closed: { $sum: 1 } } },
+          { $sort: { closed: -1 } },
+          { $limit: 5 },
+          {
+            $lookup: {
+              from: 'doctors',
+              localField: '_id',
+              foreignField: '_id',
+              as: 'doctor',
+            },
+          },
+          { $unwind: { path: '$doctor', preserveNullAndEmptyArrays: true } },
+          {
+            $project: {
+              _id: 0,
+              doctorId: { $toString: '$_id' },
+              name: {
+                $cond: [
+                  { $gt: ['$doctor', null] },
+                  { $concat: ['$doctor.firstName', ' ', '$doctor.lastName'] },
+                  'Médico desconocido',
+                ],
+              },
+              specialty: '$doctor.specialty',
+              closed: 1,
+            },
+          },
+        ]),
+      ]);
+
+    // Build status breakdown map
+    const statusMap: Record<string, number> = {};
+    for (const row of statusAgg as { _id: string; count: number }[]) {
+      statusMap[row._id] = row.count;
+    }
+
+    const timingRow = (timingAgg[0] ?? {}) as {
+      avgMs?: number;
+      total?: number;
+      slaOk?: number;
+    };
+    const closedTotal = timingRow.total ?? 0;
+    const avgAttentionMs = timingRow.avgMs ?? 0;
+    const slaOk = timingRow.slaOk ?? 0;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      statusBreakdown: {
+        pending: statusMap['PENDING'] ?? 0,
+        inAttention: statusMap['IN_ATTENTION'] ?? 0,
+        closed: statusMap['CLOSED'] ?? 0,
+      },
+      totalConsultations:
+        (statusMap['PENDING'] ?? 0) +
+        (statusMap['IN_ATTENTION'] ?? 0) +
+        (statusMap['CLOSED'] ?? 0),
+      closedLast7Days: closedLast7Agg,
+      avgAttentionTimeMinutes:
+        closedTotal > 0 ? Math.round(avgAttentionMs / 60_000) : null,
+      slaCompliance:
+        closedTotal > 0
+          ? Number(((slaOk / closedTotal) * 100).toFixed(1))
+          : null,
+      bySpecialty: (
+        specialtyAgg as { _id: string; total: number; closed: number }[]
+      ).map((row) => ({
+        specialty: row._id,
+        total: row.total,
+        closed: row.closed,
+      })),
+      topDoctors: topDoctorsAgg as {
+        doctorId: string;
+        name: string;
+        specialty?: string;
+        closed: number;
+      }[],
+    };
   }
 
   async getBusinessMetrics() {

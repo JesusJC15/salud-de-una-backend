@@ -1373,7 +1373,6 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .set('Authorization', `Bearer ${session.accessToken}`)
       .send({
         email: 'patient-email-new@example.com',
-        currentPassword: 'StrongP@ss1',
       })
       .expect(200);
 
@@ -1470,12 +1469,11 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       .set('Authorization', `Bearer ${patientToken}`)
       .send({
         email: 'patient-email-taken-2@example.com',
-        currentPassword: 'StrongP@ss1',
       })
       .expect(409);
   });
 
-  it('PUT /v1/patients/me should change password and revoke previous refresh sessions', async () => {
+  it('PUT /v1/patients/me should reject unknown fields like password (Auth0 migration)', async () => {
     await request(app.getHttpServer()).post('/v1/auth/patient/register').send({
       firstName: 'Lina',
       lastName: 'Suarez',
@@ -1483,41 +1481,22 @@ describe('Epic 1 HU-001/HU-002 (e2e)', () => {
       password: 'StrongP@ss1',
     });
 
-    const session = await loginSession(
+    const patientToken = await login(
       'patient-password-change@example.com',
       'StrongP@ss1',
       'patient',
     );
 
+    // Password management was migrated to Auth0 — these fields are no longer
+    // accepted by the profile update endpoint.
     await request(app.getHttpServer())
       .put('/v1/patients/me')
-      .set('Authorization', `Bearer ${session.accessToken}`)
+      .set('Authorization', `Bearer ${patientToken}`)
       .send({
         currentPassword: 'StrongP@ss1',
         newPassword: 'NuevaP@ss2',
       })
-      .expect(200);
-
-    await request(app.getHttpServer())
-      .post('/v1/auth/patient/login')
-      .send({
-        email: 'patient-password-change@example.com',
-        password: 'StrongP@ss1',
-      })
-      .expect(401);
-
-    await request(app.getHttpServer())
-      .post('/v1/auth/patient/login')
-      .send({
-        email: 'patient-password-change@example.com',
-        password: 'NuevaP@ss2',
-      })
-      .expect(200);
-
-    await request(app.getHttpServer())
-      .post('/v1/auth/refresh')
-      .send({ refreshToken: session.refreshToken })
-      .expect(401);
+      .expect(400);
   });
 
   it('POST /v1/auth/refresh should rotate session when refresh token is provided', async () => {

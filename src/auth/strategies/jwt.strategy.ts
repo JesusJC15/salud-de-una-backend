@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import * as jwksRsa from 'jwks-rsa';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Admin, AdminDocument } from '../../admins/schemas/admin.schema';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
@@ -63,6 +63,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     if (!dbId) {
       throw new UnauthorizedException('Usuario no aprovisionado');
+    }
+
+    if (!Types.ObjectId.isValid(dbId)) {
+      throw new UnauthorizedException('ID de usuario invalido en token');
     }
 
     if (!role || !Object.values(UserRole).includes(role)) {

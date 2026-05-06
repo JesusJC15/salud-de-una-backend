@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -77,6 +78,13 @@ export class AuthController {
       .exec();
 
     if (existing) {
+      // Patient already in MongoDB — link the Auth0 user to the existing profile
+      // and ensure the role is assigned in Auth0 (idempotent).
+      await this.provisioningService.setUserDbId(
+        auth0UserId,
+        existing._id?.toString() ?? (existing as { id?: string }).id ?? '',
+        UserRole.PATIENT,
+      );
       return this.toPatientProvisionResponse(existing);
     }
 
@@ -123,7 +131,27 @@ export class AuthController {
       .exec();
 
     if (existing) {
+      // Doctor already in MongoDB — link the Auth0 user to the existing profile
+      // and ensure the DOCTOR role is assigned in Auth0 (idempotent).
+      await this.provisioningService.setUserDbId(
+        auth0UserId,
+        existing._id?.toString() ?? (existing as { id?: string }).id ?? '',
+        UserRole.DOCTOR,
+      );
       return this.toDoctorProvisionResponse(existing);
+    }
+
+    // Creating a new doctor profile — all fields are required.
+    if (
+      !dto.firstName ||
+      !dto.lastName ||
+      !dto.specialty ||
+      !dto.personalId ||
+      !dto.phoneNumber
+    ) {
+      throw new BadRequestException(
+        'firstName, lastName, specialty, personalId y phoneNumber son obligatorios para registrar un nuevo médico',
+      );
     }
 
     await this.authService.ensureEmailIsAvailable(email);

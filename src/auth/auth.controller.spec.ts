@@ -254,7 +254,13 @@ describe('AuthController', () => {
     );
 
     expect(patientModel.create).not.toHaveBeenCalled();
-    expect(provisioningService.setUserDbId).not.toHaveBeenCalled();
+    // setUserDbId is called even for existing patients to ensure the Auth0
+    // user is linked to the MongoDB profile (idempotent operation).
+    expect(provisioningService.setUserDbId).toHaveBeenCalledWith(
+      'auth0|abc123',
+      'existing-id',
+      UserRole.PATIENT,
+    );
     expect(result).toMatchObject({ id: 'existing-id' });
   });
 });

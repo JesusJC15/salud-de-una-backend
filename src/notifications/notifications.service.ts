@@ -144,6 +144,19 @@ export class NotificationsService {
     };
   }
 
+  sendExpoPush(token: string, title: string, body: string): void {
+    fetch('https://exp.host/push/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ to: token, title, body, sound: 'default' }),
+    }).catch((error: unknown) => {
+      this.logger.warn(`Expo push failed: ${String(error)}`);
+    });
+  }
+
   private isDuplicateSourceEvent(error: unknown): boolean {
     if (
       typeof error === 'object' &&

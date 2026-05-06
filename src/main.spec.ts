@@ -17,6 +17,10 @@ jest.mock('@nestjs/core', () => ({
   },
 }));
 
+jest.mock('@nestjs/platform-socket.io', () => ({
+  IoAdapter: jest.fn().mockImplementation(() => ({})),
+}));
+
 type ConfigValue = string | string[] | undefined;
 type CorsOriginCallback = (err: Error | null, allow?: boolean) => void;
 type CorsOptions = {
@@ -38,6 +42,7 @@ type AppMock = {
   use: jest.Mock<void, [SecurityMiddleware]>;
   useGlobalPipes: jest.Mock<void, [unknown]>;
   useGlobalFilters: jest.Mock<void, [unknown]>;
+  useWebSocketAdapter: jest.Mock;
   listen: jest.Mock<Promise<void>, [number]>;
 };
 type ConfigServiceMock = {
@@ -64,6 +69,7 @@ function createBootstrapContext(
     use: jest.fn<void, [SecurityMiddleware]>(),
     useGlobalPipes: jest.fn<void, [unknown]>(),
     useGlobalFilters: jest.fn<void, [unknown]>(),
+    useWebSocketAdapter: jest.fn(),
     listen: jest.fn<Promise<void>, [number]>().mockResolvedValue(undefined),
   };
   const configService: ConfigServiceMock = {

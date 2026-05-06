@@ -268,6 +268,28 @@ describe('PatientsService', () => {
     expect(authService.revokeAllRefreshSessionsForUser).not.toHaveBeenCalled();
   });
 
+  it('updateMe should throw ConflictException on duplicate email', async () => {
+    const patient = createPatientDocument({
+      save: jest
+        .fn()
+        .mockRejectedValue({ code: 11000, keyPattern: { email: 1 } }),
+    });
+    patientModel.findById.mockReturnValue(createDocumentQuery(patient));
+    mockSession();
+
+    await expect(
+      service.updateMe(
+        {
+          userId: patient.id,
+          email: patient.email,
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        { email: 'taken@example.com' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it('updateMe should throw NotFoundException when patient not found', async () => {
     patientModel.findById.mockReturnValue(createDocumentQuery(null));
     mockSession();
