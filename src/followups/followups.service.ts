@@ -16,7 +16,11 @@ import {
 } from '../triage/schemas/triage-session.schema';
 import { SubmitFollowupDto } from './dto/submit-followup.dto';
 import { FOLLOWUPS_QUEUE } from './followups.constants';
-import { Followup, FollowupDocument } from './schemas/followup.schema';
+import {
+  Followup,
+  FollowupDocument,
+  FollowupStatus,
+} from './schemas/followup.schema';
 
 @Injectable()
 export class FollowupsService {
@@ -66,7 +70,7 @@ export class FollowupsService {
     return created;
   }
 
-  async getMine(user: RequestUser, status?: string) {
+  async getMine(user: RequestUser, status?: FollowupStatus) {
     const items = await this.followupModel
       .find({
         patientId: new Types.ObjectId(user.userId),

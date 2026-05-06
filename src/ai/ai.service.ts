@@ -228,7 +228,7 @@ export class AiService {
     try {
       await this.auditLogModel.create({
         provider: payload.provider,
-        model: payload.model,
+        model: payload.model ?? 'unknown',
         promptKey: payload.promptKey,
         promptVersion: payload.promptVersion,
         actorId: payload.actorId,
@@ -240,7 +240,7 @@ export class AiService {
         sanitizedInputSummary: payload.sanitizedInputSummary,
         sanitizedOutputSummary: payload.sanitizedOutputSummary,
         tokenUsage: payload.tokenUsage,
-      });
+      } as any);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Failed to persist AI audit log: ${message}`);

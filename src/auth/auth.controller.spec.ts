@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
+import { UserRole } from '../common/enums/user-role.enum';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -157,10 +158,10 @@ describe('AuthController', () => {
       user: {
         userId: 'p1',
         email: 'ana@example.com',
-        role: 'PATIENT',
+        role: UserRole.PATIENT,
         isActive: true,
       },
-    });
+    } as unknown as any);
 
     expect(result).toEqual({
       user: { id: 'p1', email: 'ana@example.com', role: 'PATIENT' },

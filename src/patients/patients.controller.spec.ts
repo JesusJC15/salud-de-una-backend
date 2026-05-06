@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PatientsController } from './patients.controller';
+import { UserRole } from '../common/enums/user-role.enum';
 import { PatientsService } from './patients.service';
 
 describe('PatientsController', () => {
@@ -27,10 +28,10 @@ describe('PatientsController', () => {
       user: {
         userId: 'p1',
         email: 'ana@example.com',
-        role: 'PATIENT',
+        role: UserRole.PATIENT,
         isActive: true,
       },
-    });
+    } as unknown as any);
 
     expect(service.getMe).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'p1' }),
@@ -46,10 +47,10 @@ describe('PatientsController', () => {
         user: {
           userId: 'p1',
           email: 'ana@example.com',
-          role: 'PATIENT',
+          role: UserRole.PATIENT,
           isActive: true,
         },
-      },
+      } as unknown as any,
       { firstName: 'Laura' },
     );
 

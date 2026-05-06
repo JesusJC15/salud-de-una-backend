@@ -220,7 +220,7 @@ export class TriageService {
     const patientId = new Types.ObjectId(user.userId);
     const query = {
       patientId,
-      status: 'IN_PROGRESS',
+      status: 'IN_PROGRESS' as TriageSessionStatus,
       ...(specialty ? { specialty } : {}),
     };
 
@@ -229,7 +229,9 @@ export class TriageService {
       .sort({ createdAt: -1 })
       .exec();
 
-    const items = sessions.map((session) => this.toActiveSessionSummary(session));
+    const items = sessions.map((session) =>
+      this.toActiveSessionSummary(session),
+    );
 
     return {
       items,
@@ -254,7 +256,9 @@ export class TriageService {
     const triageSession = await this.getOwnedSession(sessionId, user);
 
     if (triageSession.status !== 'IN_PROGRESS') {
-      throw new BadRequestException('Solo se pueden cancelar sesiones en progreso');
+      throw new BadRequestException(
+        'Solo se pueden cancelar sesiones en progreso',
+      );
     }
 
     const canceledAt = new Date();
@@ -436,7 +440,8 @@ export class TriageService {
         errorCode: TRIAGE_ANALYSIS_ERROR_CODES.RULESET_MISSING,
         specialty: triageSession.specialty,
         sessionId: triageSession._id.toString(),
-        message: 'No fue posible completar el analisis de triage en este momento',
+        message:
+          'No fue posible completar el analisis de triage en este momento',
       });
     }
 
@@ -507,7 +512,8 @@ export class TriageService {
           errorCode: TRIAGE_ANALYSIS_ERROR_CODES.DEPENDENCY_UNAVAILABLE,
           specialty: triageSession.specialty,
           sessionId: triageSession._id.toString(),
-          message: 'No fue posible completar el analisis de triage en este momento',
+          message:
+            'No fue posible completar el analisis de triage en este momento',
         });
       }
     }
@@ -614,7 +620,11 @@ export class TriageService {
   }
 
   private async analyzeGeneralMedicineWithResilience(
-    answers: { questionId: string; questionText: string; answerValue: unknown }[],
+    answers: {
+      questionId: string;
+      questionText: string;
+      answerValue: unknown;
+    }[],
     redFlags: RedFlag[],
     user: RequestUser,
     correlationId: string | undefined,
@@ -627,7 +637,11 @@ export class TriageService {
   }> {
     let lastError: unknown;
 
-    for (let attempt = 1; attempt <= TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS.length + 1; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS.length + 1;
+      attempt += 1
+    ) {
       try {
         const aiResult = await this.geminiTriageService.analyzeTriage(
           answers,
@@ -725,7 +739,8 @@ export class TriageService {
 
   private isTransientAiError(error: unknown): boolean {
     const normalizedError = this.normalizeError(error);
-    const signal = `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
+    const signal =
+      `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
 
     return [
       'timeout',
@@ -745,7 +760,8 @@ export class TriageService {
 
   private isAiUnavailableByDesign(error: unknown): boolean {
     const normalizedError = this.normalizeError(error);
-    const signal = `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
+    const signal =
+      `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
 
     return [
       'ai provider is disabled',
@@ -915,7 +931,8 @@ export class TriageService {
       specialty,
       existingSessionId,
       status: 'IN_PROGRESS',
-      message: 'Ya existe una sesion de triage en progreso para esta especialidad',
+      message:
+        'Ya existe una sesion de triage en progreso para esta especialidad',
     });
   }
 

@@ -3,6 +3,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { SubmitFollowupDto } from './dto/submit-followup.dto';
+import { FollowupStatus } from './schemas/followup.schema';
 import { FollowupsService } from './followups.service';
 
 @Controller('followups')
@@ -12,7 +13,11 @@ export class FollowupsController {
   @Get('mine')
   @Roles(UserRole.PATIENT)
   getMine(@Req() req: RequestContext, @Query('status') status?: string) {
-    return this.followupsService.getMine(req.user!, status);
+    return this.followupsService.getMine(
+      req.user!,
+      // Query params are strings; cast to FollowupStatus for the service
+      status as unknown as FollowupStatus,
+    );
   }
 
   @Get(':followupId')

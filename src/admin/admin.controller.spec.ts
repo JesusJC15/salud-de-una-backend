@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserRole } from '../common/enums/user-role.enum';
+import { ProgramType } from '../common/enums/program-type.enum';
+import { TitleObtainingOrigin } from '../common/enums/title-obtaining-origin.enum';
+import { RethusState } from '../common/enums/rethus-state.enum';
+import { RethusDecisionAction } from './dto/rethus-decision.dto';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
@@ -56,11 +60,11 @@ describe('AdminController', () => {
   it('verifyDoctorLegacy should call service', async () => {
     service.verifyDoctor.mockResolvedValue({ doctorId: 'd1' });
     const dto: RethusVerifyDto = {
-      programType: 'UNIVERSITY',
-      titleObtainingOrigin: 'LOCAL',
+      programType: ProgramType.UNIVERSITY,
+      titleObtainingOrigin: TitleObtainingOrigin.LOCAL,
       professionOccupation: 'MEDICO GENERAL',
       startDate: '2024-01-15',
-      rethusState: 'VALID',
+      rethusState: RethusState.VALID,
       administrativeAct: 'ACT-2026-001',
       reportingEntity: 'MINISTERIO DE SALUD',
     };
@@ -69,10 +73,10 @@ describe('AdminController', () => {
       user: {
         userId: 'a1',
         email: 'admin@example.com',
-        role: 'ADMIN',
+        role: UserRole.ADMIN,
         isActive: true,
       },
-    });
+    } as unknown as any);
 
     expect(service.verifyDoctor).toHaveBeenCalledWith(
       'd1',
@@ -87,15 +91,15 @@ describe('AdminController', () => {
     service.verifyDoctor.mockResolvedValue({ doctorId: 'd1' });
     const result = await controller.verifyDoctor(
       'd1',
-      { action: 'APPROVE', notes: 'ok' },
+      { action: RethusDecisionAction.APPROVE, notes: 'ok' },
       {
         user: {
           userId: 'a1',
           email: 'admin@example.com',
-          role: 'ADMIN',
+          role: UserRole.ADMIN,
           isActive: true,
         },
-      },
+      } as unknown as any,
     );
 
     expect(service.verifyDoctor).toHaveBeenCalledWith(
