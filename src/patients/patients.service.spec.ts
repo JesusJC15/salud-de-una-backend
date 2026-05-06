@@ -8,6 +8,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
+import { PatientTimelineService } from './patient-timeline.service';
 import { PatientsService } from './patients.service';
 import { Patient } from './schemas/patient.schema';
 
@@ -64,6 +65,9 @@ describe('PatientsService', () => {
     ensureEmailIsAvailable: jest.Mock;
     revokeAllRefreshSessionsForUser: jest.Mock;
   };
+  let patientTimelineService: {
+    getTimeline: jest.Mock;
+  };
 
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockReset();
@@ -81,6 +85,9 @@ describe('PatientsService', () => {
       ensureEmailIsAvailable: jest.fn(),
       revokeAllRefreshSessionsForUser: jest.fn(),
     };
+    patientTimelineService = {
+      getTimeline: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -88,6 +95,10 @@ describe('PatientsService', () => {
         { provide: getConnectionToken(), useValue: connection },
         { provide: getModelToken(Patient.name), useValue: patientModel },
         { provide: AuthService, useValue: authService },
+        {
+          provide: PatientTimelineService,
+          useValue: patientTimelineService,
+        },
       ],
     }).compile();
 

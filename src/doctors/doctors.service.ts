@@ -71,6 +71,7 @@ export class DoctorsService {
       role: doctor.role,
       specialty: doctor.specialty,
       doctorStatus: doctor.doctorStatus,
+      availabilityStatus: doctor.availabilityStatus ?? 'AVAILABLE',
       verification: verification
         ? {
             programType: verification.programType,
@@ -86,6 +87,20 @@ export class DoctorsService {
             notes: verification.notes,
           }
         : null,
+    };
+  }
+
+  async updateAvailability(user: RequestUser, status: 'AVAILABLE' | 'PAUSED') {
+    const doctor = await this.doctorModel.findById(user.userId).exec();
+    if (!doctor) {
+      throw new NotFoundException('Medico no encontrado');
+    }
+
+    doctor.availabilityStatus = status;
+    await doctor.save();
+
+    return {
+      availabilityStatus: doctor.availabilityStatus,
     };
   }
 

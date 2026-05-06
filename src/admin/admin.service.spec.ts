@@ -8,6 +8,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { Admin } from '../admins/schemas/admin.schema';
 import { RefreshSession } from '../auth/schemas/refresh-session.schema';
+import { Consultation } from '../consultations/schemas/consultation.schema';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { RethusState } from '../common/enums/rethus-state.enum';
 import { Specialty } from '../common/enums/specialty.enum';
@@ -20,6 +21,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { Patient } from '../patients/schemas/patient.schema';
 import { AdminService } from './admin.service';
 import { ListDoctorsForReviewDto } from './dto/list-doctors-for-review.dto';
+import { RethusDecisionAction } from './dto/rethus-decision.dto';
 import { RethusVerifyDto } from './dto/rethus-verify.dto';
 
 describe('AdminService', () => {
@@ -66,6 +68,10 @@ describe('AdminService', () => {
 
   const refreshSessionModelMock = {
     updateMany: jest.fn(),
+  };
+
+  const consultationModelMock = {
+    find: jest.fn(),
   };
 
   const outboxServiceMock = {
@@ -129,6 +135,10 @@ describe('AdminService', () => {
         {
           provide: getModelToken(RefreshSession.name),
           useValue: refreshSessionModelMock,
+        },
+        {
+          provide: getModelToken(Consultation.name),
+          useValue: consultationModelMock,
         },
         {
           provide: OutboxService,
@@ -206,209 +216,209 @@ describe('AdminService', () => {
   });
 
   it('should map compact decision dto to verification state', async () => {
-  const doctorDocument = {
-    id: validDoctorId,
-    _id: new Types.ObjectId(validDoctorId),
-    doctorStatus: 'PENDING',
-    save: jest.fn().mockResolvedValue(undefined),
-  };
-  doctorModelMock.findById.mockReturnValue({
-    session: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(doctorDocument),
-  });
-  rethusVerificationModelMock.findOne.mockReturnValue({
-    sort: jest.fn().mockReturnThis(),
-    session: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(null),
-  });
-  rethusVerificationModelMock.create.mockResolvedValue([
-    {
-      _id: 'verification-id',
-      programType: 'UNDEFINED',
-      titleObtainingOrigin: 'LOCAL',
-      professionOccupation: 'PENDIENTE DE ACTUALIZACION',
-      startDate: new Date('1970-01-01'),
-      rethusState: 'EXPIRED',
-      administrativeAct: 'N/A',
-      reportingEntity: 'N/A',
-    },
-  ]);
-
-  const result = await service.verifyDoctor(
-    validDoctorId,
-    { action: 'REJECT', notes: 'faltan soportes' },
-    actor,
-  );
-
-  expect(result.doctorStatus).toBe(DoctorStatus.REJECTED);
-  expect(rethusVerificationModelMock.create).toHaveBeenCalledWith(
-    [
-      expect.objectContaining({
+    const doctorDocument = {
+      id: validDoctorId,
+      _id: new Types.ObjectId(validDoctorId),
+      doctorStatus: 'PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+    rethusVerificationModelMock.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    rethusVerificationModelMock.create.mockResolvedValue([
+      {
+        _id: 'verification-id',
+        programType: 'UNDEFINED',
+        titleObtainingOrigin: 'LOCAL',
+        professionOccupation: 'PENDIENTE DE ACTUALIZACION',
+        startDate: new Date('1970-01-01'),
         rethusState: 'EXPIRED',
-        notes: 'faltan soportes',
-      }),
-    ],
-    { session: sessionMock },
-  );
-});
+        administrativeAct: 'N/A',
+        reportingEntity: 'N/A',
+      },
+    ]);
 
-it('should reuse latest verification data when approving compact decision dto', async () => {
-  const doctorDocument = {
-    id: validDoctorId,
-    _id: new Types.ObjectId(validDoctorId),
-    doctorStatus: 'PENDING',
-    save: jest.fn().mockResolvedValue(undefined),
-  };
-  doctorModelMock.findById.mockReturnValue({
-    session: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(doctorDocument),
+    const result = (await service.verifyDoctor(
+      validDoctorId,
+      { action: RethusDecisionAction.REJECT, notes: 'faltan soportes' },
+      actor,
+    )) as { doctorStatus: DoctorStatus };
+
+    expect(result.doctorStatus).toBe(DoctorStatus.REJECTED);
+    expect(rethusVerificationModelMock.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          rethusState: 'EXPIRED',
+          notes: 'faltan soportes',
+        }),
+      ],
+      { session: sessionMock },
+    );
   });
-  rethusVerificationModelMock.findOne.mockReturnValue({
-    sort: jest.fn().mockReturnThis(),
-    session: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue({
-      programType: 'TECHNICAL',
-      titleObtainingOrigin: 'FOREIGN',
-      professionOccupation: 'ODONTOLOGO',
-      startDate: new Date('2020-04-01'),
-      administrativeAct: 'ACT-OLD',
-      reportingEntity: 'SECRETARIA',
-    }),
-  });
-  rethusVerificationModelMock.create.mockResolvedValue([
-    {
-      _id: 'verification-id',
-      programType: 'TECHNICAL',
-      titleObtainingOrigin: 'FOREIGN',
-      professionOccupation: 'ODONTOLOGO',
-      startDate: new Date('2020-04-01'),
-      rethusState: 'VALID',
-      administrativeAct: 'ACT-OLD',
-      reportingEntity: 'SECRETARIA',
-    },
-  ]);
 
-  const result = await service.verifyDoctor(
-    validDoctorId,
-    { action: 'APPROVE', notes: 'aprobado' },
-    actor,
-  );
-
-  expect(result.doctorStatus).toBe(DoctorStatus.VERIFIED);
-  expect(rethusVerificationModelMock.create).toHaveBeenCalledWith(
-    [
-      expect.objectContaining({
+  it('should reuse latest verification data when approving compact decision dto', async () => {
+    const doctorDocument = {
+      id: validDoctorId,
+      _id: new Types.ObjectId(validDoctorId),
+      doctorStatus: 'PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+    rethusVerificationModelMock.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
         programType: 'TECHNICAL',
         titleObtainingOrigin: 'FOREIGN',
-        rethusState: 'VALID',
+        professionOccupation: 'ODONTOLOGO',
+        startDate: new Date('2020-04-01'),
+        administrativeAct: 'ACT-OLD',
+        reportingEntity: 'SECRETARIA',
       }),
-    ],
-    { session: sessionMock },
-  );
-});
+    });
+    rethusVerificationModelMock.create.mockResolvedValue([
+      {
+        _id: 'verification-id',
+        programType: 'TECHNICAL',
+        titleObtainingOrigin: 'FOREIGN',
+        professionOccupation: 'ODONTOLOGO',
+        startDate: new Date('2020-04-01'),
+        rethusState: 'VALID',
+        administrativeAct: 'ACT-OLD',
+        reportingEntity: 'SECRETARIA',
+      },
+    ]);
 
-it('should map pending rethus state to pending doctor status', async () => {
-  const doctorDocument = {
-    id: validDoctorId,
-    _id: new Types.ObjectId(validDoctorId),
-    doctorStatus: 'PENDING',
-    save: jest.fn().mockResolvedValue(undefined),
-  };
+    const result = (await service.verifyDoctor(
+      validDoctorId,
+      { action: RethusDecisionAction.APPROVE, notes: 'aprobado' },
+      actor,
+    )) as { doctorStatus: DoctorStatus };
 
-  doctorModelMock.findById.mockReturnValue({
-    session: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(doctorDocument),
-  });
-  rethusVerificationModelMock.findOne.mockReturnValue({
-    sort: jest.fn().mockReturnThis(),
-    session: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(null),
-  });
-  rethusVerificationModelMock.create.mockResolvedValue([
-    {
-      _id: 'verification-id',
-      programType: 'UNIVERSITY',
-      titleObtainingOrigin: 'LOCAL',
-      professionOccupation: 'MEDICO GENERAL',
-      startDate: new Date('2024-01-15'),
-      rethusState: 'PENDING',
-      administrativeAct: 'ACT-2026-001',
-      reportingEntity: 'MINISTERIO DE SALUD',
-    },
-  ]);
-
-  const result = await service.verifyDoctor(
-    validDoctorId,
-    {
-      ...dto,
-      rethusState: RethusState.PENDING,
-    },
-    actor,
-  );
-
-  expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
-});
-
-it('should fail with internal error when transaction callback produces no response', async () => {
-  sessionMock.withTransaction.mockImplementation(async () => undefined);
-
-  await expect(
-    service.verifyDoctor(validDoctorId, dto, actor),
-  ).rejects.toBeInstanceOf(InternalServerErrorException);
-
-  expect(sessionMock.endSession).toHaveBeenCalled();
-});
-
-it('should throw BadRequestException when doctorId is invalid', async () => {
-  await expect(
-    service.verifyDoctor('invalid-id', dto, actor),
-  ).rejects.toBeInstanceOf(BadRequestException);
-});
-
-it('should throw NotFoundException when doctor does not exist', async () => {
-  doctorModelMock.findById.mockReturnValue({
-    session: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(null),
+    expect(result.doctorStatus).toBe(DoctorStatus.VERIFIED);
+    expect(rethusVerificationModelMock.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          programType: 'TECHNICAL',
+          titleObtainingOrigin: 'FOREIGN',
+          rethusState: 'VALID',
+        }),
+      ],
+      { session: sessionMock },
+    );
   });
 
-  await expect(
-    service.verifyDoctor(validDoctorId, dto, actor),
-  ).rejects.toBeInstanceOf(NotFoundException);
+  it('should map pending rethus state to pending doctor status', async () => {
+    const doctorDocument = {
+      id: validDoctorId,
+      _id: new Types.ObjectId(validDoctorId),
+      doctorStatus: 'PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
 
-  expect(sessionMock.endSession).toHaveBeenCalled();
-});
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+    rethusVerificationModelMock.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    rethusVerificationModelMock.create.mockResolvedValue([
+      {
+        _id: 'verification-id',
+        programType: 'UNIVERSITY',
+        titleObtainingOrigin: 'LOCAL',
+        professionOccupation: 'MEDICO GENERAL',
+        startDate: new Date('2024-01-15'),
+        rethusState: 'PENDING',
+        administrativeAct: 'ACT-2026-001',
+        reportingEntity: 'MINISTERIO DE SALUD',
+      },
+    ]);
 
-it('should map unexpected errors to InternalServerErrorException', async () => {
-  const doctorDocument = {
-    id: validDoctorId,
-    _id: new Types.ObjectId(validDoctorId),
-    doctorStatus: 'PENDING',
-    save: jest.fn().mockResolvedValue(undefined),
-  };
+    const result = (await service.verifyDoctor(
+      validDoctorId,
+      {
+        ...dto,
+        rethusState: RethusState.PENDING,
+      },
+      actor,
+    )) as { doctorStatus: DoctorStatus };
 
-  doctorModelMock.findById.mockReturnValue({
-    session: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(doctorDocument),
+    expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
   });
-  rethusVerificationModelMock.findOne.mockReturnValue({
-    sort: jest.fn().mockReturnThis(),
-    session: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(null),
-  });
-  rethusVerificationModelMock.create.mockRejectedValue(
-    new Error('db failure'),
-  );
 
-  await expect(
-    service.verifyDoctor(validDoctorId, dto, actor),
-  ).rejects.toBeInstanceOf(InternalServerErrorException);
-  expect(sessionMock.endSession).toHaveBeenCalled();
-});
-  
+  it('should fail with internal error when transaction callback produces no response', async () => {
+    sessionMock.withTransaction.mockResolvedValue(undefined);
+
+    await expect(
+      service.verifyDoctor(validDoctorId, dto, actor),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+
+    expect(sessionMock.endSession).toHaveBeenCalled();
+  });
+
+  it('should throw BadRequestException when doctorId is invalid', async () => {
+    await expect(
+      service.verifyDoctor('invalid-id', dto, actor),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('should throw NotFoundException when doctor does not exist', async () => {
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.verifyDoctor(validDoctorId, dto, actor),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(sessionMock.endSession).toHaveBeenCalled();
+  });
+
+  it('should map unexpected errors to InternalServerErrorException', async () => {
+    const doctorDocument = {
+      id: validDoctorId,
+      _id: new Types.ObjectId(validDoctorId),
+      doctorStatus: 'PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    doctorModelMock.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+    rethusVerificationModelMock.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    rethusVerificationModelMock.create.mockRejectedValue(
+      new Error('db failure'),
+    );
+
+    await expect(
+      service.verifyDoctor(validDoctorId, dto, actor),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(sessionMock.endSession).toHaveBeenCalled();
+  });
+
   describe('listDoctorsForReview', () => {
     const setupFindMock = () => {
       rethusVerificationModelMock.aggregate.mockReturnValue({
@@ -448,7 +458,7 @@ it('should map unexpected errors to InternalServerErrorException', async () => {
     });
 
     it('should apply no $or filter when search is absent', async () => {
-  setupFindMock();
+      setupFindMock();
 
       doctorModelMock.find.mockReturnValue({
         sort: jest.fn().mockReturnThis(),
@@ -482,7 +492,7 @@ it('should map unexpected errors to InternalServerErrorException', async () => {
 
       expect(rethusVerificationModelMock.aggregate).not.toHaveBeenCalled();
     });
-    
+
     it('should apply filters and map latest verification + status summary', async () => {
       const doctorAId = new Types.ObjectId();
       const doctorBId = new Types.ObjectId();
@@ -686,7 +696,7 @@ it('should map unexpected errors to InternalServerErrorException', async () => {
     expect(orItems[2].email?.source).toBe('\\.\\*admin');
     expect(result.items[0].role).toBe(UserRole.ADMIN);
   });
-  
+
   it('updateUserActive should revoke sessions when disabling user', async () => {
     const doctorId = new Types.ObjectId().toString();
     const saveMock = jest.fn().mockResolvedValue(undefined);
@@ -710,132 +720,137 @@ it('should map unexpected errors to InternalServerErrorException', async () => {
     expect(refreshSessionModelMock.updateMany).toHaveBeenCalled();
     expect(result).toMatchObject({ id: doctorId, isActive: false });
   });
-  
-  
+
   it('updateUserActive should revoke sessions when disabling user', async () => {
-  const doctorId = new Types.ObjectId().toString();
-  const saveMock = jest.fn().mockResolvedValue(undefined);
-  doctorModelMock.findById.mockReturnValue({
-    exec: jest.fn().mockResolvedValue({
-      id: doctorId,
+    const doctorId = new Types.ObjectId().toString();
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    doctorModelMock.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        id: doctorId,
+        isActive: true,
+        updatedAt: new Date('2026-03-20'),
+        save: saveMock,
+      }),
+    });
+    refreshSessionModelMock.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    const result = await service.updateUserActive(UserRole.DOCTOR, doctorId, {
+      isActive: false,
+    });
+
+    expect(saveMock).toHaveBeenCalled();
+    expect(refreshSessionModelMock.updateMany).toHaveBeenCalled();
+    expect(result).toMatchObject({ id: doctorId, isActive: false });
+  });
+
+  it('updateUserActive should not revoke sessions when enabling user', async () => {
+    const patientId = new Types.ObjectId().toString();
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    patientModelMock.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        id: patientId,
+        isActive: false,
+        save: saveMock,
+      }),
+    });
+
+    const result = await service.updateUserActive(UserRole.PATIENT, patientId, {
       isActive: true,
-      updatedAt: new Date('2026-03-20'),
-      save: saveMock,
-    }),
-  });
-  refreshSessionModelMock.updateMany.mockReturnValue({
-    exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-  });
+    });
 
-  const result = await service.updateUserActive(UserRole.DOCTOR, doctorId, {
-    isActive: false,
+    expect(saveMock).toHaveBeenCalled();
+    expect(refreshSessionModelMock.updateMany).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ id: patientId, isActive: true });
   });
 
-  expect(saveMock).toHaveBeenCalled();
-  expect(refreshSessionModelMock.updateMany).toHaveBeenCalled();
-  expect(result).toMatchObject({ id: doctorId, isActive: false });
-});
-
-it('updateUserActive should not revoke sessions when enabling user', async () => {
-  const patientId = new Types.ObjectId().toString();
-  const saveMock = jest.fn().mockResolvedValue(undefined);
-  patientModelMock.findById.mockReturnValue({
-    exec: jest.fn().mockResolvedValue({
-      id: patientId,
-      isActive: false,
-      save: saveMock,
-    }),
+  it('updateUserActive should throw when user id is invalid', async () => {
+    await expect(
+      service.updateUserActive(UserRole.PATIENT, 'invalid-id', {
+        isActive: false,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  const result = await service.updateUserActive(UserRole.PATIENT, patientId, {
-    isActive: true,
+  it('updateUserActive should throw when user does not exist', async () => {
+    adminModelMock.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.updateUserActive(
+        UserRole.ADMIN,
+        new Types.ObjectId().toString(),
+        {
+          isActive: false,
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  expect(saveMock).toHaveBeenCalled();
-  expect(refreshSessionModelMock.updateMany).not.toHaveBeenCalled();
-  expect(result).toMatchObject({ id: patientId, isActive: true });
-});
-
-it('updateUserActive should throw when user id is invalid', async () => {
-  await expect(
-    service.updateUserActive(UserRole.PATIENT, 'invalid-id', {
-      isActive: false,
-    }),
-  ).rejects.toBeInstanceOf(BadRequestException);
-});
-
-it('updateUserActive should throw when user does not exist', async () => {
-  adminModelMock.findById.mockReturnValue({
-    exec: jest.fn().mockResolvedValue(null),
+  it('getUserByRole should throw on invalid user id', async () => {
+    await expect(
+      service.getUserByRole(UserRole.ADMIN, 'invalid-id'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  await expect(
-    service.updateUserActive(UserRole.ADMIN, new Types.ObjectId().toString(), {
-      isActive: false,
-    }),
-  ).rejects.toBeInstanceOf(NotFoundException);
-});
+  it('getUserByRole should map patient payload', async () => {
+    const patientId = new Types.ObjectId();
+    patientModelMock.findById.mockReturnValue({
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: patientId,
+        firstName: 'Patient',
+        lastName: 'Test',
+        email: 'patient@test.com',
+        isActive: true,
+        birthDate: null,
+      }),
+    });
 
-it('getUserByRole should throw on invalid user id', async () => {
-  await expect(
-    service.getUserByRole(UserRole.ADMIN, 'invalid-id'),
-  ).rejects.toBeInstanceOf(BadRequestException);
-});
+    const result = await service.getUserByRole(
+      UserRole.PATIENT,
+      patientId.toString(),
+    );
 
-it('getUserByRole should map patient payload', async () => {
-  const patientId = new Types.ObjectId();
-  patientModelMock.findById.mockReturnValue({
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue({
-      _id: patientId,
-      firstName: 'Patient',
-      lastName: 'Test',
-      email: 'patient@test.com',
-      isActive: true,
+    expect(result).toMatchObject({
+      role: UserRole.PATIENT,
       birthDate: null,
-    }),
+    });
   });
 
-  const result = await service.getUserByRole(
-    UserRole.PATIENT,
-    patientId.toString(),
-  );
+  it('getUserByRole should map admin payload', async () => {
+    const adminId = new Types.ObjectId();
+    adminModelMock.findById.mockReturnValue({
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: adminId,
+        firstName: 'Admin',
+        lastName: 'Test',
+        email: 'admin@test.com',
+        isActive: true,
+      }),
+    });
 
-  expect(result).toMatchObject({
-    role: UserRole.PATIENT,
-    birthDate: null,
-  });
-});
+    const result = await service.getUserByRole(
+      UserRole.ADMIN,
+      adminId.toString(),
+    );
 
-it('getUserByRole should map admin payload', async () => {
-  const adminId = new Types.ObjectId();
-  adminModelMock.findById.mockReturnValue({
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue({
-      _id: adminId,
-      firstName: 'Admin',
-      lastName: 'Test',
+    expect(result).toMatchObject({
+      role: UserRole.ADMIN,
       email: 'admin@test.com',
-      isActive: true,
-    }),
+    });
   });
-
-  const result = await service.getUserByRole(UserRole.ADMIN, adminId.toString());
-
-  expect(result).toMatchObject({
-    role: UserRole.ADMIN,
-    email: 'admin@test.com',
-  });
-});
 
   it('getUserByRole should throw when user does not exist', async () => {
-  doctorModelMock.findById.mockReturnValue({
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(null),
+    doctorModelMock.findById.mockReturnValue({
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    await expect(
+      service.getUserByRole(UserRole.DOCTOR, new Types.ObjectId().toString()),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
-  await expect(
-    service.getUserByRole(UserRole.DOCTOR, new Types.ObjectId().toString()),
-  ).rejects.toBeInstanceOf(NotFoundException);
-});
-
 });

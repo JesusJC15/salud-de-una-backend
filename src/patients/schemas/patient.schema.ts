@@ -16,6 +16,9 @@ export class Patient {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
 
+  @Prop({ unique: true, sparse: true, index: true, trim: true })
+  auth0Subject?: string;
+
   @Prop({ required: true, select: false })
   passwordHash!: string;
 
@@ -30,6 +33,9 @@ export class Patient {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ type: [String], default: [] })
+  pushTokens!: string[];
 
   createdAt?: Date;
   updatedAt?: Date;

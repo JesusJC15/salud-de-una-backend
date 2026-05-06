@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req } from '@nestjs/common';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
@@ -23,5 +23,14 @@ export class DoctorsController {
       dto,
       req.correlationId,
     );
+  }
+
+  @Patch('me/availability')
+  @Roles(UserRole.DOCTOR)
+  updateAvailability(
+    @Body() dto: { status: 'AVAILABLE' | 'PAUSED' },
+    @Req() req: RequestContext,
+  ) {
+    return this.doctorsService.updateAvailability(req.user!, dto.status);
   }
 }

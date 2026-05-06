@@ -5,6 +5,10 @@ import {
   RefreshSession,
   RefreshSessionSchema,
 } from '../auth/schemas/refresh-session.schema';
+import {
+  Consultation,
+  ConsultationSchema,
+} from '../consultations/schemas/consultation.schema';
 import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 import {
   RethusVerification,
@@ -24,6 +28,7 @@ import { AdminService } from './admin.service';
       { name: Patient.name, schema: PatientSchema },
       { name: Admin.name, schema: AdminSchema },
       { name: RefreshSession.name, schema: RefreshSessionSchema },
+      { name: Consultation.name, schema: ConsultationSchema },
     ]),
   ],
   controllers: [AdminController],

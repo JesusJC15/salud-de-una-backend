@@ -18,4 +18,16 @@ export class DashboardController {
   getBusiness() {
     return this.dashboardService.getBusinessMetrics();
   }
+
+  @Get('consultations')
+  @Roles(UserRole.ADMIN)
+  getConsultations() {
+    return this.dashboardService.getConsultationMetrics();
+  }
+
+  @Get('alerts')
+  @Roles(UserRole.ADMIN)
+  getAlerts() {
+    return this.dashboardService.getAlerts();
+  }
 }

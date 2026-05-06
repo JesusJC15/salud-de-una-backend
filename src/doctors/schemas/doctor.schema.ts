@@ -17,6 +17,9 @@ export class Doctor {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
 
+  @Prop({ unique: true, sparse: true, index: true, trim: true })
+  auth0Subject?: string;
+
   @Prop({ required: true, select: false })
   passwordHash!: string;
 
@@ -40,6 +43,9 @@ export class Doctor {
 
   @Prop({ type: Types.ObjectId, ref: 'RethusVerification' })
   rethusVerification?: Types.ObjectId;
+
+  @Prop({ enum: ['AVAILABLE', 'PAUSED'], default: 'AVAILABLE' })
+  availabilityStatus!: 'AVAILABLE' | 'PAUSED';
 
   @Prop({ default: true })
   isActive!: boolean;

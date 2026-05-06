@@ -1,22 +1,53 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Consultation } from '../consultations/schemas/consultation.schema';
 import { DashboardService } from './dashboard.service';
 import { Doctor } from '../doctors/schemas/doctor.schema';
+import { Followup } from '../followups/schemas/followup.schema';
 import { Notification } from '../notifications/schemas/notification.schema';
 import { Patient } from '../patients/schemas/patient.schema';
 import { TechnicalMetricsService } from './metrics/technical-metrics.service';
+import { TriageSession } from '../triage/schemas/triage-session.schema';
 
 describe('DashboardService', () => {
   let service: DashboardService;
   const doctorModel = { aggregate: jest.fn() };
   const patientModel = { aggregate: jest.fn() };
   const notificationModel = { aggregate: jest.fn() };
+  const consultationQuery = {
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: jest.fn(),
+  };
+  const triageSessionQuery = {
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: jest.fn(),
+  };
+  const followupQuery = {
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: jest.fn(),
+  };
+  const consultationModel = {
+    find: jest.fn().mockReturnValue(consultationQuery),
+  };
+  const triageSessionModel = {
+    find: jest.fn().mockReturnValue(triageSessionQuery),
+  };
+  const followupModel = {
+    find: jest.fn().mockReturnValue(followupQuery),
+  };
   const technicalMetricsService = {
     record: jest.fn(),
     getSummary: jest.fn(),
   };
 
   beforeEach(async () => {
+    consultationQuery.exec.mockResolvedValue([]);
+    triageSessionQuery.exec.mockResolvedValue([]);
+    followupQuery.exec.mockResolvedValue([]);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DashboardService,
@@ -25,6 +56,18 @@ describe('DashboardService', () => {
         {
           provide: getModelToken(Notification.name),
           useValue: notificationModel,
+        },
+        {
+          provide: getModelToken(Consultation.name),
+          useValue: consultationModel,
+        },
+        {
+          provide: getModelToken(TriageSession.name),
+          useValue: triageSessionModel,
+        },
+        {
+          provide: getModelToken(Followup.name),
+          useValue: followupModel,
         },
         {
           provide: TechnicalMetricsService,

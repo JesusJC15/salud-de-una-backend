@@ -1,8 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DoctorStatus } from '../common/enums/doctor-status.enum';
+import { FollowupsService } from '../followups/followups.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { DOCTOR_VERIFICATION_CHANGED_EVENT } from './outbox.constants';
-import { OutboxService } from './outbox.service';
+import {
+  CONSULTATION_CLOSED_EVENT,
+  DOCTOR_VERIFICATION_CHANGED_EVENT,
+} from './outbox.constants';
+import {
+  ConsultationClosedPayload,
+  DoctorVerificationChangedPayload,
+  OutboxService,
+} from './outbox.service';
 
 @Injectable()
 export class DomainEventsHandlerService {
@@ -11,6 +18,7 @@ export class DomainEventsHandlerService {
   constructor(
     private readonly outboxService: OutboxService,
     private readonly notificationsService: NotificationsService,
+    private readonly followupsService: FollowupsService,
   ) {}
 
   async processOutboxEventById(eventId: string): Promise<void> {
@@ -19,32 +27,45 @@ export class DomainEventsHandlerService {
       return;
     }
 
-    const payload = event.payload as {
-      doctorId?: string;
-      doctorStatus?: DoctorStatus;
-      notes?: string;
-    };
+    const payload = event.payload as
+      | DoctorVerificationChangedPayload
+      | ConsultationClosedPayload;
 
-    if (event.eventType !== DOCTOR_VERIFICATION_CHANGED_EVENT) {
-      const message = `Unhandled outbox event type: ${event.eventType}`;
-      this.logger.warn(`Outbox event ${event.id} failed: ${message}`);
-      throw new Error(message);
+    if (event.eventType === DOCTOR_VERIFICATION_CHANGED_EVENT) {
+      const doctorPayload = payload as DoctorVerificationChangedPayload;
+      if (!doctorPayload.doctorId || !doctorPayload.doctorStatus) {
+        const message = `Invalid payload for outbox event ${event.id}`;
+        this.logger.warn(`Outbox event ${event.id} failed: ${message}`);
+        throw new Error(message);
+      }
+
+      await this.notificationsService.createDoctorStatusChange(
+        doctorPayload.doctorId,
+        doctorPayload.doctorStatus,
+        doctorPayload.notes,
+        undefined,
+        { sourceEventId: event.id },
+      );
+      await this.outboxService.markProcessed(event.id);
+      return;
     }
 
-    if (!payload.doctorId || !payload.doctorStatus) {
-      const message = `Invalid payload for outbox event ${event.id}`;
-      this.logger.warn(`Outbox event ${event.id} failed: ${message}`);
-      throw new Error(message);
+    if (event.eventType === CONSULTATION_CLOSED_EVENT) {
+      const consultationPayload = payload as ConsultationClosedPayload;
+      const consultationId = consultationPayload.consultationId;
+      if (typeof consultationId !== 'string' || consultationId.length === 0) {
+        const message = `Invalid payload for outbox event ${event.id}`;
+        this.logger.warn(`Outbox event ${event.id} failed: ${message}`);
+        throw new Error(message);
+      }
+
+      await this.followupsService.handleConsultationClosedEvent(consultationId);
+      await this.outboxService.markProcessed(event.id);
+      return;
     }
 
-    await this.notificationsService.createDoctorStatusChange(
-      payload.doctorId,
-      payload.doctorStatus,
-      payload.notes,
-      undefined,
-      { sourceEventId: event.id },
-    );
-
-    await this.outboxService.markProcessed(event.id);
+    const message = `Unhandled outbox event type: ${event.eventType}`;
+    this.logger.warn(`Outbox event ${event.id} failed: ${message}`);
+    throw new Error(message);
   }
 }

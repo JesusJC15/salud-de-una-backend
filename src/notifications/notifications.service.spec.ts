@@ -2,6 +2,8 @@ import { NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { UserRole } from '../common/enums/user-role.enum';
+import { PushNotificationsService } from './push-notifications.service';
 import { NotificationsService } from './notifications.service';
 import { Notification } from './schemas/notification.schema';
 
@@ -32,6 +34,9 @@ describe('NotificationsService', () => {
     findOneAndUpdate: jest.fn(),
     updateMany: jest.fn(),
   };
+  const pushNotificationsService = {
+    sendToUser: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -41,6 +46,10 @@ describe('NotificationsService', () => {
         {
           provide: getModelToken(Notification.name),
           useValue: notificationModel,
+        },
+        {
+          provide: PushNotificationsService,
+          useValue: pushNotificationsService,
         },
       ],
     }).compile();
@@ -123,7 +132,7 @@ describe('NotificationsService', () => {
       {
         userId: new Types.ObjectId().toString(),
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       },
       true,
@@ -156,7 +165,7 @@ describe('NotificationsService', () => {
       {
         userId: new Types.ObjectId().toString(),
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       },
       false,
@@ -182,7 +191,7 @@ describe('NotificationsService', () => {
       {
         userId: new Types.ObjectId().toString(),
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       },
       false,
@@ -197,7 +206,7 @@ describe('NotificationsService', () => {
       service.markAsRead('invalid', {
         userId: new Types.ObjectId().toString(),
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -213,7 +222,7 @@ describe('NotificationsService', () => {
       service.markAsRead(new Types.ObjectId().toString(), {
         userId: new Types.ObjectId().toString(),
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -233,7 +242,7 @@ describe('NotificationsService', () => {
     const result = await service.markAsRead(id.toString(), {
       userId: new Types.ObjectId().toString(),
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
 
@@ -251,7 +260,7 @@ describe('NotificationsService', () => {
     const result = await service.markAllAsRead({
       userId: new Types.ObjectId().toString(),
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
 
@@ -273,7 +282,7 @@ describe('NotificationsService', () => {
       {
         userId: new Types.ObjectId().toString(),
         email: 'doc@example.com',
-        role: 'DOCTOR',
+        role: UserRole.DOCTOR,
         isActive: true,
       },
       false,
@@ -295,7 +304,7 @@ describe('NotificationsService', () => {
     const result = await service.markAsRead(id.toString(), {
       userId: new Types.ObjectId().toString(),
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
     expect(result.read).toBe(true);
@@ -309,7 +318,7 @@ describe('NotificationsService', () => {
     const result = await service.markAllAsRead({
       userId: new Types.ObjectId().toString(),
       email: 'doc@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
       isActive: true,
     });
     expect(result.updatedCount).toBe(0);

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConnectionOptions, Queue } from 'bullmq';
+import { FollowupsModule } from '../followups/followups.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { REDIS_CONNECTION_OPTIONS } from '../redis/redis.constants';
 import {
@@ -17,6 +18,7 @@ import { OutboxEvent, OutboxEventSchema } from './schemas/outbox-event.schema';
 @Module({
   imports: [
     NotificationsModule,
+    FollowupsModule,
     MongooseModule.forFeature([
       { name: OutboxEvent.name, schema: OutboxEventSchema },
     ]),

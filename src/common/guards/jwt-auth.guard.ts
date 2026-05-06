@@ -5,16 +5,18 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AuthGuard } from '@nestjs/passport';
+import { AuthService } from '../../auth/auth.service';
+import { RequestContext } from '../interfaces/request-context.interface';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') implements CanActivate {
-  constructor(private readonly reflector: Reflector) {
-    super();
-  }
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly authService: AuthService,
+  ) {}
 
-  canActivate(context: ExecutionContext) {
+  async canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -24,20 +26,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') implements CanActivate {
       return true;
     }
 
-    return super.canActivate(context);
-  }
-
-  handleRequest<TUser = unknown>(
-    err: unknown,
-    user: TUser,
-    info: unknown,
-  ): TUser {
-    void info;
-    if (err || !user) {
-      throw err instanceof Error
-        ? err
-        : new UnauthorizedException('No autorizado');
+    const request = context.switchToHttp().getRequest<RequestContext>();
+    const authorization = request.headers?.authorization?.trim();
+    if (!authorization?.toLowerCase().startsWith('bearer ')) {
+      throw new UnauthorizedException('No autorizado');
     }
-    return user;
+
+    const token = authorization.slice(7).trim();
+    if (!token) {
+      throw new UnauthorizedException('No autorizado');
+    }
+
+    request.user = await this.authService.authenticateAccessToken(token);
+    return true;
   }
 }

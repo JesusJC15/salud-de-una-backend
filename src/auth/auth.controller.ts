@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -14,6 +15,8 @@ import { AuthMeResponseDto } from './dto/auth-me.response.dto';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { ProvisionDoctorDto } from './dto/provision-doctor.dto';
+import { ProvisionPatientDto } from './dto/provision-patient.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
@@ -73,6 +76,26 @@ export class AuthController {
   async logout(@Body() dto: LogoutDto) {
     await this.authService.revokeRefreshSession(dto.refreshToken);
     return { message: 'Sesion cerrada' };
+  }
+
+  @Post('provision/patient')
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  provisionPatient(
+    @Body() dto: ProvisionPatientDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.authService.provisionPatientWithAuth0(dto, authorization);
+  }
+
+  @Post('provision/doctor')
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  provisionDoctor(
+    @Body() dto: ProvisionDoctorDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.authService.provisionDoctorWithAuth0(dto, authorization);
   }
 
   @Get('me')

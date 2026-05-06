@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
-import { DOCTOR_VERIFICATION_CHANGED_EVENT } from './outbox.constants';
+import {
+  CONSULTATION_CLOSED_EVENT,
+  DOCTOR_VERIFICATION_CHANGED_EVENT,
+} from './outbox.constants';
 import {
   OutboxEvent,
   OutboxEventDocument,
@@ -14,6 +17,10 @@ export type DoctorVerificationChangedPayload = {
   doctorId: string;
   doctorStatus: DoctorStatus;
   notes?: string;
+};
+
+export type ConsultationClosedPayload = {
+  consultationId: string;
 };
 
 @Injectable()
@@ -34,6 +41,30 @@ export class OutboxService {
           eventType: DOCTOR_VERIFICATION_CHANGED_EVENT,
           aggregateType: 'doctor',
           aggregateId: payload.doctorId,
+          payload,
+          correlationId,
+          status: 'pending',
+          attempts: 0,
+          availableAt: new Date(),
+        },
+      ],
+      session ? { session } : undefined,
+    );
+
+    return event;
+  }
+
+  async createConsultationClosedEvent(
+    payload: ConsultationClosedPayload,
+    correlationId?: string,
+    session?: ClientSession,
+  ): Promise<OutboxEventDocument> {
+    const [event] = await this.outboxEventModel.create(
+      [
+        {
+          eventType: CONSULTATION_CLOSED_EVENT,
+          aggregateType: 'consultation',
+          aggregateId: payload.consultationId,
           payload,
           correlationId,
           status: 'pending',

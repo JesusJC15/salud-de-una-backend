@@ -2,6 +2,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClientSession, Types } from 'mongoose';
 import { Specialty } from '../common/enums/specialty.enum';
+import { Doctor } from '../doctors/schemas/doctor.schema';
+import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { Patient } from '../patients/schemas/patient.schema';
+import { TriageSession } from '../triage/schemas/triage-session.schema';
+import { ChatService } from '../chat/chat.service';
 import { ConsultationsService } from './consultations.service';
 import { Consultation } from './schemas/consultation.schema';
 
@@ -19,6 +25,18 @@ describe('ConsultationsService', () => {
     create: jest.fn(),
     find: jest.fn().mockReturnValue(findChain),
   };
+  const doctorModel = {};
+  const patientModel = {};
+  const triageSessionModel = {};
+  const outboxService = {
+    createConsultationClosedEvent: jest.fn(),
+  };
+  const outboxDispatcherService = {
+    dispatchPendingEvents: jest.fn(),
+  };
+  const chatService = {
+    getMessages: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -30,6 +48,30 @@ describe('ConsultationsService', () => {
         {
           provide: getModelToken(Consultation.name),
           useValue: consultationModel,
+        },
+        {
+          provide: getModelToken(Doctor.name),
+          useValue: doctorModel,
+        },
+        {
+          provide: getModelToken(Patient.name),
+          useValue: patientModel,
+        },
+        {
+          provide: getModelToken(TriageSession.name),
+          useValue: triageSessionModel,
+        },
+        {
+          provide: OutboxService,
+          useValue: outboxService,
+        },
+        {
+          provide: OutboxDispatcherService,
+          useValue: outboxDispatcherService,
+        },
+        {
+          provide: ChatService,
+          useValue: chatService,
         },
       ],
     }).compile();

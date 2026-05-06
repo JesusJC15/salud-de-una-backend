@@ -11,7 +11,10 @@ import { Connection, Model } from 'mongoose';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { PatientTimelineService } from './patient-timeline.service';
+import { TimelineQueryDto } from './dto/timeline-query.dto';
 import { UpdatePatientProfileDto } from './dto/update-patient-profile.dto';
+import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { Patient, PatientDocument } from './schemas/patient.schema';
 
 @Injectable()
@@ -22,6 +25,7 @@ export class PatientsService {
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
     private readonly authService: AuthService,
+    private readonly patientTimelineService: PatientTimelineService,
   ) {}
 
   async getMe(user: RequestUser) {
@@ -165,6 +169,31 @@ export class PatientsService {
 
       throw error;
     }
+  }
+
+  async updatePushToken(user: RequestUser, dto: UpdatePushTokenDto) {
+    const patient = await this.patientModel.findById(user.userId).exec();
+    if (!patient) {
+      throw new NotFoundException('Paciente no encontrado');
+    }
+
+    patient.pushTokens = Array.from(
+      new Set([...(patient.pushTokens ?? []), dto.token]),
+    );
+    await patient.save();
+
+    return {
+      updated: true,
+      tokensCount: patient.pushTokens.length,
+    };
+  }
+
+  async getTimeline(
+    user: RequestUser,
+    patientId: string,
+    query: TimelineQueryDto,
+  ) {
+    return this.patientTimelineService.getTimeline(user, patientId, query);
   }
 
   private toProfileResponse(patient: {

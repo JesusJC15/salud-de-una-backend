@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { PushNotificationsService } from './push-notifications.service';
 import {
   Notification,
   NotificationDocument,
@@ -14,6 +15,7 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   async createDoctorStatusChange(
@@ -52,6 +54,60 @@ export class NotificationsService {
     }
   }
 
+  async createUserNotification(input: {
+    userId: string;
+    type: string;
+    status: string;
+    message: string;
+    session?: ClientSession;
+    sourceEventId?: string;
+    resourceId?: string;
+    deepLink?: string;
+    metadata?: Record<string, unknown>;
+    push?: {
+      title: string;
+      body: string;
+      data?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    try {
+      await this.notificationModel.create(
+        [
+          {
+            userId: new Types.ObjectId(input.userId),
+            type: input.type,
+            status: input.status,
+            message: input.message,
+            sourceEventId: input.sourceEventId,
+            resourceId: input.resourceId,
+            deepLink: input.deepLink,
+            metadata: input.metadata,
+            read: false,
+          },
+        ],
+        input.session ? { session: input.session } : undefined,
+      );
+    } catch (error: unknown) {
+      if (this.isDuplicateSourceEvent(error)) {
+        this.logger.warn(
+          `Notificacion duplicada ignorada para sourceEventId=${input.sourceEventId}`,
+        );
+        return;
+      }
+
+      throw error;
+    }
+
+    if (input.push) {
+      await this.pushNotificationsService.sendToUser({
+        userId: input.userId,
+        title: input.push.title,
+        body: input.push.body,
+        data: input.push.data,
+      });
+    }
+  }
+
   async getMine(user: RequestUser, unreadOnly = false, limit = 20) {
     const sanitizedLimit = Math.min(Math.max(limit, 1), 100);
     const query = {
@@ -80,6 +136,9 @@ export class NotificationsService {
         type: notification.type,
         status: notification.status,
         message: notification.message,
+        resourceId: notification.resourceId,
+        deepLink: notification.deepLink,
+        metadata: notification.metadata ?? null,
         read: notification.read,
         readAt: notification.readAt ?? null,
         createdAt: notification.createdAt ?? null,
