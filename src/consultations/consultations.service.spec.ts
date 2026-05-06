@@ -1,8 +1,10 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClientSession, Types } from 'mongoose';
+import { AiService } from '../ai/ai.service';
 import { Specialty } from '../common/enums/specialty.enum';
 import { Doctor } from '../doctors/schemas/doctor.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { Patient } from '../patients/schemas/patient.schema';
@@ -28,6 +30,12 @@ describe('ConsultationsService', () => {
   const doctorModel = {};
   const patientModel = {};
   const triageSessionModel = {};
+  const aiService = {
+    generateText: jest.fn(),
+  };
+  const notificationsService = {
+    createUserNotification: jest.fn(),
+  };
   const outboxService = {
     createConsultationClosedEvent: jest.fn(),
   };
@@ -62,6 +70,14 @@ describe('ConsultationsService', () => {
           useValue: triageSessionModel,
         },
         {
+          provide: AiService,
+          useValue: aiService,
+        },
+        {
+          provide: NotificationsService,
+          useValue: notificationsService,
+        },
+        {
           provide: OutboxService,
           useValue: outboxService,
         },
@@ -80,7 +96,7 @@ describe('ConsultationsService', () => {
   });
 
   it('creates consultation using string ids without session', async () => {
-    consultationModel.create.mockResolvedValue([]);
+    consultationModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
 
     await service.createFromTriage({
       patientId: new Types.ObjectId().toString(),
@@ -104,7 +120,7 @@ describe('ConsultationsService', () => {
   });
 
   it('creates consultation using object ids with session', async () => {
-    consultationModel.create.mockResolvedValue([]);
+    consultationModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
     const patientId = new Types.ObjectId();
     const triageSessionId = new Types.ObjectId();
     const session = { id: 'tx-1' } as unknown as ClientSession;

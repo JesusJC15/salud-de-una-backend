@@ -1,8 +1,20 @@
-import { Body, Controller, Get, Patch, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { DoctorVerifiedGuard } from '../common/guards/doctor-verified.guard';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { RethusResubmitDto } from './dto/rethus-resubmit.dto';
+import { UpdateAvailabilityDto } from './dto/update-availability.dto';
+import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { DoctorsService } from './doctors.service';
 
 @Controller('doctors')
@@ -15,6 +27,26 @@ export class DoctorsController {
     return this.doctorsService.getMe(req.user!);
   }
 
+  @Patch('me/availability')
+  @Roles(UserRole.DOCTOR)
+  @UseGuards(DoctorVerifiedGuard)
+  updateAvailability(
+    @Body() dto: UpdateAvailabilityDto,
+    @Req() req: RequestContext,
+  ) {
+    return this.doctorsService.updateAvailability(req.user!.userId, dto.status);
+  }
+
+  @Patch('me/push-token')
+  @Roles(UserRole.DOCTOR)
+  @HttpCode(204)
+  async updatePushToken(
+    @Body() dto: UpdatePushTokenDto,
+    @Req() req: RequestContext,
+  ) {
+    await this.doctorsService.updatePushToken(req.user!.userId, dto.token);
+  }
+
   @Post('me/rethus-resubmit')
   @Roles(UserRole.DOCTOR)
   rethusResubmit(@Body() dto: RethusResubmitDto, @Req() req: RequestContext) {
@@ -23,14 +55,5 @@ export class DoctorsController {
       dto,
       req.correlationId,
     );
-  }
-
-  @Patch('me/availability')
-  @Roles(UserRole.DOCTOR)
-  updateAvailability(
-    @Body() dto: { status: 'AVAILABLE' | 'PAUSED' },
-    @Req() req: RequestContext,
-  ) {
-    return this.doctorsService.updateAvailability(req.user!, dto.status);
   }
 }

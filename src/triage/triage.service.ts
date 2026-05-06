@@ -96,6 +96,7 @@ type SaveTriageAnswersResponse = {
 
 type AnalyzeTriageSessionResponse = {
   sessionId: string;
+  consultationId: string;
   priority: TriagePriority;
   redFlags: RedFlag[];
   message: string;
@@ -558,7 +559,7 @@ export class TriageService {
     triageSession.completedAt = new Date();
     await triageSession.save();
 
-    await this.consultationsService.createFromTriage({
+    const consultationId = await this.consultationsService.createFromTriage({
       patientId: triageSession.patientId,
       triageSessionId: triageSession._id,
       specialty: triageSession.specialty,
@@ -610,6 +611,7 @@ export class TriageService {
 
     return {
       sessionId: triageSession._id.toString(),
+      consultationId,
       priority,
       redFlags,
       message,

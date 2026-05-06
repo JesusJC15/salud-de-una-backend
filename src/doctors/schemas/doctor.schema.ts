@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { DoctorAvailability } from '../../common/enums/doctor-availability.enum';
 import { DoctorStatus } from '../../common/enums/doctor-status.enum';
 import { Specialty } from '../../common/enums/specialty.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
@@ -41,14 +42,21 @@ export class Doctor {
   @Prop({ type: String, enum: DoctorStatus, default: DoctorStatus.PENDING })
   doctorStatus!: DoctorStatus;
 
+  @Prop({
+    type: String,
+    enum: DoctorAvailability,
+    default: DoctorAvailability.AVAILABLE,
+  })
+  availabilityStatus!: DoctorAvailability;
+
   @Prop({ type: Types.ObjectId, ref: 'RethusVerification' })
   rethusVerification?: Types.ObjectId;
 
-  @Prop({ enum: ['AVAILABLE', 'PAUSED'], default: 'AVAILABLE' })
-  availabilityStatus!: 'AVAILABLE' | 'PAUSED';
-
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ type: String })
+  expoPushToken?: string;
 
   createdAt?: Date;
   updatedAt?: Date;

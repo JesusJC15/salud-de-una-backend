@@ -1,19 +1,24 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   forwardRef,
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
+import { AiService } from '../ai/ai.service';
 import { ChatService } from '../chat/chat.service';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import {
   TriageSession,
@@ -48,6 +53,13 @@ type QueueRow = {
   createdAt: Date | null;
 };
 
+const CLINICAL_SUMMARY_SYSTEM_INSTRUCTION =
+  'Eres un asistente médico clínico. Dado el resultado de un triage, genera un resumen ' +
+  'clínico conciso (máximo 200 palabras) para el médico que va a atender al paciente. ' +
+  'Incluye: síntoma principal, duración, intensidad, signos de alarma detectados y ' +
+  'prioridad asignada. Usa lenguaje médico profesional en español. No hagas diagnósticos ' +
+  'ni recomendaciones de tratamiento.';
+
 @Injectable()
 export class ConsultationsService {
   constructor(
@@ -59,6 +71,8 @@ export class ConsultationsService {
     private readonly patientModel: Model<PatientDocument>,
     @InjectModel(TriageSession.name)
     private readonly triageSessionModel: Model<TriageSessionDocument>,
+    private readonly aiService: AiService,
+    private readonly notificationsService: NotificationsService,
     private readonly outboxService: OutboxService,
     @Inject(forwardRef(() => OutboxDispatcherService))
     private readonly outboxDispatcherService: OutboxDispatcherService,
@@ -68,8 +82,8 @@ export class ConsultationsService {
   async createFromTriage(
     input: CreateConsultationFromTriageInput,
     session?: ClientSession,
-  ): Promise<void> {
-    await this.consultationModel.create(
+  ): Promise<string> {
+    const [doc] = await this.consultationModel.create(
       [
         {
           patientId: this.toObjectId(input.patientId),
@@ -81,6 +95,8 @@ export class ConsultationsService {
       ],
       session ? { session } : undefined,
     );
+
+    return doc._id.toString();
   }
 
   async createFollowupEscalationConsultation(input: {
@@ -234,6 +250,18 @@ export class ConsultationsService {
     consultation.assignedAt = new Date();
     await consultation.save();
 
+    await this.notificationsService.createUserNotification({
+      userId: consultation.patientId.toString(),
+      type: 'CONSULTATION_ASSIGNED',
+      status: consultation.status,
+      message: 'Un médico está atendiendo tu consulta ahora.',
+      resourceId: consultation.id,
+      deepLink: `/triage/chat/${consultation.id}`,
+      metadata: {
+        consultationId: consultation.id,
+      },
+    });
+
     return {
       id: consultation.id,
       status: consultation.status,
@@ -270,6 +298,18 @@ export class ConsultationsService {
     consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
     await consultation.save();
 
+    await this.notificationsService.createUserNotification({
+      userId: consultation.patientId.toString(),
+      type: 'CONSULTATION_CLOSED',
+      status: consultation.status,
+      message: 'Tu consulta finalizó. Puedes calificar la atención recibida.',
+      resourceId: consultation.id,
+      deepLink: `/consultations/${consultation.id}`,
+      metadata: {
+        consultationId: consultation.id,
+      },
+    });
+
     await this.outboxService.createConsultationClosedEvent(
       {
         consultationId: consultation.id,
@@ -305,18 +345,56 @@ export class ConsultationsService {
       throw new NotFoundException('Triage asociado no encontrado');
     }
 
-    const summaryLines = [
-      `Especialidad: ${triageSession.specialty}`,
-      `Prioridad: ${triageSession.analysis?.priority ?? consultation.priority}`,
-      triageSession.analysis?.aiSummary
-        ? `Resumen IA: ${triageSession.analysis.aiSummary}`
-        : null,
-      triageSession.answers.length > 0
-        ? `Motivo principal: ${this.formatAnswerValue(triageSession.answers[0]?.answerValue)}`
-        : null,
-    ].filter(Boolean);
+    const answersText = triageSession.answers
+      .map(
+        (answer) =>
+          `Pregunta: ${answer.questionText}\nRespuesta: ${this.formatAnswerValue(answer.answerValue)}`,
+      )
+      .join('\n\n');
 
-    consultation.clinicalSummary = summaryLines.join('\n');
+    const redFlagsText = triageSession.analysis?.redFlags?.length
+      ? `\nSignos de alarma detectados:\n${triageSession.analysis.redFlags
+          .map((redFlag) => `- [${redFlag.severity}] ${redFlag.evidence}`)
+          .join('\n')}`
+      : '\nNo se detectaron signos de alarma.';
+
+    const inputText =
+      `Especialidad: ${triageSession.specialty}\n` +
+      `Prioridad asignada: ${triageSession.analysis?.priority ?? consultation.priority}\n\n` +
+      `Respuestas del triage:\n${answersText}` +
+      redFlagsText;
+
+    try {
+      const result = await this.aiService.generateText({
+        promptKey: 'CLINICAL_SUMMARY_V1',
+        promptVersion: 1,
+        model: 'gemini-2.5-flash',
+        systemInstruction: CLINICAL_SUMMARY_SYSTEM_INSTRUCTION,
+        inputText,
+        correlationId: randomUUID(),
+      });
+
+      consultation.clinicalSummary = result.text?.trim() ?? '';
+    } catch {
+      const summaryLines = [
+        `Especialidad: ${triageSession.specialty}`,
+        `Prioridad: ${triageSession.analysis?.priority ?? consultation.priority}`,
+        triageSession.analysis?.aiSummary
+          ? `Resumen IA: ${triageSession.analysis.aiSummary}`
+          : null,
+        triageSession.answers.length > 0
+          ? `Motivo principal: ${this.formatAnswerValue(triageSession.answers[0]?.answerValue)}`
+          : null,
+      ].filter(Boolean);
+
+      consultation.clinicalSummary = summaryLines.join('\n');
+      if (!consultation.clinicalSummary) {
+        throw new ServiceUnavailableException(
+          'No fue posible generar el resumen clínico en este momento',
+        );
+      }
+    }
+
     await consultation.save();
 
     return {
@@ -402,6 +480,10 @@ export class ConsultationsService {
 
     if (consultation.status !== 'CLOSED') {
       throw new BadRequestException('Solo puedes calificar consultas cerradas');
+    }
+
+    if (consultation.rating !== undefined) {
+      throw new ConflictException('Esta consulta ya fue calificada');
     }
 
     consultation.rating = dto.rating;

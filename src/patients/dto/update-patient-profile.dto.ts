@@ -3,13 +3,13 @@ import {
   IsEmail,
   IsEnum,
   IsString,
-  Matches,
   MaxLength,
-  MinLength,
   ValidateIf,
 } from 'class-validator';
 import { UserGender } from '../../common/enums/user-gender.enum';
 
+// Password changes are handled by Auth0 Universal Login.
+// Use Auth0's /dbconnections/change_password endpoint from the client.
 export class UpdatePatientProfileDto {
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsString()
@@ -32,14 +32,4 @@ export class UpdatePatientProfileDto {
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsEmail()
   email?: string;
-
-  @ValidateIf((_, value: unknown) => value !== undefined)
-  @IsString()
-  currentPassword?: string;
-
-  @ValidateIf((_, value: unknown) => value !== undefined)
-  @IsString()
-  @MinLength(8)
-  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/)
-  newPassword?: string;
 }

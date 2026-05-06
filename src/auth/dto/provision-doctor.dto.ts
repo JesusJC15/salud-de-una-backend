@@ -1,21 +1,28 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Specialty } from '../../common/enums/specialty.enum';
 
 export class ProvisionDoctorDto {
+  @IsOptional()
   @IsString()
-  firstName!: string;
+  @MaxLength(80)
+  firstName?: string;
 
+  @IsOptional()
   @IsString()
-  lastName!: string;
+  @MaxLength(80)
+  lastName?: string;
 
+  @IsOptional()
   @IsEnum(Specialty)
-  specialty!: Specialty;
+  specialty?: Specialty;
 
+  @IsOptional()
   @IsString()
-  personalId!: string;
+  personalId?: string;
 
+  @IsOptional()
   @IsString()
-  phoneNumber!: string;
+  phoneNumber?: string;
 
   @IsOptional()
   @IsString()

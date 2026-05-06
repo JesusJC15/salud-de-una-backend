@@ -20,6 +20,6 @@ export interface DoctorMeResponseDto {
   role: string;
   specialty: string;
   doctorStatus: string;
-  availabilityStatus?: 'AVAILABLE' | 'PAUSED';
+  availabilityStatus: string;
   verification: DoctorMeVerificationResponseDto | null;
 }

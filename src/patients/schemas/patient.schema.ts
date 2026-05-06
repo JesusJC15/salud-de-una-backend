@@ -37,6 +37,9 @@ export class Patient {
   @Prop({ type: [String], default: [] })
   pushTokens!: string[];
 
+  @Prop({ type: String })
+  expoPushToken?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

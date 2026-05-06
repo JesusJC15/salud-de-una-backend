@@ -7,7 +7,7 @@ import { Admin } from '../../admins/schemas/admin.schema';
 import { Doctor } from '../../doctors/schemas/doctor.schema';
 import { Patient } from '../../patients/schemas/patient.schema';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { JwtStrategy } from './jwt.strategy';
+import { AUTH0_CLAIM_NS, JwtStrategy } from './jwt.strategy';
 
 function createFindByIdChain(result: unknown) {
   return {
@@ -17,7 +17,26 @@ function createFindByIdChain(result: unknown) {
   };
 }
 
-describe('JwtStrategy', () => {
+function buildPayload(
+  dbId: string,
+  role: UserRole,
+  isActive = true,
+  extraClaims: Record<string, unknown> = {},
+) {
+  return {
+    sub: 'auth0|507f1f77bcf86cd799439011',
+    iss: 'https://test.auth0.com/',
+    aud: ['https://api.salud-de-una.com'],
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    iat: Math.floor(Date.now() / 1000),
+    [`${AUTH0_CLAIM_NS}db_id`]: dbId,
+    [`${AUTH0_CLAIM_NS}role`]: role,
+    [`${AUTH0_CLAIM_NS}is_active`]: isActive,
+    ...extraClaims,
+  };
+}
+
+describe('JwtStrategy (Auth0)', () => {
   let strategy: JwtStrategy;
   const patientModel = { findById: jest.fn() };
   const doctorModel = { findById: jest.fn() };
@@ -29,7 +48,20 @@ describe('JwtStrategy', () => {
         JwtStrategy,
         {
           provide: ConfigService,
-          useValue: { getOrThrow: jest.fn(() => 'secret') },
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === 'auth.auth0Domain') return 'test.auth0.com';
+              if (key === 'auth.auth0Audience')
+                return 'https://api.salud-de-una.com';
+              return undefined;
+            }),
+            getOrThrow: jest.fn((key: string) => {
+              if (key === 'auth.auth0Domain') return 'test.auth0.com';
+              if (key === 'auth.auth0Audience')
+                return 'https://api.salud-de-una.com';
+              throw new Error(`Config key not found: ${key}`);
+            }),
+          },
         },
         { provide: getModelToken(Patient.name), useValue: patientModel },
         { provide: getModelToken(Doctor.name), useValue: doctorModel },
@@ -40,29 +72,40 @@ describe('JwtStrategy', () => {
     strategy = module.get<JwtStrategy>(JwtStrategy);
   });
 
-  it('should reject non-access tokenType', async () => {
+  it('should reject token without db_id claim (unprovisioned user)', async () => {
     await expect(
       strategy.validate({
-        sub: new Types.ObjectId().toString(),
-        role: UserRole.PATIENT,
-        email: 'ana@example.com',
-        tokenType: 'refresh',
+        sub: 'auth0|unprovisioned',
+        iss: 'https://test.auth0.com/',
+        aud: 'https://api.salud-de-una.com',
+        exp: 9999999999,
+        iat: 0,
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('should reject invalid subject', async () => {
+  it('should reject token without role claim', async () => {
+    const id = new Types.ObjectId().toString();
     await expect(
       strategy.validate({
-        sub: 'not-valid',
-        role: UserRole.PATIENT,
-        email: 'ana@example.com',
-        tokenType: 'access',
+        sub: 'auth0|xxx',
+        iss: 'https://test.auth0.com/',
+        aud: 'https://api.salud-de-una.com',
+        exp: 9999999999,
+        iat: 0,
+        [`${AUTH0_CLAIM_NS}db_id`]: id,
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('should validate patient payload', async () => {
+  it('should reject token with is_active=false claim', async () => {
+    const id = new Types.ObjectId().toString();
+    await expect(
+      strategy.validate(buildPayload(id, UserRole.PATIENT, false)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('should validate patient payload and return RequestUser', async () => {
     const id = new Types.ObjectId().toString();
     patientModel.findById.mockReturnValue(
       createFindByIdChain({
@@ -72,12 +115,7 @@ describe('JwtStrategy', () => {
       }),
     );
 
-    const result = await strategy.validate({
-      sub: id,
-      role: UserRole.PATIENT,
-      email: 'ana@example.com',
-      tokenType: 'access',
-    });
+    const result = await strategy.validate(buildPayload(id, UserRole.PATIENT));
 
     expect(result).toEqual({
       userId: id,
@@ -97,12 +135,7 @@ describe('JwtStrategy', () => {
       }),
     );
 
-    const result = await strategy.validate({
-      sub: id,
-      role: UserRole.DOCTOR,
-      email: 'doc@example.com',
-      tokenType: 'access',
-    });
+    const result = await strategy.validate(buildPayload(id, UserRole.DOCTOR));
 
     expect(result).toEqual({
       userId: id,
@@ -112,7 +145,27 @@ describe('JwtStrategy', () => {
     });
   });
 
-  it('should reject inactive user', async () => {
+  it('should validate admin payload', async () => {
+    const id = new Types.ObjectId().toString();
+    adminModel.findById.mockReturnValue(
+      createFindByIdChain({
+        email: 'admin@example.com',
+        role: UserRole.ADMIN,
+        isActive: true,
+      }),
+    );
+
+    const result = await strategy.validate(buildPayload(id, UserRole.ADMIN));
+
+    expect(result).toEqual({
+      userId: id,
+      email: 'admin@example.com',
+      role: UserRole.ADMIN,
+      isActive: true,
+    });
+  });
+
+  it('should reject inactive user from DB', async () => {
     const id = new Types.ObjectId().toString();
     adminModel.findById.mockReturnValue(
       createFindByIdChain({
@@ -123,12 +176,7 @@ describe('JwtStrategy', () => {
     );
 
     await expect(
-      strategy.validate({
-        sub: id,
-        role: UserRole.ADMIN,
-        email: 'admin@example.com',
-        tokenType: 'access',
-      }),
+      strategy.validate(buildPayload(id, UserRole.ADMIN)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
