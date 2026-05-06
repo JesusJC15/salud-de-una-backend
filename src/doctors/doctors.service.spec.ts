@@ -6,6 +6,7 @@ import {
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { DoctorAvailability } from '../common/enums/doctor-availability.enum';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
@@ -243,7 +244,7 @@ describe('DoctorsService', () => {
       },
     );
 
-    expect((result as any).doctorStatus).toBe(DoctorStatus.PENDING);
+    expect(result.doctorStatus).toBe(DoctorStatus.PENDING);
     expect(doctorDocument.save).toHaveBeenCalled();
     expect(
       outboxServiceMock.createDoctorVerificationChangedEvent,
@@ -283,7 +284,7 @@ describe('DoctorsService', () => {
         {
           userId: 'not-valid',
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
         { notes: 'test' },
@@ -302,7 +303,7 @@ describe('DoctorsService', () => {
         {
           userId: doctorId,
           email: 'doc@example.com',
-          role: 'DOCTOR',
+          role: UserRole.DOCTOR,
           isActive: true,
         },
         { notes: 'test' },
@@ -333,9 +334,12 @@ describe('DoctorsService', () => {
     (doctorModel as Record<string, unknown>).findByIdAndUpdate =
       findByIdAndUpdate;
 
-    const result = await service.updateAvailability('doctor-id', 'PAUSED');
+    const result = await service.updateAvailability(
+      'doctor-id',
+      DoctorAvailability.PAUSED,
+    );
 
-    expect(result.availabilityStatus).toBe('PAUSED');
+    expect(result.availabilityStatus).toBe(DoctorAvailability.PAUSED);
   });
 
   it('updateAvailability should use passed status when availabilityStatus is null', async () => {
@@ -346,8 +350,11 @@ describe('DoctorsService', () => {
         exec: jest.fn().mockResolvedValue({ availabilityStatus: null }),
       });
 
-    const result = await service.updateAvailability('doctor-id', 'AVAILABLE');
-    expect(result.availabilityStatus).toBe('AVAILABLE');
+    const result = await service.updateAvailability(
+      'doctor-id',
+      DoctorAvailability.AVAILABLE,
+    );
+    expect(result.availabilityStatus).toBe(DoctorAvailability.AVAILABLE);
   });
 
   it('updateAvailability should throw NotFoundException when doctor not found', async () => {
@@ -359,7 +366,7 @@ describe('DoctorsService', () => {
       });
 
     await expect(
-      service.updateAvailability('missing-id', 'AVAILABLE'),
+      service.updateAvailability('missing-id', DoctorAvailability.AVAILABLE),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 

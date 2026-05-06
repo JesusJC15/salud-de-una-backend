@@ -13,6 +13,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { AiService } from '../ai/ai.service';
 import { ChatService } from '../chat/chat.service';
+import { DoctorAvailability } from '../common/enums/doctor-availability.enum';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -34,6 +35,7 @@ import { Doctor, DoctorDocument } from '../doctors/schemas/doctor.schema';
 import {
   Consultation,
   ConsultationDocument,
+  type ConsultationStatus,
 } from './schemas/consultation.schema';
 
 type CreateConsultationFromTriageInput = {
@@ -59,6 +61,10 @@ const CLINICAL_SUMMARY_SYSTEM_INSTRUCTION =
   'Incluye: síntoma principal, duración, intensidad, signos de alarma detectados y ' +
   'prioridad asignada. Usa lenguaje médico profesional en español. No hagas diagnósticos ' +
   'ni recomendaciones de tratamiento.';
+
+const CONSULTATION_PENDING: ConsultationStatus = 'PENDING';
+const CONSULTATION_IN_ATTENTION: ConsultationStatus = 'IN_ATTENTION';
+const CONSULTATION_CLOSED: ConsultationStatus = 'CLOSED';
 
 @Injectable()
 export class ConsultationsService {
@@ -228,7 +234,7 @@ export class ConsultationsService {
       );
     }
 
-    if (doctor.availabilityStatus === 'PAUSED') {
+    if (doctor.availabilityStatus === DoctorAvailability.PAUSED) {
       throw new ForbiddenException('Debes reanudar tu disponibilidad');
     }
 
@@ -239,13 +245,13 @@ export class ConsultationsService {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    if (consultation.status !== 'PENDING') {
+    if (consultation.status !== CONSULTATION_PENDING) {
       throw new BadRequestException(
         'Solo se pueden asignar consultas pendientes',
       );
     }
 
-    consultation.status = 'IN_ATTENTION';
+    consultation.status = CONSULTATION_IN_ATTENTION;
     consultation.assignedDoctorId = new Types.ObjectId(user.userId);
     consultation.assignedAt = new Date();
     await consultation.save();
@@ -286,16 +292,20 @@ export class ConsultationsService {
 
     this.assertAssignedDoctor(consultation, user);
 
-    if (consultation.status !== 'IN_ATTENTION') {
+    if (consultation.status !== CONSULTATION_IN_ATTENTION) {
       throw new BadRequestException(
         'Solo se pueden cerrar consultas en atencion',
       );
     }
 
-    consultation.status = 'CLOSED';
+    consultation.status = CONSULTATION_CLOSED;
     consultation.closedAt = new Date();
-    consultation.baselineSymptomSeverity = dto.baselineSymptomSeverity;
-    consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
+    if (dto.baselineSymptomSeverity !== undefined) {
+      consultation.baselineSymptomSeverity = dto.baselineSymptomSeverity;
+    }
+    if (dto.redFlagsConfirmed !== undefined) {
+      consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
+    }
     await consultation.save();
 
     await this.notificationsService.createUserNotification({
@@ -478,7 +488,7 @@ export class ConsultationsService {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    if (consultation.status !== 'CLOSED') {
+    if (consultation.status !== CONSULTATION_CLOSED) {
       throw new BadRequestException('Solo puedes calificar consultas cerradas');
     }
 
@@ -502,17 +512,16 @@ export class ConsultationsService {
   }
 
   private getPriorityRank(priority: TriagePriority): number {
-    if (priority === 'HIGH') {
-      return 0;
+    switch (priority) {
+      case 'HIGH':
+        return 0;
+      case 'MODERATE':
+        return 1;
+      case 'LOW':
+        return 2;
+      default:
+        return 99;
     }
-    if (priority === 'MODERATE') {
-      return 1;
-    }
-    if (priority === 'LOW') {
-      return 2;
-    }
-
-    return 99;
   }
 
   private async getHistory(

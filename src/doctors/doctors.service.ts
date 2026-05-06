@@ -32,6 +32,18 @@ const DEFAULT_RESUBMIT_VERIFICATION = {
   reportingEntity: 'N/A',
 } as const;
 
+type RethusResubmitResponse = {
+  doctorId: string;
+  doctorStatus: DoctorStatus;
+  checkedAt: Date;
+  verification: {
+    rethusState: RethusState;
+    checkedBy: string;
+    evidenceUrl?: string;
+    notes?: string;
+  };
+};
+
 @Injectable()
 export class DoctorsService {
   constructor(
@@ -98,24 +110,14 @@ export class DoctorsService {
     user: RequestUser,
     dto: RethusResubmitDto,
     correlationId?: string,
-  ) {
+  ): Promise<RethusResubmitResponse> {
     if (!Types.ObjectId.isValid(user.userId)) {
       throw new BadRequestException('doctorId invalido');
     }
 
     const session = await this.connection.startSession();
     try {
-      let response: {
-        doctorId: string;
-        doctorStatus: DoctorStatus;
-        checkedAt: Date;
-        verification: {
-          rethusState: RethusState;
-          checkedBy: string;
-          evidenceUrl?: string;
-          notes?: string;
-        };
-      } | null = null;
+      let response: RethusResubmitResponse | null = null;
 
       await session.withTransaction(async () => {
         response = await this.executeRethusResubmit(
@@ -178,7 +180,7 @@ export class DoctorsService {
     dto: RethusResubmitDto,
     correlationId: string | undefined,
     session: ClientSession,
-  ) {
+  ): Promise<RethusResubmitResponse> {
     const doctor = await this.doctorModel
       .findById(user.userId)
       .session(session)

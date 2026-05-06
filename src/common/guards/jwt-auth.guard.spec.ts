@@ -1,6 +1,7 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { UserRole } from '../enums/user-role.enum';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
@@ -51,11 +52,13 @@ describe('JwtAuthGuard', () => {
     const parentCanActivate = jest
       .spyOn(
         Object.getPrototypeOf(JwtAuthGuard.prototype) as {
-          canActivate: (context: ExecutionContext) => unknown;
+          canActivate: (
+            context: ExecutionContext,
+          ) => boolean | Promise<boolean>;
         },
         'canActivate',
       )
-      .mockResolvedValue(true);
+      .mockImplementation(async () => true);
 
     await expect(
       Promise.resolve(guard.canActivate(createContext('Bearer token-123'))),
@@ -67,7 +70,7 @@ describe('JwtAuthGuard', () => {
     const user = {
       userId: 'u1',
       email: 'doctor@example.com',
-      role: 'DOCTOR',
+      role: UserRole.DOCTOR,
     };
 
     expect(guard.handleRequest(null, user, null)).toBe(user);

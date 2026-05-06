@@ -18,7 +18,9 @@ describe('E2E Consultations / Queue Access', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('blocks doctors with pending REThUS verification', async () => {

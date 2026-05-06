@@ -22,7 +22,9 @@ describe('E2E Admin / Users Management', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('returns 403 for non-admin users', async () => {

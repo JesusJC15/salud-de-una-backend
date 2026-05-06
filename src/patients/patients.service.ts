@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -6,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -53,6 +55,7 @@ export class PatientsService {
         await session.withTransaction(async () => {
           const patient = await this.patientModel
             .findById(user.userId)
+            .select('+passwordHash')
             .session(session)
             .exec();
 
@@ -64,10 +67,61 @@ export class PatientsService {
             dto.email != null ? this.normalizeEmail(dto.email) : undefined;
           const wantsEmailChange =
             normalizedEmail !== undefined && normalizedEmail !== patient.email;
+          const wantsPasswordChange = dto.newPassword !== undefined;
+          const requiresCurrentPassword =
+            wantsEmailChange || wantsPasswordChange;
 
-          if (wantsEmailChange) {
+          if (
+            !requiresCurrentPassword &&
+            (dto.currentPassword !== undefined || dto.newPassword !== undefined)
+          ) {
+            throw new BadRequestException(
+              'Payload de credenciales incoherente',
+            );
+          }
+
+          if (requiresCurrentPassword && !dto.currentPassword) {
+            throw new BadRequestException(
+              'currentPassword es obligatorio para cambios sensibles',
+            );
+          }
+
+          if (requiresCurrentPassword) {
+            const matches = await bcrypt.compare(
+              dto.currentPassword!,
+              patient.passwordHash,
+            );
+
+            if (!matches) {
+              throw new BadRequestException(
+                'La contraseña actual es incorrecta',
+              );
+            }
+          }
+
+          if (wantsEmailChange && normalizedEmail) {
             await this.authService.ensureEmailIsAvailable(normalizedEmail);
             patient.email = normalizedEmail;
+          }
+
+          if (wantsPasswordChange) {
+            const isSamePassword = await bcrypt.compare(
+              dto.newPassword!,
+              patient.passwordHash,
+            );
+            if (isSamePassword) {
+              throw new BadRequestException(
+                'La nueva contraseña debe ser diferente a la actual',
+              );
+            }
+
+            patient.passwordHash = await bcrypt.hash(dto.newPassword!, 12);
+            await this.authService.revokeAllRefreshSessionsForUser(
+              patient.id,
+              patient.role,
+              'password_changed',
+              session,
+            );
           }
 
           if (dto.firstName !== undefined) patient.firstName = dto.firstName;

@@ -1,4 +1,7 @@
-import { Doctor } from '../../../src/doctors/schemas/doctor.schema';
+import {
+  Doctor,
+  type DoctorDocument,
+} from '../../../src/doctors/schemas/doctor.schema';
 import { RethusVerification } from '../../../src/doctors/schemas/rethus-verification.schema';
 import { Notification } from '../../../src/notifications/schemas/notification.schema';
 import { DoctorStatus } from '../../../src/common/enums/doctor-status.enum';
@@ -29,7 +32,9 @@ describe('E2E Doctors / Onboarding And Verification', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('rejects duplicate doctor personalId', async () => {
@@ -118,7 +123,7 @@ describe('E2E Doctors / Onboarding And Verification', () => {
       doctorStatus: 'VERIFIED',
     });
 
-    const doctorModel = context.getModel(Doctor.name);
+    const doctorModel = context.getModel<DoctorDocument>(Doctor.name);
     const verificationModel = context.getModel(RethusVerification.name);
     const notificationModel = context.getModel(Notification.name);
 

@@ -20,7 +20,7 @@ type AuthenticatedSocket = Socket<
   SocketEventsMap,
   SocketEventsMap,
   SocketEventsMap,
-  { user?: RequestUser }
+  { user?: RequestUser; authPromise?: Promise<RequestUser | null> }
 >;
 
 @WebSocketGateway({
@@ -48,23 +48,22 @@ export class ChatGateway implements OnGatewayConnection {
   async handleConnection(client: AuthenticatedSocket) {
     const token = this.extractToken(client);
     if (!token) {
-      client.emit('chat:error', {
-        code: 'UNAUTHORIZED',
-        message: 'Token ausente',
-      });
-      client.disconnect();
+      this.rejectUnauthorizedClient(client, 'Token ausente');
       return;
     }
 
-    try {
-      client.data.user = await this.authService.authenticateAccessToken(token);
-    } catch {
-      client.emit('chat:error', {
-        code: 'UNAUTHORIZED',
-        message: 'Token invalido',
+    client.data.authPromise = this.authService
+      .authenticateAccessToken(token)
+      .then((user) => {
+        client.data.user = user;
+        return user;
+      })
+      .catch(() => {
+        this.rejectUnauthorizedClient(client, 'Token invalido');
+        return null;
       });
-      client.disconnect();
-    }
+
+    await client.data.authPromise;
   }
 
   @SubscribeMessage('chat:join')
@@ -72,13 +71,8 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() dto: ChatJoinDto,
   ) {
-    const user = client.data.user;
+    const user = await this.getAuthenticatedUser(client);
     if (!user) {
-      client.emit('chat:error', {
-        code: 'UNAUTHORIZED',
-        message: 'Sesion no valida',
-      });
-      client.disconnect();
       return;
     }
 
@@ -99,13 +93,8 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() dto: ChatSendDto,
   ) {
-    const user = client.data.user;
+    const user = await this.getAuthenticatedUser(client);
     if (!user) {
-      client.emit('chat:error', {
-        code: 'UNAUTHORIZED',
-        message: 'Sesion no valida',
-      });
-      client.disconnect();
       return;
     }
 
@@ -141,8 +130,34 @@ export class ChatGateway implements OnGatewayConnection {
     return null;
   }
 
+  private async getAuthenticatedUser(
+    client: AuthenticatedSocket,
+  ): Promise<RequestUser | null> {
+    if (client.data.user) {
+      return client.data.user;
+    }
+
+    if (client.data.authPromise) {
+      return client.data.authPromise;
+    }
+
+    this.rejectUnauthorizedClient(client, 'Sesion no valida');
+    return null;
+  }
+
   private toRoom(consultationId: string) {
     return `consultation:${consultationId}`;
+  }
+
+  private rejectUnauthorizedClient(
+    client: AuthenticatedSocket,
+    message: string,
+  ) {
+    client.emit('chat:error', {
+      code: 'UNAUTHORIZED',
+      message,
+    });
+    client.disconnect();
   }
 
   private toErrorPayload(error: unknown) {
