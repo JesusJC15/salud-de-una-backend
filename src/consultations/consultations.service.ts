@@ -502,6 +502,9 @@ export class ConsultationsService {
 
   private toObjectId(value: string | Types.ObjectId): Types.ObjectId {
     if (value instanceof Types.ObjectId) return value;
+    if (!Types.ObjectId.isValid(value)) {
+      throw new BadRequestException('Invalid ObjectId');
+    }
     return new Types.ObjectId(value);
   }
 }
