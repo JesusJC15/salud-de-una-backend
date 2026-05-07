@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { Consultation } from '../consultations/schemas/consultation.schema';
 import { UserRole } from '../common/enums/user-role.enum';
+import { buildRequestUser } from '../common/testing/request-test-helpers';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TriageSession } from '../triage/schemas/triage-session.schema';
 import { FOLLOWUPS_QUEUE } from './followups.constants';
@@ -175,11 +176,11 @@ describe('FollowupsService', () => {
     followupModel.find.mockReturnValue(query);
 
     const result = await service.getMine(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       'PENDING',
     );
 
@@ -207,11 +208,14 @@ describe('FollowupsService', () => {
     });
 
     await expect(
-      service.getById(followupId.toString(), {
-        userId: new Types.ObjectId().toString(),
-        role: UserRole.PATIENT,
-        email: 'other@test.com',
-      }),
+      service.getById(
+        followupId.toString(),
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.PATIENT,
+          email: 'other@test.com',
+        }),
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -239,11 +243,11 @@ describe('FollowupsService', () => {
     ]);
 
     const result = await service.submit(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       {
         followupId: followupId.toString(),
         currentSymptomSeverity: 6,

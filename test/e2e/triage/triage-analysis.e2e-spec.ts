@@ -25,7 +25,9 @@ describe('E2E Triage / Analysis With Rule-Based Fallback', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('returns 422 when trying to analyze an incomplete session', async () => {

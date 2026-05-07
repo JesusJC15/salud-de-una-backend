@@ -10,6 +10,7 @@ import { ClientSession, Types } from 'mongoose';
 import { AiService } from '../ai/ai.service';
 import { UserRole } from '../common/enums/user-role.enum';
 import { Specialty } from '../common/enums/specialty.enum';
+import { buildRequestUser } from '../common/testing/request-test-helpers';
 import { Doctor } from '../doctors/schemas/doctor.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
@@ -374,11 +375,14 @@ describe('ConsultationsService', () => {
       }),
     });
 
-    const result = await service.getById(consultationId.toString(), {
-      userId: patientId.toString(),
-      role: UserRole.PATIENT,
-      email: 'patient@test.com',
-    });
+    const result = await service.getById(
+      consultationId.toString(),
+      buildRequestUser({
+        userId: patientId.toString(),
+        role: UserRole.PATIENT,
+        email: 'patient@test.com',
+      }),
+    );
 
     expect(result).toMatchObject({
       id: consultationId.toString(),
@@ -411,11 +415,14 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue(consultation),
     });
 
-    const result = await service.assign(consultationId.toString(), {
-      userId: doctorId.toString(),
-      role: UserRole.DOCTOR,
-      email: 'doctor@test.com',
-    });
+    const result = await service.assign(
+      consultationId.toString(),
+      buildRequestUser({
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    );
 
     expect(consultation.save).toHaveBeenCalled();
     expect(notificationsService.createUserNotification).toHaveBeenCalledWith(
@@ -445,11 +452,11 @@ describe('ConsultationsService', () => {
 
     const result = await service.close(
       consultationId.toString(),
-      {
+      buildRequestUser({
         userId: doctorId.toString(),
         role: UserRole.DOCTOR,
         email: 'doctor@test.com',
-      },
+      }),
       {
         baselineSymptomSeverity: 5,
         redFlagsConfirmed: true,
@@ -504,11 +511,14 @@ describe('ConsultationsService', () => {
       text: 'Resumen clínico final',
     });
 
-    const result = await service.generateSummary(consultationId.toString(), {
-      userId: doctorId.toString(),
-      role: UserRole.DOCTOR,
-      email: 'doctor@test.com',
-    });
+    const result = await service.generateSummary(
+      consultationId.toString(),
+      buildRequestUser({
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    );
 
     expect(aiService.generateText).toHaveBeenCalled();
     expect(result.summary).toBe('Resumen clínico final');
@@ -549,11 +559,14 @@ describe('ConsultationsService', () => {
     });
     aiService.generateText.mockRejectedValue(new Error('gemini down'));
 
-    const result = await service.generateSummary(consultationId.toString(), {
-      userId: doctorId.toString(),
-      role: UserRole.DOCTOR,
-      email: 'doctor@test.com',
-    });
+    const result = await service.generateSummary(
+      consultationId.toString(),
+      buildRequestUser({
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    );
 
     expect(result.summary).toContain('Especialidad: ODONTOLOGY');
     expect(result.summary).toContain('Resumen IA: Paciente estable');
@@ -561,11 +574,11 @@ describe('ConsultationsService', () => {
 
   it('delegates chat retrieval to chat service', async () => {
     chatService.getMessages.mockResolvedValue({ items: [], total: 0 });
-    const user = {
+    const user = buildRequestUser({
       userId: new Types.ObjectId().toString(),
       role: UserRole.ADMIN,
       email: 'admin@test.com',
-    };
+    });
 
     await expect(
       service.getMessages(new Types.ObjectId().toString(), user, 25),
@@ -594,11 +607,11 @@ describe('ConsultationsService', () => {
 
     const result = await service.rate(
       consultationId.toString(),
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       { rating: 5, ratingComment: 'Excelente' },
     );
 
@@ -632,11 +645,11 @@ describe('ConsultationsService', () => {
     consultationModel.countDocuments.mockResolvedValue(1);
 
     const result = await service.getDoctorHistory(
-      {
+      buildRequestUser({
         userId: doctorId.toString(),
         role: UserRole.DOCTOR,
         email: 'doctor@test.com',
-      },
+      }),
       { page: 2, limit: 1, status: 'CLOSED' },
     );
 
@@ -674,11 +687,14 @@ describe('ConsultationsService', () => {
 
   it('assign rejects invalid doctor ids', async () => {
     try {
-      await service.assign('consultation-1', {
-        userId: 'invalid-id',
-        role: UserRole.DOCTOR,
-        email: 'doctor@test.com',
-      });
+      await service.assign(
+        'consultation-1',
+        buildRequestUser({
+          userId: 'invalid-id',
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      );
       fail('Expected assign to throw');
     } catch (error) {
       expect(error).toBeInstanceOf(BadRequestException);
@@ -696,11 +712,14 @@ describe('ConsultationsService', () => {
     });
 
     await expect(
-      service.assign(new Types.ObjectId().toString(), {
-        userId: new Types.ObjectId().toString(),
-        role: UserRole.DOCTOR,
-        email: 'doctor@test.com',
-      }),
+      service.assign(
+        new Types.ObjectId().toString(),
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -718,11 +737,14 @@ describe('ConsultationsService', () => {
     });
 
     await expect(
-      service.assign(new Types.ObjectId().toString(), {
-        userId: new Types.ObjectId().toString(),
-        role: UserRole.DOCTOR,
-        email: 'doctor@test.com',
-      }),
+      service.assign(
+        new Types.ObjectId().toString(),
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -742,11 +764,14 @@ describe('ConsultationsService', () => {
     });
 
     await expect(
-      service.assign(new Types.ObjectId().toString(), {
-        userId: new Types.ObjectId().toString(),
-        role: UserRole.DOCTOR,
-        email: 'doctor@test.com',
-      }),
+      service.assign(
+        new Types.ObjectId().toString(),
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -762,11 +787,11 @@ describe('ConsultationsService', () => {
     await expect(
       service.close(
         new Types.ObjectId().toString(),
-        {
+        buildRequestUser({
           userId: doctorId.toString(),
           role: UserRole.DOCTOR,
           email: 'doctor@test.com',
-        },
+        }),
         {
           baselineSymptomSeverity: 2,
           redFlagsConfirmed: false,
@@ -790,11 +815,14 @@ describe('ConsultationsService', () => {
     });
 
     await expect(
-      service.generateSummary(new Types.ObjectId().toString(), {
-        userId: doctorId.toString(),
-        role: UserRole.DOCTOR,
-        email: 'doctor@test.com',
-      }),
+      service.generateSummary(
+        new Types.ObjectId().toString(),
+        buildRequestUser({
+          userId: doctorId.toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -823,11 +851,11 @@ describe('ConsultationsService', () => {
 
     const result = await service.generateSummary(
       new Types.ObjectId().toString(),
-      {
+      buildRequestUser({
         userId: doctorId.toString(),
         role: UserRole.DOCTOR,
         email: 'doctor@test.com',
-      },
+      }),
     );
 
     expect(result.summary).toContain('Especialidad: GENERAL_MEDICINE');
@@ -853,11 +881,11 @@ describe('ConsultationsService', () => {
 
     const result = await service.submitSummaryFeedback(
       'c1',
-      {
+      buildRequestUser({
         userId: doctorId.toString(),
         role: UserRole.DOCTOR,
         email: 'doctor@test.com',
-      },
+      }),
       { value: 'USEFUL', comment: 'Buen resumen' },
     );
 
@@ -881,11 +909,11 @@ describe('ConsultationsService', () => {
     await expect(
       service.rate(
         'c1',
-        {
+        buildRequestUser({
           userId: new Types.ObjectId().toString(),
           role: UserRole.PATIENT,
           email: 'patient@test.com',
-        },
+        }),
         { rating: 4 },
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -903,11 +931,11 @@ describe('ConsultationsService', () => {
     await expect(
       service.rate(
         'c1',
-        {
+        buildRequestUser({
           userId: patientId.toString(),
           role: UserRole.PATIENT,
           email: 'patient@test.com',
-        },
+        }),
         { rating: 4 },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -926,11 +954,11 @@ describe('ConsultationsService', () => {
     await expect(
       service.rate(
         'c1',
-        {
+        buildRequestUser({
           userId: patientId.toString(),
           role: UserRole.PATIENT,
           email: 'patient@test.com',
-        },
+        }),
         { rating: 4 },
       ),
     ).rejects.toBeInstanceOf(ConflictException);
@@ -948,11 +976,11 @@ describe('ConsultationsService', () => {
     const patientId = new Types.ObjectId();
 
     const result = await service.getPatientHistory(
-      {
+      buildRequestUser({
         userId: patientId.toString(),
         role: UserRole.PATIENT,
         email: 'patient@test.com',
-      },
+      }),
       {},
     );
 
@@ -983,11 +1011,14 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue(null),
     });
 
-    const result = await service.getById(consultationId.toString(), {
-      userId: new Types.ObjectId().toString(),
-      role: UserRole.ADMIN,
-      email: 'admin@test.com',
-    });
+    const result = await service.getById(
+      consultationId.toString(),
+      buildRequestUser({
+        userId: new Types.ObjectId().toString(),
+        role: UserRole.ADMIN,
+        email: 'admin@test.com',
+      }),
+    );
 
     expect(result.id).toBe(consultationId.toString());
     expect(result.triage).toBeNull();
@@ -995,11 +1026,14 @@ describe('ConsultationsService', () => {
 
   it('getById rejects invalid consultation ids', async () => {
     await expect(
-      service.getById('invalid-id', {
-        userId: new Types.ObjectId().toString(),
-        role: UserRole.ADMIN,
-        email: 'admin@test.com',
-      }),
+      service.getById(
+        'invalid-id',
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.ADMIN,
+          email: 'admin@test.com',
+        }),
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 

@@ -16,9 +16,8 @@ jest.mock('bullmq', () => ({
 
 describe('FollowupsProcessor', () => {
   let processor: FollowupsProcessor;
-  let configService: Pick<ConfigService, 'get'> & {
-    get: jest.MockedFunction<ConfigService['get']>;
-  };
+  let configService: ConfigService;
+  let getConfigSpy: jest.SpiedFunction<ConfigService['get']>;
   let followupsService: {
     processDueFollowups: jest.Mock;
     processMissedFollowups: jest.Mock;
@@ -29,12 +28,8 @@ describe('FollowupsProcessor', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    configService = {
-      get: jest.fn<
-        ReturnType<ConfigService['get']>,
-        Parameters<ConfigService['get']>
-      >(),
-    };
+    configService = new ConfigService();
+    getConfigSpy = jest.spyOn(configService, 'get');
     followupsService = {
       processDueFollowups: jest.fn(),
       processMissedFollowups: jest.fn(),
@@ -61,7 +56,7 @@ describe('FollowupsProcessor', () => {
 
   it('starts a BullMQ worker when Redis is configured', () => {
     const connectionOptions = { host: 'localhost', port: 6379 };
-    configService.get.mockImplementation((key: string) => {
+    getConfigSpy.mockImplementation((key: string) => {
       if (key === 'redis.url') {
         return 'redis://localhost:6379';
       }
@@ -72,7 +67,7 @@ describe('FollowupsProcessor', () => {
     });
 
     processor = new FollowupsProcessor(
-      configService as ConfigService,
+      configService,
       connectionOptions,
       followupsService as unknown as FollowupsService,
     );
@@ -123,7 +118,7 @@ describe('FollowupsProcessor', () => {
     const close = jest.fn().mockResolvedValue(undefined);
     const workerMock = Worker as unknown as jest.Mock;
     workerMock.mockImplementationOnce(() => ({ close }));
-    configService.get.mockImplementation((key: string) => {
+    getConfigSpy.mockImplementation((key: string) => {
       if (key === 'redis.url') {
         return 'redis://localhost:6379';
       }
@@ -131,7 +126,7 @@ describe('FollowupsProcessor', () => {
     });
 
     processor = new FollowupsProcessor(
-      configService as ConfigService,
+      configService,
       { host: 'localhost', port: 6379 },
       followupsService as unknown as FollowupsService,
     );

@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
 import { PatientTimelineService } from './patient-timeline.service';
@@ -26,6 +27,11 @@ function createDocumentQuery(result: unknown) {
 function createPatientDocument(
   overrides: Partial<Record<string, unknown>> = {},
 ) {
+  const passwordHash =
+    typeof overrides.passwordHash === 'string'
+      ? overrides.passwordHash
+      : bcrypt.hashSync('StrongP@ss1', 4);
+
   return {
     _id: { toString: () => '507f1f77bcf86cd799439011' },
     id: '507f1f77bcf86cd799439011',
@@ -37,6 +43,7 @@ function createPatientDocument(
     gender: 'FEMALE',
     createdAt: new Date('2026-03-01T00:00:00.000Z'),
     updatedAt: new Date('2026-03-02T00:00:00.000Z'),
+    passwordHash,
     save: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -163,7 +170,7 @@ describe('PatientsService', () => {
     expect(authService.revokeAllRefreshSessionsForUser).not.toHaveBeenCalled();
   });
 
-  it('updateMe should update email without requiring currentPassword', async () => {
+  it('updateMe should update email when currentPassword is provided', async () => {
     const patient = createPatientDocument();
     patientModel.findById.mockReturnValue(createDocumentQuery(patient));
     mockSession();
@@ -177,6 +184,7 @@ describe('PatientsService', () => {
       },
       {
         email: '  Laura@Example.com  ',
+        currentPassword: 'StrongP@ss1',
       },
     );
 
@@ -202,6 +210,7 @@ describe('PatientsService', () => {
       {
         firstName: 'Laura',
         email: 'laura@example.com',
+        currentPassword: 'StrongP@ss1',
       },
     );
 
@@ -230,6 +239,7 @@ describe('PatientsService', () => {
         },
         {
           email: 'taken@example.com',
+          currentPassword: 'StrongP@ss1',
         },
       ),
     ).rejects.toBeInstanceOf(ConflictException);
@@ -296,7 +306,10 @@ describe('PatientsService', () => {
           role: UserRole.PATIENT,
           isActive: true,
         },
-        { email: 'taken@example.com' },
+        {
+          email: 'taken@example.com',
+          currentPassword: 'StrongP@ss1',
+        },
       ),
     ).rejects.toBeInstanceOf(ConflictException);
   });

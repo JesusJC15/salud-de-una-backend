@@ -1,17 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { io as ioClient, Socket } from 'socket.io-client';
 import * as bcrypt from 'bcrypt';
-import { Model, Types } from 'mongoose';
+import { Connection, ConnectionStates, Model, Types } from 'mongoose';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { Admin, AdminDocument } from '../src/admins/schemas/admin.schema';
 import {
   Consultation,
+  type ConsultationStatus,
   ConsultationDocument,
 } from '../src/consultations/schemas/consultation.schema';
 import {
@@ -23,6 +24,11 @@ import { RethusState } from '../src/common/enums/rethus-state.enum';
 
 jest.mock('dotenv/config', () => ({}));
 jest.setTimeout(120_000);
+
+const CLINICAL_SUMMARY_PROMPT_KEY = 'CLINICAL_SUMMARY_V1' as const;
+const DISCONNECTED_STATE: ConnectionStates = ConnectionStates.disconnected;
+const CONSULTATION_IN_ATTENTION: ConsultationStatus = 'IN_ATTENTION';
+const CONSULTATION_CLOSED: ConsultationStatus = 'CLOSED';
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -68,7 +74,7 @@ function waitForConnect(socket: Socket, timeoutMs = 4_000): Promise<void> {
 
 const aiServiceMock = {
   generateText: jest.fn(({ promptKey }: { promptKey: string }) => {
-    if (promptKey === 'CLINICAL_SUMMARY_V1') {
+    if (promptKey === CLINICAL_SUMMARY_PROMPT_KEY) {
       return Promise.resolve({
         provider: 'mock',
         model: 'mock',
@@ -129,6 +135,7 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
   };
 
   let app: INestApplication<App>;
+  let connection: Connection | undefined;
   let mongoServer: MongoMemoryReplSet;
   let serverPort: number;
 
@@ -211,6 +218,7 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
     consultationModel = app.get<Model<ConsultationDocument>>(
       getModelToken(Consultation.name),
     );
+    connection = app.get<Connection>(getConnectionToken());
     messageModel = app.get<Model<ConsultationMessageDocument>>(
       getModelToken(ConsultationMessage.name),
     );
@@ -327,8 +335,15 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
   });
 
   afterAll(async () => {
-    if (app) await app.close();
-    if (mongoServer) await mongoServer.stop();
+    if (app) {
+      await app.close();
+    }
+    if (connection && connection.readyState !== DISCONNECTED_STATE) {
+      await connection.close(true);
+    }
+    if (mongoServer) {
+      await mongoServer.stop({ doCleanup: true, force: true });
+    }
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         Reflect.deleteProperty(process.env, key);
@@ -370,7 +385,7 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
 
     // Verify in DB
     const doc = await consultationModel.findById(consultationId).lean().exec();
-    expect(doc?.status).toBe('IN_ATTENTION');
+    expect(doc?.status).toBe(CONSULTATION_IN_ATTENTION);
     expect(doc?.assignedDoctorId?.toString()).toBe(doctorId);
   });
 
@@ -500,11 +515,11 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
       .expect(200);
 
     const body = res.body as { id: string; status: string; closedAt: string };
-    expect(body.status).toBe('CLOSED');
+    expect(body.status).toBe(CONSULTATION_CLOSED);
     expect(body.closedAt).toBeTruthy();
 
     const doc = await consultationModel.findById(consultationId).lean().exec();
-    expect(doc?.status).toBe('CLOSED');
+    expect(doc?.status).toBe(CONSULTATION_CLOSED);
     expect(doc?.closedAt).toBeDefined();
   });
 
@@ -517,12 +532,13 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
 
     try {
       await waitForConnect(patientSocket);
-      patientSocket.emit('chat:join', { consultationId });
-
-      const history = await waitForEvent<{ messages: unknown[] }>(
+      const historyPromise = waitForEvent<{ messages: unknown[] }>(
         patientSocket,
         'chat:history',
       );
+      patientSocket.emit('chat:join', { consultationId });
+
+      const history = await historyPromise;
       // Can read history of closed consultation
       expect(Array.isArray(history.messages)).toBe(true);
       expect(history.messages.length).toBe(2);
@@ -580,7 +596,7 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
     expect(body.total).toBeGreaterThanOrEqual(1);
     const item = body.items.find((i) => i.id === consultationId);
     expect(item).toBeDefined();
-    expect(item?.status).toBe('CLOSED');
+    expect(item?.status).toBe(CONSULTATION_CLOSED);
     expect(item?.rating).toBe(4);
   });
 
@@ -597,7 +613,7 @@ describe('Happy path: triage → consulta → chat → cierre → calificación 
     expect(body.total).toBeGreaterThanOrEqual(1);
     const item = body.items.find((i) => i.id === consultationId);
     expect(item).toBeDefined();
-    expect(item?.status).toBe('CLOSED');
+    expect(item?.status).toBe(CONSULTATION_CLOSED);
     expect(item?.patientId).toBe(patientId);
   });
 });

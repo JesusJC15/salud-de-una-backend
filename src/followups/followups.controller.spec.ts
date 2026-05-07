@@ -1,3 +1,5 @@
+import type { RequestContext } from '../common/interfaces/request-context.interface';
+import { buildRequestContext } from '../common/testing/request-test-helpers';
 import { UserRole } from '../common/enums/user-role.enum';
 import { FollowupsController } from './followups.controller';
 
@@ -15,14 +17,17 @@ describe('FollowupsController', () => {
     controller = new FollowupsController(service as never);
   });
 
-  function makeReq(userId = 'patient-1', role: UserRole = UserRole.PATIENT) {
-    return {
+  function makeReq(
+    userId = 'patient-1',
+    role: UserRole = UserRole.PATIENT,
+  ): RequestContext {
+    return buildRequestContext({
       user: {
         userId,
         role,
         email: `${userId}@test.com`,
       },
-    } as never;
+    });
   }
 
   it('delegates getMine with req.user and optional status', () => {

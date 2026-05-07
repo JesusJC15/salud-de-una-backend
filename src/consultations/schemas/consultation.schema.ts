@@ -9,6 +9,11 @@ export const CONSULTATION_STATUSES = [
   'CLOSED',
 ] as const;
 export type ConsultationStatus = (typeof CONSULTATION_STATUSES)[number];
+export const ConsultationStatusValue = {
+  PENDING: 'PENDING',
+  IN_ATTENTION: 'IN_ATTENTION',
+  CLOSED: 'CLOSED',
+} as const;
 
 export type ConsultationDocument = HydratedDocument<Consultation>;
 

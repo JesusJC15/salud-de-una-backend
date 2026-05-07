@@ -22,7 +22,9 @@ describe('E2E Auth / Patient Sessions', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('registers a patient with sanitized response fields', async () => {

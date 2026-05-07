@@ -14,7 +14,9 @@ describe('E2E Clinical AI / Admin Health Check', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('reports disabled AI when runtime configuration is absent', async () => {

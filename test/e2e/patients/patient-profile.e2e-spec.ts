@@ -15,7 +15,9 @@ describe('E2E Patients / Profile Management', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    if (context) {
+      await context.close();
+    }
   });
 
   it('returns the patient profile for patient role', async () => {

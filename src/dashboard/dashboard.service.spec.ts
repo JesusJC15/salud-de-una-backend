@@ -11,7 +11,7 @@ import { TriageSession } from '../triage/schemas/triage-session.schema';
 
 describe('DashboardService', () => {
   let service: DashboardService;
-  const doctorModel = { aggregate: jest.fn() };
+  const doctorModel = { aggregate: jest.fn(), find: jest.fn() };
   const patientModel = { aggregate: jest.fn() };
   const notificationModel = { aggregate: jest.fn() };
   const consultationQuery = {
