@@ -14,8 +14,6 @@ import {
   PatientDocument,
 } from '../../patients/schemas/patient.schema';
 
-// Fallback strategy for clients still using legacy HMAC-signed JWTs.
-// Remove this file after the Auth0 cutover window (~90 days post-migration).
 @Injectable()
 export class JwtLegacyStrategy extends PassportStrategy(
   Strategy,

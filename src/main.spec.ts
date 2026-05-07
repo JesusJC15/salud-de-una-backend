@@ -185,9 +185,9 @@ describe('main bootstrap', () => {
       readyState: 0,
       asPromise: jest.fn().mockRejectedValue('boom'),
     } as unknown as Connection;
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('exit');
-    }) as never);
+    });
 
     await expect(waitForDatabaseConnection(connection, logger)).rejects.toThrow(
       'exit',
@@ -204,9 +204,9 @@ describe('main bootstrap', () => {
       readyState: 0,
       asPromise: jest.fn(() => new Promise(() => undefined)),
     } as unknown as Connection;
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('exit');
-    }) as never);
+    });
 
     const promise = waitForDatabaseConnection(connection, logger);
     jest.advanceTimersByTime(30_000);
@@ -260,7 +260,7 @@ describe('main bootstrap', () => {
     const [middleware] = app.use.mock.calls[0];
     const res = { setHeader: jest.fn() };
     const next = jest.fn();
-    middleware({} as unknown, res as any, next);
+    middleware({}, res, next);
     expect(res.setHeader).toHaveBeenCalledWith(
       'X-Content-Type-Options',
       'nosniff',

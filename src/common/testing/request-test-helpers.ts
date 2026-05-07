@@ -15,10 +15,12 @@ export function buildRequestUser(
   };
 }
 
-export function buildRequestContext(input: {
-  user?: Partial<RequestUser>;
-  correlationId?: string;
-} = {}): RequestContext {
+export function buildRequestContext(
+  input: {
+    user?: Partial<RequestUser>;
+    correlationId?: string;
+  } = {},
+): RequestContext {
   return {
     user: buildRequestUser(input.user),
     correlationId: input.correlationId,

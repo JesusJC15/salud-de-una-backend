@@ -11,7 +11,9 @@ import { REDIS_CLIENT } from './redis.constants';
 export class RedisClientLifecycleService implements OnApplicationShutdown {
   private readonly logger = new Logger(RedisClientLifecycleService.name);
 
-  constructor(@Inject(REDIS_CLIENT) private readonly redisClient: Redis | null) {}
+  constructor(
+    @Inject(REDIS_CLIENT) private readonly redisClient: Redis | null,
+  ) {}
 
   async onApplicationShutdown(): Promise<void> {
     if (

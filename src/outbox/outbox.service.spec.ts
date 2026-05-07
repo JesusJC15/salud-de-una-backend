@@ -75,28 +75,28 @@ describe('OutboxService', () => {
       id: 'event-2',
     });
 
-    const [query, updatePayload, options] =
-      outboxEventModel.findOneAndUpdate.mock.calls[0] as [
-        {
-          $or: Array<Record<string, unknown>>;
-        },
-        {
-          $set: {
-            status: string;
-            availableAt: Date;
-            lastError?: string;
-          };
-          $inc: {
-            attempts: number;
-          };
-        },
-        {
-          sort: {
-            createdAt: 1;
-          };
-          returnDocument: string;
-        },
-      ];
+    const [query, updatePayload, options] = outboxEventModel.findOneAndUpdate
+      .mock.calls[0] as [
+      {
+        $or: Array<Record<string, unknown>>;
+      },
+      {
+        $set: {
+          status: string;
+          availableAt: Date;
+          lastError?: string;
+        };
+        $inc: {
+          attempts: number;
+        };
+      },
+      {
+        sort: {
+          createdAt: 1;
+        };
+        returnDocument: string;
+      },
+    ];
 
     expect(query.$or).toHaveLength(2);
     expect(query.$or).toEqual(

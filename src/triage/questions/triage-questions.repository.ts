@@ -185,7 +185,9 @@ export class TriageQuestionsRepository {
   };
 
   getQuestionsBySpecialty(specialty: Specialty): TriageQuestion[] {
-    return this.catalog[specialty].map((question) => this.cloneQuestion(question));
+    return this.catalog[specialty].map((question) =>
+      this.cloneQuestion(question),
+    );
   }
 
   getQuestionById(

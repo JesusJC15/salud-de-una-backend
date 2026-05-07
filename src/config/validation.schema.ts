@@ -42,4 +42,5 @@ export const validationSchema = Joi.object({
     otherwise: Joi.string().allow('').optional(),
   }),
   GEMINI_MODEL: Joi.string().allow('').optional(),
+  AUTH0_MIGRATION_KEY: Joi.string().allow('').optional(),
 });

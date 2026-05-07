@@ -58,7 +58,7 @@ describe('JwtAuthGuard', () => {
         },
         'canActivate',
       )
-      .mockImplementation(async () => true);
+      .mockImplementation(() => true);
 
     await expect(
       Promise.resolve(guard.canActivate(createContext('Bearer token-123'))),

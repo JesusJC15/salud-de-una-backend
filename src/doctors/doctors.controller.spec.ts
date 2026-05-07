@@ -106,17 +106,14 @@ describe('DoctorsController', () => {
     service.updatePushToken.mockResolvedValue(undefined);
 
     await expect(
-      controller.updatePushToken(
-        { token: 'ExponentPushToken[test]' },
-        {
-          user: {
-            userId: 'd1',
-            email: 'doc@example.com',
-            role: UserRole.DOCTOR,
-            isActive: true,
-          },
-        } as unknown as RequestContext,
-      ),
+      controller.updatePushToken({ token: 'ExponentPushToken[test]' }, {
+        user: {
+          userId: 'd1',
+          email: 'doc@example.com',
+          role: UserRole.DOCTOR,
+          isActive: true,
+        },
+      } as unknown as RequestContext),
     ).resolves.toBeUndefined();
 
     expect(service.updatePushToken).toHaveBeenCalledWith(

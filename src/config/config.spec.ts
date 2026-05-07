@@ -50,16 +50,16 @@ describe('config factories', () => {
     expect(config.keyPrefix).toBe('salud-de-una');
     expect(config.outboxDispatchIntervalMs).toBe(1000);
   });
-  
+
   it('redisConfig should respect custom prefix and valid interval', () => {
-  process.env.REDIS_KEY_PREFIX = 'custom-prefix';
-  process.env.OUTBOX_DISPATCH_INTERVAL_MS = '2500';
+    process.env.REDIS_KEY_PREFIX = 'custom-prefix';
+    process.env.OUTBOX_DISPATCH_INTERVAL_MS = '2500';
 
-  const config = redisConfig();
+    const config = redisConfig();
 
-  expect(config.keyPrefix).toBe('custom-prefix');
-  expect(config.outboxDispatchIntervalMs).toBe(2500);
-});
+    expect(config.keyPrefix).toBe('custom-prefix');
+    expect(config.outboxDispatchIntervalMs).toBe(2500);
+  });
 
   it('redisConfig should allow empty prefix', () => {
     process.env.REDIS_KEY_PREFIX = '';
@@ -81,7 +81,7 @@ describe('config factories', () => {
     config = redisConfig();
     expect(config.outboxDispatchIntervalMs).toBe(1000);
   });
-  
+
   it('aiConfig should map ai flags and defaults', () => {
     process.env.AI_ENABLED = 'true';
     process.env.AI_PROVIDER = 'gemini';
@@ -94,7 +94,7 @@ describe('config factories', () => {
     expect(config.geminiApiKey).toBe('key');
     expect(config.model).toBe('gemini-2.5-flash');
   });
-  
+
   it('aiConfig should use defaults when ai env vars are missing', () => {
     delete process.env.AI_ENABLED;
     delete process.env.AI_PROVIDER;

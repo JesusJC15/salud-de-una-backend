@@ -84,7 +84,9 @@ describe('TechnicalMetricsService', () => {
   });
 
   it('should not warn when Redis metrics store is intentionally disabled', async () => {
-    redisStore.record.mockRejectedValue(new Error('Redis metrics store disabled'));
+    redisStore.record.mockRejectedValue(
+      new Error('Redis metrics store disabled'),
+    );
     redisStore.getSummary.mockRejectedValue(
       new Error('Redis metrics store disabled'),
     );

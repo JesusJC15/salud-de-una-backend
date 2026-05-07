@@ -20,8 +20,6 @@ import { ProvisioningService } from './provisioning.service';
 @Module({
   imports: [
     PassportModule,
-    // JwtModule kept for legacy token issuance during cutover window.
-    // Remove after all clients migrate to Auth0.
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

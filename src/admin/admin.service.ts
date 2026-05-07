@@ -863,12 +863,12 @@ export class AdminService {
     user: PatientProjection | DoctorProjection | AdminProjection,
   ): UserListItem {
     if (role === UserRole.DOCTOR) {
-      return this.mapDoctorUser(user as DoctorProjection);
+      return this.mapDoctorUser(user);
     }
     if (role === UserRole.PATIENT) {
-      return this.mapPatientUser(user as PatientProjection);
+      return this.mapPatientUser(user);
     }
-    return this.mapAdminUser(user as AdminProjection);
+    return this.mapAdminUser(user);
   }
 
   private mapBaseUser(role: UserRole, user: BaseUserProjection): UserListItem {

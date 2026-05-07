@@ -49,7 +49,10 @@ export class JwtProvisionStrategy extends PassportStrategy(
     this.domain = domain;
   }
 
-  async validate(req: Request, payload: Auth0JwtPayload): Promise<ProvisionUser> {
+  async validate(
+    req: Request,
+    payload: Auth0JwtPayload,
+  ): Promise<ProvisionUser> {
     let email =
       (payload[`${AUTH0_CLAIM_NS}email`] as string | undefined) ??
       payload.email ??

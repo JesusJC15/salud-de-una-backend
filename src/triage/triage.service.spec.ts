@@ -121,6 +121,7 @@ describe('TriageService', () => {
 
     await expect(promise).rejects.toBeInstanceOf(ConflictException);
     await expect(promise).rejects.toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       response: expect.objectContaining({
         errorCode: 'TRIAGE_SESSION_IN_PROGRESS',
         specialty: Specialty.GENERAL_MEDICINE,
@@ -150,6 +151,7 @@ describe('TriageService', () => {
 
     await expect(promise).rejects.toBeInstanceOf(ConflictException);
     await expect(promise).rejects.toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       response: expect.objectContaining({
         errorCode: 'TRIAGE_SESSION_IN_PROGRESS',
         existingSessionId: existingId.toString(),
@@ -569,15 +571,12 @@ describe('TriageService', () => {
     });
 
     await expect(
-      service.cancelSession(
-        new Types.ObjectId().toString(),
-        {
-          userId: new Types.ObjectId().toString(),
-          email: 'patient@example.com',
-          role: UserRole.PATIENT,
-          isActive: true,
-        },
-      ),
+      service.cancelSession(new Types.ObjectId().toString(), {
+        userId: new Types.ObjectId().toString(),
+        email: 'patient@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -833,6 +832,7 @@ describe('TriageService', () => {
         'corr-ai-failure',
       ),
     ).rejects.toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       response: expect.objectContaining({
         errorCode: 'TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE',
         specialty: Specialty.GENERAL_MEDICINE,

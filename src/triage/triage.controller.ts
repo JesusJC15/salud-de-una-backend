@@ -95,7 +95,8 @@ export class TriageController {
         specialty: 'GENERAL_MEDICINE',
         existingSessionId: '680f0493bba79f530f7486f1',
         status: 'IN_PROGRESS',
-        message: 'Ya existe una sesion de triage en progreso para esta especialidad',
+        message:
+          'Ya existe una sesion de triage en progreso para esta especialidad',
         path: '/v1/triage/sessions',
         timestamp: '2026-04-07T18:20:00.000Z',
         correlation_id: 'e65fd6f0-966d-4d67-9d0b-f0668f752b17',
@@ -236,7 +237,10 @@ export class TriageController {
       },
     },
   })
-  getSessionDetail(@Req() req: RequestContext, @Param('sessionId') sessionId: string) {
+  getSessionDetail(
+    @Req() req: RequestContext,
+    @Param('sessionId') sessionId: string,
+  ) {
     return this.triageService.getSessionDetail(sessionId, req.user!);
   }
 
@@ -259,10 +263,16 @@ export class TriageController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'Payload invalido o estado no permitido' })
+  @ApiBadRequestResponse({
+    description: 'Payload invalido o estado no permitido',
+  })
   @ApiUnauthorizedResponse({ description: 'JWT ausente o invalido' })
-  @ApiForbiddenResponse({ description: 'El usuario autenticado no tiene rol PATIENT' })
-  @ApiNotFoundResponse({ description: 'Sesion no encontrada o no pertenece al paciente' })
+  @ApiForbiddenResponse({
+    description: 'El usuario autenticado no tiene rol PATIENT',
+  })
+  @ApiNotFoundResponse({
+    description: 'Sesion no encontrada o no pertenece al paciente',
+  })
   saveAnswers(
     @Req() req: RequestContext,
     @Param('sessionId') sessionId: string,
@@ -287,16 +297,23 @@ export class TriageController {
         sessionId: '680f0493bba79f530f7486f1',
         priority: 'MODERATE',
         redFlags: [],
-        message: 'Analisis de triage completado. Tu caso fue enviado a la cola medica.',
+        message:
+          'Analisis de triage completado. Tu caso fue enviado a la cola medica.',
         highPriorityAlert: false,
       },
     },
   })
   @ApiBadRequestResponse({ description: 'Sesion invalida o no en progreso' })
   @ApiUnauthorizedResponse({ description: 'JWT ausente o invalido' })
-  @ApiForbiddenResponse({ description: 'El usuario autenticado no tiene rol PATIENT' })
-  @ApiNotFoundResponse({ description: 'Sesion no encontrada o no pertenece al paciente' })
-  @ApiUnprocessableEntityResponse({ description: 'La sesion no tiene todas las respuestas requeridas' })
+  @ApiForbiddenResponse({
+    description: 'El usuario autenticado no tiene rol PATIENT',
+  })
+  @ApiNotFoundResponse({
+    description: 'Sesion no encontrada o no pertenece al paciente',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'La sesion no tiene todas las respuestas requeridas',
+  })
   @ApiServiceUnavailableResponse({
     description: 'Dependencia de analisis no disponible o ruleset ausente',
     schema: {
@@ -305,7 +322,8 @@ export class TriageController {
         errorCode: 'TRIAGE_ANALYSIS_DEPENDENCY_UNAVAILABLE',
         specialty: 'GENERAL_MEDICINE',
         sessionId: '680f0493bba79f530f7486f1',
-        message: 'No fue posible completar el analisis de triage en este momento',
+        message:
+          'No fue posible completar el analisis de triage en este momento',
         path: '/v1/triage/sessions/680f0493bba79f530f7486f1/analyze',
         timestamp: '2026-04-11T10:00:00.000Z',
         correlation_id: 'mobile-mntx90rg-gpe1oido',
@@ -352,9 +370,20 @@ export class TriageController {
     },
   })
   @ApiUnauthorizedResponse({ description: 'JWT ausente o invalido' })
-  @ApiForbiddenResponse({ description: 'El usuario autenticado no tiene rol PATIENT' })
-  @ApiNotFoundResponse({ description: 'Sesion no encontrada o no pertenece al paciente' })
-  cancelSession(@Req() req: RequestContext, @Param('sessionId') sessionId: string) {
-    return this.triageService.cancelSession(sessionId, req.user!, req.correlationId);
+  @ApiForbiddenResponse({
+    description: 'El usuario autenticado no tiene rol PATIENT',
+  })
+  @ApiNotFoundResponse({
+    description: 'Sesion no encontrada o no pertenece al paciente',
+  })
+  cancelSession(
+    @Req() req: RequestContext,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.triageService.cancelSession(
+      sessionId,
+      req.user!,
+      req.correlationId,
+    );
   }
 }

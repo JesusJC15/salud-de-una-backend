@@ -9,7 +9,8 @@ import {
 @Injectable()
 export class TechnicalMetricsService {
   private readonly logger = new Logger(TechnicalMetricsService.name);
-  private static readonly REDIS_DISABLED_MESSAGE = 'Redis metrics store disabled';
+  private static readonly REDIS_DISABLED_MESSAGE =
+    'Redis metrics store disabled';
 
   constructor(
     private readonly redisStore: RedisTechnicalMetricsStore,

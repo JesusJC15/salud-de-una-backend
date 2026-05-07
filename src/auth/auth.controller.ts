@@ -7,7 +7,6 @@ import {
   HttpCode,
   HttpStatus,
   InternalServerErrorException,
-  NotFoundException,
   Post,
   Req,
   UseGuards,
@@ -174,59 +173,6 @@ export class AuthController {
     );
 
     return this.toDoctorProvisionResponse(doctor);
-  }
-
-  @Post('migrate-check')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  async migrateCheck(
-    @Req() req: RequestContext,
-    @Body() body: { email: string; password: string },
-  ) {
-    const migrationKey = process.env.AUTH0_MIGRATION_KEY;
-    const providedKey = req.headers?.['x-migration-key'] as string | undefined;
-
-    if (!migrationKey || providedKey !== migrationKey) {
-      throw new NotFoundException('Not found');
-    }
-
-    const patient = await this.patientModel
-      .findOne({ email: body.email.toLowerCase().trim() })
-      .select('+passwordHash firstName lastName role')
-      .lean()
-      .exec();
-
-    if (patient) {
-      const matches = await bcrypt.compare(body.password, patient.passwordHash);
-      if (!matches) throw new NotFoundException('Invalid credentials');
-      return {
-        user_id: patient._id.toString(),
-        email: patient.email,
-        role: UserRole.PATIENT,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-      };
-    }
-
-    const doctor = await this.doctorModel
-      .findOne({ email: body.email.toLowerCase().trim() })
-      .select('+passwordHash firstName lastName role')
-      .lean()
-      .exec();
-
-    if (doctor) {
-      const matches = await bcrypt.compare(body.password, doctor.passwordHash);
-      if (!matches) throw new NotFoundException('Invalid credentials');
-      return {
-        user_id: doctor._id.toString(),
-        email: doctor.email,
-        role: UserRole.DOCTOR,
-        firstName: doctor.firstName,
-        lastName: doctor.lastName,
-      };
-    }
-
-    throw new NotFoundException('User not found');
   }
 
   @Get('me')

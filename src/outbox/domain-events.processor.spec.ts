@@ -38,7 +38,8 @@ describe('DomainEventsProcessor', () => {
   };
 
   beforeEach(() => {
-    WorkerMock = jest.requireMock('bullmq').Worker as typeof WorkerMock;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    WorkerMock = jest.requireMock('bullmq').Worker;
     WorkerMock.instances.length = 0;
     configService = {
       get: jest.fn().mockImplementation((key: string) => {
@@ -93,7 +94,7 @@ describe('DomainEventsProcessor', () => {
     });
     processor = new DomainEventsProcessor(
       configService as unknown as ConfigService,
-      { host: 'localhost', port: 6379 } as never,
+      { host: 'localhost', port: 6379 },
       domainEventsHandler as never,
       outboxService as never,
     );
@@ -158,9 +159,7 @@ describe('DomainEventsProcessor', () => {
       new Error('failed once'),
     );
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('event-4'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('event-4'));
     warnSpy.mockRestore();
   });
 

@@ -1,8 +1,5 @@
 import { UserRole } from '../enums/user-role.enum';
-import {
-  buildRequestContext,
-  buildRequestUser,
-} from './request-test-helpers';
+import { buildRequestContext, buildRequestUser } from './request-test-helpers';
 
 describe('request-test-helpers', () => {
   it('buildRequestUser should provide typed defaults', () => {
