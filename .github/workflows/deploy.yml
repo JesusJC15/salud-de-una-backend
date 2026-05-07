@@ -1,10 +1,13 @@
-name: Test & Deploy Backend
+name: CI Backend
 
 on:
   push:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
+
+# Railway auto-deploys on push to main via GitHub integration.
+# This workflow only gates quality: tests must pass before Railway picks up the commit.
 
 jobs:
   test:
@@ -39,24 +42,3 @@ jobs:
 
       - name: E2E tests
         run: npm run test:e2e -- --runInBand
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: Trigger Railway deploy
-        env:
-          WEBHOOK_URL: ${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "::error::RAILWAY_DEPLOY_WEBHOOK secret is not configured. Add it in GitHub → Settings → Secrets → Actions."
-            exit 1
-          fi
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK_URL")
-          echo "Railway webhook response: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "202" ]; then
-            echo "::error::Railway webhook returned unexpected status: $HTTP_CODE"
-            exit 1
-          fi
