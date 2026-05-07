@@ -1,19 +1,15 @@
-import { Inject, Optional, UsePipes, ValidationPipe } from '@nestjs/common';
+import { UsePipes, ValidationPipe } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
-  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { createAdapter } from '@socket.io/redis-adapter';
-import { Redis } from 'ioredis';
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { REDIS_CLIENT } from '../redis/redis.constants';
 import { ChatJoinDto } from './dto/chat-join.dto';
 import { ChatSendDto } from './dto/chat-send.dto';
 import { ChatService } from './chat.service';
@@ -40,25 +36,14 @@ type AuthenticatedSocket = Socket<
     transform: true,
   }),
 )
-export class ChatGateway implements OnGatewayConnection, OnGatewayInit {
+export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   private server!: Server;
 
   constructor(
-    @Optional()
-    @Inject(REDIS_CLIENT)
-    private readonly redisClient: Redis | null,
     private readonly authService: AuthService,
     private readonly chatService: ChatService,
   ) {}
-
-  afterInit(server: Server): void {
-    if (this.redisClient) {
-      const pubClient = this.redisClient;
-      const subClient = this.redisClient.duplicate();
-      server.adapter(createAdapter(pubClient, subClient));
-    }
-  }
 
   async handleConnection(client: AuthenticatedSocket) {
     const token = this.extractToken(client);

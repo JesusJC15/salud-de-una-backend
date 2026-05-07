@@ -47,4 +47,16 @@ jobs:
 
     steps:
       - name: Trigger Railway deploy
-        run: curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}"
+        env:
+          WEBHOOK_URL: ${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::error::RAILWAY_DEPLOY_WEBHOOK secret is not configured. Add it in GitHub → Settings → Secrets → Actions."
+            exit 1
+          fi
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK_URL")
+          echo "Railway webhook response: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "202" ]; then
+            echo "::error::Railway webhook returned unexpected status: $HTTP_CODE"
+            exit 1
+          fi

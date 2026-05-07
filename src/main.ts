@@ -3,6 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { getConnectionToken } from '@nestjs/mongoose';
+import { Redis } from 'ioredis';
+import { REDIS_CLIENT } from './redis/redis.constants';
+import { RedisIoAdapter } from './chat/redis-io.adapter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { Connection } from 'mongoose';
@@ -77,7 +80,12 @@ export async function waitForDatabaseConnection(
 export async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
-  app.useWebSocketAdapter(new IoAdapter(app));
+  const redisClient = app.get<Redis | null>(REDIS_CLIENT);
+  if (redisClient) {
+    app.useWebSocketAdapter(new RedisIoAdapter(app, redisClient));
+  } else {
+    app.useWebSocketAdapter(new IoAdapter(app));
+  }
   const configService = app.get(ConfigService);
   const dbConnection = app.get<Connection>(getConnectionToken());
   const globalPrefix = 'v1';
