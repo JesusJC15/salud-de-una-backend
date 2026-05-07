@@ -442,4 +442,84 @@ describe('AuthController', () => {
       role: UserRole.DOCTOR,
     });
   });
+
+  it('provisionPatient should accept dto with birthDate (covers ternary true-branch)', async () => {
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    authService.ensureEmailIsAvailable.mockResolvedValue(undefined);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
+    patientModel.create.mockResolvedValue({
+      id: 'p-new',
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Lopez',
+      role: UserRole.PATIENT,
+    });
+
+    const result = await controller.provisionPatient(
+      { user: { auth0UserId: 'auth0|abc', email: 'ana@example.com' } } as never,
+      { firstName: 'Ana', lastName: 'Lopez', birthDate: '1990-01-01' },
+    );
+
+    expect(patientModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ birthDate: new Date('1990-01-01') }),
+    );
+    expect(result).toMatchObject({ id: 'p-new' });
+  });
+
+  it('provisionPatient should resolve id from _id when existing has no id field', async () => {
+    const existing = {
+      _id: { toString: () => 'only-_id' },
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Lopez',
+      role: UserRole.PATIENT,
+    };
+    patientModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(existing),
+    });
+
+    const result = await controller.provisionPatient(
+      { user: { auth0UserId: 'auth0|abc', email: 'ana@example.com' } } as never,
+      { firstName: 'Ana', lastName: 'Lopez' },
+    );
+
+    expect(result).toMatchObject({ id: 'only-_id' });
+  });
+
+  it('provisionDoctor should resolve id from _id when existing has no id field', async () => {
+    doctorModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => 'doc-only-_id' },
+        email: 'doc@example.com',
+        firstName: 'Laura',
+        lastName: 'Medina',
+        role: UserRole.DOCTOR,
+        specialty: Specialty.GENERAL_MEDICINE,
+        doctorStatus: 'PENDING',
+      }),
+    });
+
+    const result = await controller.provisionDoctor(
+      {
+        user: { auth0UserId: 'auth0|doc', email: 'doc@example.com' },
+      } as never,
+      {
+        firstName: 'Laura',
+        lastName: 'Medina',
+        specialty: Specialty.GENERAL_MEDICINE,
+        personalId: 'CC-999',
+        phoneNumber: '3009999999',
+      },
+    );
+
+    expect(result).toMatchObject({ id: 'doc-only-_id' });
+  });
 });
