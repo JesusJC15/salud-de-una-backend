@@ -6,6 +6,7 @@ import {
   ConsultationSchema,
 } from '../consultations/schemas/consultation.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { RedisModule } from '../redis/redis.module';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import {
@@ -17,6 +18,7 @@ import {
   imports: [
     AuthModule,
     NotificationsModule,
+    RedisModule,
     MongooseModule.forFeature([
       { name: Consultation.name, schema: ConsultationSchema },
       {
