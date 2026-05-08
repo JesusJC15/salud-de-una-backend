@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AiModule } from '../ai/ai.module';
 import {
   Consultation,
   ConsultationSchema,
@@ -18,12 +19,14 @@ import {
 } from '../triage/schemas/triage-session.schema';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
+import { ErrorLogsService } from './error-logs.service';
 import { InMemoryTechnicalMetricsStore } from './metrics/in-memory-technical-metrics.store';
 import { RedisTechnicalMetricsStore } from './metrics/redis-technical-metrics.store';
 import { TechnicalMetricsService } from './metrics/technical-metrics.service';
 
 @Module({
   imports: [
+    AiModule,
     MongooseModule.forFeature([
       { name: Patient.name, schema: PatientSchema },
       { name: Doctor.name, schema: DoctorSchema },
@@ -48,7 +51,8 @@ import { TechnicalMetricsService } from './metrics/technical-metrics.service';
         ),
     },
     TechnicalMetricsService,
+    ErrorLogsService,
   ],
-  exports: [DashboardService],
+  exports: [DashboardService, ErrorLogsService],
 })
 export class DashboardModule {}

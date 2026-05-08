@@ -6,17 +6,22 @@ import {
   Injectable,
   Logger,
   NestInterceptor,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Observable, tap } from 'rxjs';
 import { DashboardService } from '../../dashboard/dashboard.service';
+import { ErrorLogsService } from '../../dashboard/error-logs.service';
 import { RequestContext } from '../interfaces/request-context.interface';
 
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(RequestLoggingInterceptor.name);
 
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    @Optional() private readonly errorLogsService?: ErrorLogsService,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
@@ -66,8 +71,22 @@ export class RequestLoggingInterceptor implements NestInterceptor {
             error instanceof HttpException
               ? error.getStatus()
               : HttpStatus.INTERNAL_SERVER_ERROR;
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
 
           void this.dashboardService.record({ latencyMs, statusCode });
+
+          if (statusCode >= 500) {
+            this.errorLogsService?.append({
+              statusCode,
+              method,
+              url: endpoint,
+              correlationId,
+              userId: userId === 'anonymous' ? undefined : userId,
+              errorMessage,
+            });
+          }
+
           this.logger.error(
             JSON.stringify({
               timestamp: new Date().toISOString(),
@@ -81,8 +100,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
               status_code: statusCode,
               error_code:
                 error instanceof Error ? error.name : 'UnhandledException',
-              error_message:
-                error instanceof Error ? error.message : String(error),
+              error_message: errorMessage,
             }),
           );
         },

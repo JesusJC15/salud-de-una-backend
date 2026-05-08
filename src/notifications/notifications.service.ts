@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { NotificationsGateway } from './notifications.gateway';
 import { PushNotificationsService } from './push-notifications.service';
 import {
   Notification,
@@ -16,6 +17,9 @@ export class NotificationsService {
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
     private readonly pushNotificationsService: PushNotificationsService,
+    @Optional()
+    @Inject(forwardRef(() => NotificationsGateway))
+    private readonly notificationsGateway?: NotificationsGateway,
   ) {}
 
   async createDoctorStatusChange(
@@ -25,16 +29,18 @@ export class NotificationsService {
     session?: ClientSession,
     options?: { sourceEventId?: string },
   ): Promise<void> {
+    const message = notes
+      ? `Tu verificacion como doctor fue ${doctorStatus}. Notas: ${notes}`
+      : `Tu verificacion como doctor fue ${doctorStatus}.`;
+
     try {
-      await this.notificationModel.create(
+      const [created] = await this.notificationModel.create(
         [
           {
             userId: new Types.ObjectId(userId),
             type: 'DOCTOR_STATUS_CHANGE',
             status: doctorStatus,
-            message: notes
-              ? `Tu verificacion como doctor fue ${doctorStatus}. Notas: ${notes}`
-              : `Tu verificacion como doctor fue ${doctorStatus}.`,
+            message,
             sourceEventId: options?.sourceEventId,
             read: false,
           },
@@ -42,6 +48,13 @@ export class NotificationsService {
         session ? { session } : undefined,
       );
       this.logger.log(`Notificacion creada para ${userId}`);
+      this.notificationsGateway?.emitToUser(userId, {
+        id: created._id.toString(),
+        type: 'DOCTOR_STATUS_CHANGE',
+        message,
+        read: false,
+        createdAt: created.createdAt ?? new Date(),
+      });
     } catch (error: unknown) {
       if (this.isDuplicateSourceEvent(error)) {
         this.logger.warn(
@@ -71,7 +84,7 @@ export class NotificationsService {
     };
   }): Promise<void> {
     try {
-      await this.notificationModel.create(
+      const [created] = await this.notificationModel.create(
         [
           {
             userId: new Types.ObjectId(input.userId),
@@ -87,6 +100,14 @@ export class NotificationsService {
         ],
         input.session ? { session: input.session } : undefined,
       );
+      this.notificationsGateway?.emitToUser(input.userId, {
+        id: created._id.toString(),
+        type: input.type,
+        message: input.message,
+        deepLink: input.deepLink,
+        read: false,
+        createdAt: created.createdAt ?? new Date(),
+      });
     } catch (error: unknown) {
       if (this.isDuplicateSourceEvent(error)) {
         this.logger.warn(

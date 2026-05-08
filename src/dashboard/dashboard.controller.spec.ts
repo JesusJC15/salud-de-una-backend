@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { AiService } from '../ai/ai.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
+import { ErrorLogsService } from './error-logs.service';
 
 describe('DashboardController', () => {
   let controller: DashboardController;
@@ -10,6 +12,8 @@ describe('DashboardController', () => {
     getConsultationMetrics: jest.Mock;
     getAlerts: jest.Mock;
   };
+  let errorLogsService: { getRecent: jest.Mock };
+  let aiService: { getUsageMetrics: jest.Mock };
 
   beforeEach(async () => {
     service = {
@@ -18,10 +22,16 @@ describe('DashboardController', () => {
       getConsultationMetrics: jest.fn(),
       getAlerts: jest.fn(),
     };
+    errorLogsService = { getRecent: jest.fn().mockReturnValue([]) };
+    aiService = { getUsageMetrics: jest.fn().mockResolvedValue({ total: 0 }) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DashboardController],
-      providers: [{ provide: DashboardService, useValue: service }],
+      providers: [
+        { provide: DashboardService, useValue: service },
+        { provide: ErrorLogsService, useValue: errorLogsService },
+        { provide: AiService, useValue: aiService },
+      ],
     }).compile();
 
     controller = module.get<DashboardController>(DashboardController);

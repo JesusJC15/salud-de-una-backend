@@ -9,6 +9,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -289,6 +290,7 @@ export class TriageController {
   @Post('sessions/:sessionId/analyze')
   @HttpCode(200)
   @Roles(UserRole.PATIENT)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @ApiOperation({ summary: 'Analizar sesion de triage' })
   @ApiOkResponse({
     description: 'Sesion analizada y caso enviado a cola medica',

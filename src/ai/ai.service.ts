@@ -247,6 +247,37 @@ export class AiService {
     }
   }
 
+  async getUsageMetrics() {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const logs = await this.auditLogModel
+      .find({ createdAt: { $gte: since } })
+      .lean()
+      .exec();
+
+    const total = logs.length;
+    const successCount = logs.filter((l) => l.status === 'success').length;
+    const errorCount = total - successCount;
+    const avgLatencyMs =
+      total > 0
+        ? Math.round(logs.reduce((sum, l) => sum + l.latencyMs, 0) / total)
+        : 0;
+
+    const byPromptKey: Record<string, number> = {};
+    for (const log of logs) {
+      byPromptKey[log.promptKey] = (byPromptKey[log.promptKey] ?? 0) + 1;
+    }
+
+    return {
+      windowHours: 24,
+      total,
+      successCount,
+      errorCount,
+      successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+      avgLatencyMs,
+      byPromptKey,
+    };
+  }
+
   async getActivePromptInstruction(key: string): Promise<string | null> {
     try {
       const prompt = await this.promptDefinitionModel
@@ -304,7 +335,7 @@ export class AiService {
       { $set: { active: false } },
     );
 
-    return this.promptDefinitionModel.create({
+    const doc = new this.promptDefinitionModel({
       key: dto.key,
       version: nextVersion,
       provider: 'gemini',
@@ -313,6 +344,7 @@ export class AiService {
       systemInstruction: dto.systemInstruction,
       metadata: { createdByAdmin: true },
     });
+    return doc.save();
   }
 
   async togglePromptActive(id: string, active: boolean) {
