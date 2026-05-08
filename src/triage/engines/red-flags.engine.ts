@@ -110,7 +110,44 @@ export class RedFlagsEngine {
       return this.deduplicateByCode(this.evaluateOdontology(answers));
     }
 
+    if (specialty === Specialty.URGENT_CARE) {
+      return this.deduplicateByCode(this.evaluateUrgentCare(answers));
+    }
+
     return [];
+  }
+
+  private static evaluateUrgentCare(answers: TriageAnswer[]): RedFlag[] {
+    const redFlags: RedFlag[] = [];
+    const breathingValue = normalizeValue(this.getAnswerValue(answers, 'UR-Q3'));
+
+    if (breathingValue === 'no puedo respirar bien') {
+      redFlags.push({
+        code: 'RF-UR-001',
+        specialty: Specialty.URGENT_CARE,
+        severity: 'CRITICAL',
+        evidence: 'Dificultad respiratoria severa reportada',
+      });
+    } else if (breathingValue === 'con cierta dificultad') {
+      redFlags.push({
+        code: 'RF-UR-003',
+        specialty: Specialty.URGENT_CARE,
+        severity: 'WARNING',
+        evidence: 'Dificultad respiratoria moderada reportada',
+      });
+    }
+
+    const bleedingValue = normalizeValue(this.getAnswerValue(answers, 'UR-Q4'));
+    if (bleedingValue === 'si sangrado abundante' || bleedingValue === 'si, sangrado abundante') {
+      redFlags.push({
+        code: 'RF-UR-002',
+        specialty: Specialty.URGENT_CARE,
+        severity: 'CRITICAL',
+        evidence: 'Sangrado activo abundante reportado',
+      });
+    }
+
+    return redFlags;
   }
 
   private static evaluateOdontology(answers: TriageAnswer[]): RedFlag[] {

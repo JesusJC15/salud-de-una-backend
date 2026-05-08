@@ -246,4 +246,90 @@ export class AiService {
       this.logger.warn(`Failed to persist AI audit log: ${message}`);
     }
   }
+
+  async getActivePromptInstruction(key: string): Promise<string | null> {
+    try {
+      const prompt = await this.promptDefinitionModel
+        .findOne({ key, active: true })
+        .sort({ version: -1 })
+        .lean()
+        .exec();
+
+      return prompt?.systemInstruction ?? null;
+    } catch {
+      this.logger.warn(`Failed to load prompt instruction for key "${key}" — using fallback`);
+      return null;
+    }
+  }
+
+  async listPrompts(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.promptDefinitionModel
+        .find()
+        .sort({ key: 1, version: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.promptDefinitionModel.countDocuments(),
+    ]);
+    return { items, total, page, limit };
+  }
+
+  async getPromptVersions(key: string) {
+    return this.promptDefinitionModel
+      .find({ key })
+      .sort({ version: -1 })
+      .lean()
+      .exec();
+  }
+
+  async createPromptVersion(dto: {
+    key: string;
+    systemInstruction: string;
+    model?: string;
+  }) {
+    const defaultModel = this.configService.get<string>('ai.model') ?? 'gemini-2.5-flash';
+    const latest = await this.promptDefinitionModel
+      .findOne({ key: dto.key })
+      .sort({ version: -1 })
+      .lean()
+      .exec();
+
+    const nextVersion = (latest?.version ?? 0) + 1;
+
+    await this.promptDefinitionModel.updateMany(
+      { key: dto.key, active: true },
+      { $set: { active: false } },
+    );
+
+    return this.promptDefinitionModel.create({
+      key: dto.key,
+      version: nextVersion,
+      provider: 'gemini',
+      model: dto.model ?? defaultModel,
+      active: true,
+      systemInstruction: dto.systemInstruction,
+      metadata: { createdByAdmin: true },
+    });
+  }
+
+  async togglePromptActive(id: string, active: boolean) {
+    const prompt = await this.promptDefinitionModel.findById(id).exec();
+    if (!prompt) {
+      return null;
+    }
+
+    if (active) {
+      await this.promptDefinitionModel.updateMany(
+        { key: prompt.key, active: true, _id: { $ne: id } },
+        { $set: { active: false } },
+      );
+    }
+
+    prompt.active = active;
+    await prompt.save();
+    return prompt.toObject();
+  }
 }

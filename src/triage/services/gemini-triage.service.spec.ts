@@ -9,6 +9,7 @@ describe('GeminiTriageService', () => {
 
   const aiService = {
     generateText: jest.fn(),
+    getActivePromptInstruction: jest.fn().mockResolvedValue(null),
   };
 
   const configService = {

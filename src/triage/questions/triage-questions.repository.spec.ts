@@ -1,52 +1,101 @@
+import { getModelToken } from '@nestjs/mongoose';
+import { Test } from '@nestjs/testing';
 import { Specialty } from '../../common/enums/specialty.enum';
+import { TriageQuestionSet } from '../schemas/triage-question-set.schema';
 import { TriageQuestionsRepository } from './triage-questions.repository';
 
 describe('TriageQuestionsRepository', () => {
   let repository: TriageQuestionsRepository;
+  let questionSetModel: { findOne: jest.Mock };
 
-  beforeEach(() => {
-    repository = new TriageQuestionsRepository();
+  beforeEach(async () => {
+    questionSetModel = {
+      findOne: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      }),
+    };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        TriageQuestionsRepository,
+        {
+          provide: getModelToken(TriageQuestionSet.name),
+          useValue: questionSetModel,
+        },
+      ],
+    }).compile();
+
+    repository = module.get<TriageQuestionsRepository>(TriageQuestionsRepository);
   });
 
-  it('returns cloned questions for the requested specialty', () => {
-    const questions = repository.getQuestionsBySpecialty(
-      Specialty.GENERAL_MEDICINE,
-    );
+  describe('getQuestionsBySpecialty (async, DB + fallback)', () => {
+    it('falls back to hardcoded questions when DB returns null', async () => {
+      const questions = await repository.getQuestionsBySpecialty(
+        Specialty.GENERAL_MEDICINE,
+      );
 
-    expect(questions.length).toBeGreaterThan(0);
-    const firstQuestionId = questions[0].questionId;
+      expect(questions.length).toBeGreaterThan(0);
+    });
 
-    questions[0].questionText = 'mutated';
-    const secondRead = repository.getQuestionsBySpecialty(
-      Specialty.GENERAL_MEDICINE,
-    );
+    it('returns DB questions when available', async () => {
+      const dbQuestions = [
+        { id: 'DB-Q1', questionId: 'DB-Q1', title: 'DB Question', questionText: 'From DB?', type: 'SINGLE_CHOICE' },
+      ];
+      questionSetModel.findOne.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue({ questions: dbQuestions }),
+      });
 
-    expect(secondRead[0].questionId).toBe(firstQuestionId);
-    expect(secondRead[0].questionText).not.toBe('mutated');
+      const questions = await repository.getQuestionsBySpecialty(Specialty.GENERAL_MEDICINE);
+      expect(questions[0].questionId).toBe('DB-Q1');
+    });
+
+    it('returns cloned questions so mutations do not affect subsequent reads', async () => {
+      const questions = await repository.getQuestionsBySpecialty(Specialty.GENERAL_MEDICINE);
+      const firstQuestionId = questions[0].questionId;
+
+      questions[0].questionText = 'mutated';
+      const secondRead = await repository.getQuestionsBySpecialty(Specialty.GENERAL_MEDICINE);
+
+      expect(secondRead[0].questionId).toBe(firstQuestionId);
+      expect(secondRead[0].questionText).not.toBe('mutated');
+    });
   });
 
-  it('finds a question by id and returns undefined when missing', () => {
-    expect(
-      repository.getQuestionById(Specialty.ODONTOLOGY, 'OD-Q2')?.questionText,
-    ).toBeDefined();
+  describe('getRequiredQuestionIdsSync (hardcoded catalog)', () => {
+    it('returns required question ids preserving catalog order', () => {
+      const ids = repository.getRequiredQuestionIdsSync(Specialty.ODONTOLOGY);
+      expect(ids).toEqual(['OD-Q1', 'OD-Q2', 'OD-Q3', 'OD-Q4', 'OD-Q5']);
+    });
 
-    expect(
-      repository.getQuestionById(Specialty.ODONTOLOGY, 'OD-UNKNOWN'),
-    ).toBeUndefined();
+    it('returns URGENT_CARE question ids', () => {
+      const ids = repository.getRequiredQuestionIdsSync(Specialty.URGENT_CARE);
+      expect(ids).toEqual(['UR-Q1', 'UR-Q2', 'UR-Q3', 'UR-Q4', 'UR-Q5']);
+    });
   });
 
-  it('validates question ids by specialty', () => {
-    expect(
-      repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'MG-Q3'),
-    ).toBe(true);
-    expect(
-      repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'OD-Q3'),
-    ).toBe(false);
+  describe('getQuestionById (async)', () => {
+    it('finds a question by id', async () => {
+      const question = await repository.getQuestionById(Specialty.ODONTOLOGY, 'OD-Q2');
+      expect(question?.questionText).toBeDefined();
+    });
+
+    it('returns undefined for unknown question id', async () => {
+      const question = await repository.getQuestionById(Specialty.ODONTOLOGY, 'OD-UNKNOWN');
+      expect(question).toBeUndefined();
+    });
   });
 
-  it('returns required question ids preserving catalog order', () => {
-    const ids = repository.getRequiredQuestionIds(Specialty.ODONTOLOGY);
+  describe('isQuestionValid (async)', () => {
+    it('returns true for valid question id', async () => {
+      expect(await repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'MG-Q3')).toBe(true);
+    });
 
-    expect(ids).toEqual(['OD-Q1', 'OD-Q2', 'OD-Q3', 'OD-Q4', 'OD-Q5']);
+    it('returns false for question id from wrong specialty', async () => {
+      expect(await repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'OD-Q3')).toBe(false);
+    });
   });
 });

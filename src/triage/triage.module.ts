@@ -8,9 +8,14 @@ import {
   TriageSession,
   TriageSessionSchema,
 } from './schemas/triage-session.schema';
+import {
+  TriageQuestionSet,
+  TriageQuestionSetSchema,
+} from './schemas/triage-question-set.schema';
 import { GeminiTriageService } from './services/gemini-triage.service';
 import { GuardrailService } from './services/guardrail.service';
 import { TriageService } from './triage.service';
+import { TriageQuestionsSeederService } from './triage-questions-seeder.service';
 
 @Module({
   imports: [
@@ -18,12 +23,14 @@ import { TriageService } from './triage.service';
     ConsultationsModule,
     MongooseModule.forFeature([
       { name: TriageSession.name, schema: TriageSessionSchema },
+      { name: TriageQuestionSet.name, schema: TriageQuestionSetSchema },
     ]),
   ],
   controllers: [TriageController],
   providers: [
     TriageService,
     TriageQuestionsRepository,
+    TriageQuestionsSeederService,
     GuardrailService,
     GeminiTriageService,
   ],

@@ -177,7 +177,7 @@ export class TriageService {
       throw error;
     }
 
-    const questions = this.triageQuestionsRepository.getQuestionsBySpecialty(
+    const questions = await this.triageQuestionsRepository.getQuestionsBySpecialty(
       dto.specialty,
     );
     const progress = this.buildProgressState(dto.specialty, new Set<string>());
@@ -247,6 +247,7 @@ export class TriageService {
     const triageSession = await this.getOwnedSession(sessionId, user);
 
     return this.toSessionDetailResponse(triageSession);
+
   }
 
   async cancelSession(
@@ -319,15 +320,12 @@ export class TriageService {
       throw new BadRequestException('La sesion de triage no esta en progreso');
     }
 
+    const validQuestionIds = new Set(
+      this.triageQuestionsRepository.getRequiredQuestionIdsSync(triageSession.specialty),
+    );
     const invalidQuestionIds = dto.answers
       .map((answer) => answer.questionId)
-      .filter(
-        (questionId) =>
-          !this.triageQuestionsRepository.isQuestionValid(
-            triageSession.specialty,
-            questionId,
-          ),
-      );
+      .filter((questionId) => !validQuestionIds.has(questionId));
 
     if (invalidQuestionIds.length > 0) {
       throw new BadRequestException(
@@ -340,7 +338,7 @@ export class TriageService {
     );
 
     for (const incomingAnswer of dto.answers) {
-      const question = this.triageQuestionsRepository.getQuestionById(
+      const question = await this.triageQuestionsRepository.getQuestionById(
         triageSession.specialty,
         incomingAnswer.questionId,
       );
@@ -358,7 +356,7 @@ export class TriageService {
     }
 
     const requiredQuestionIds =
-      this.triageQuestionsRepository.getRequiredQuestionIds(
+      this.triageQuestionsRepository.getRequiredQuestionIdsSync(
         triageSession.specialty,
       );
 
@@ -410,7 +408,7 @@ export class TriageService {
     const triageSession = await this.getOwnedInProgressSession(sessionId, user);
 
     const requiredQuestionIds =
-      this.triageQuestionsRepository.getRequiredQuestionIds(
+      this.triageQuestionsRepository.getRequiredQuestionIdsSync(
         triageSession.specialty,
       );
 
@@ -450,6 +448,10 @@ export class TriageService {
       throw new UnprocessableEntityException(
         'La sesion de triage no esta completa',
       );
+    }
+
+    if (triageSession.specialty === Specialty.URGENT_CARE) {
+      return this.analyzeUrgentCare(triageSession, user, correlationId);
     }
 
     const startedAt = Date.now();
@@ -862,9 +864,9 @@ export class TriageService {
     };
   }
 
-  private toSessionDetailResponse(
+  private async toSessionDetailResponse(
     triageSession: TriageSessionDocument,
-  ): TriageSessionDetailResponse {
+  ): Promise<TriageSessionDetailResponse> {
     const answeredQuestionIds = new Set(
       triageSession.answers.map((answer) => answer.questionId),
     );
@@ -885,7 +887,7 @@ export class TriageService {
       totalSteps: progress.totalQuestions,
       totalQuestions: progress.totalQuestions,
       nextQuestionId: progress.nextQuestionId,
-      questions: this.triageQuestionsRepository.getQuestionsBySpecialty(
+      questions: await this.triageQuestionsRepository.getQuestionsBySpecialty(
         triageSession.specialty,
       ),
       createdAt: triageSession.createdAt?.toISOString() ?? null,
@@ -949,7 +951,7 @@ export class TriageService {
 
   private isSessionComplete(triageSession: TriageSessionDocument): boolean {
     const requiredQuestionIds =
-      this.triageQuestionsRepository.getRequiredQuestionIds(
+      this.triageQuestionsRepository.getRequiredQuestionIdsSync(
         triageSession.specialty,
       );
     const answeredQuestionIds = new Set(
@@ -973,7 +975,7 @@ export class TriageService {
     isComplete: boolean;
   } {
     const requiredQuestionIds =
-      this.triageQuestionsRepository.getRequiredQuestionIds(specialty);
+      this.triageQuestionsRepository.getRequiredQuestionIdsSync(specialty);
     const totalQuestions = requiredQuestionIds.length;
     const answeredCount = requiredQuestionIds.filter((questionId) =>
       answeredQuestionIds.has(questionId),
@@ -1026,5 +1028,68 @@ export class TriageService {
     }
 
     return basePriority;
+  }
+
+  private async analyzeUrgentCare(
+    triageSession: TriageSessionDocument,
+    user: RequestUser,
+    correlationId?: string,
+  ): Promise<AnalyzeTriageSessionResponse> {
+    const startedAt = Date.now();
+    const redFlags = RedFlagsEngine.evaluate(
+      triageSession.answers,
+      Specialty.URGENT_CARE,
+    );
+    const analysisDurationMs = Date.now() - startedAt;
+    const priority: TriagePriority = 'HIGH';
+
+    triageSession.analysis = {
+      priority,
+      redFlags,
+      aiSummary: 'Urgencia general detectada. Atencion medica inmediata requerida.',
+      analysisDurationMs,
+      guardrailApplied: false,
+    };
+    triageSession.status = 'COMPLETED';
+    triageSession.completedAt = new Date();
+    await triageSession.save();
+
+    const consultationId = await this.consultationsService.createFromTriage({
+      patientId: triageSession.patientId,
+      triageSessionId: triageSession._id,
+      specialty: triageSession.specialty,
+      priority,
+    });
+
+    this.logger.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        service: 'api',
+        endpoint_or_event: 'triage.analyze.completed',
+        correlation_id: correlationId,
+        user_id: user.userId,
+        role: user.role,
+        specialty: triageSession.specialty,
+        session_id: triageSession._id.toString(),
+        triage_session_id: triageSession._id.toString(),
+        priority,
+        red_flags_count: redFlags.length,
+        ai_strategy: 'not_applicable',
+        ai_attempts: 0,
+        guardrail_applied: false,
+        latency_ms: analysisDurationMs,
+      }),
+    );
+
+    return {
+      sessionId: triageSession._id.toString(),
+      consultationId,
+      priority,
+      redFlags,
+      message: 'Urgencia detectada. Tu caso fue priorizado para atencion medica inmediata.',
+      highPriorityAlert: true,
+      analysisMode: 'RULE_BASED',
+    };
   }
 }

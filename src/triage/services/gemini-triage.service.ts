@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '../../ai/ai.service';
+import { Specialty } from '../../common/enums/specialty.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import {
   RedFlag,
@@ -18,9 +19,12 @@ type TriageAnswerInput = Pick<
   'questionId' | 'questionText' | 'answerValue'
 >;
 
+const FALLBACK_SYSTEM_INSTRUCTION =
+  'Eres un asistente de triage clinico. Responde solo JSON valido con las llaves priority y summary. priority debe ser LOW, MODERATE o HIGH. summary debe ser neutral, sin diagnostico, sin prescripcion y sin medicacion.';
+
 @Injectable()
 export class GeminiTriageService {
-  private static readonly promptKey = 'triage.general_medicine.analyze';
+  private readonly logger = new Logger(GeminiTriageService.name);
 
   constructor(
     private readonly aiService: AiService,
@@ -32,13 +36,24 @@ export class GeminiTriageService {
     redFlags: RedFlag[],
     user: RequestUser,
     correlationId?: string,
+    specialty: Specialty = Specialty.GENERAL_MEDICINE,
   ): Promise<GeminiTriageResult> {
+    const promptKey = `triage.${specialty.toLowerCase()}.analyze`;
+    const systemInstruction =
+      (await this.aiService.getActivePromptInstruction(promptKey)) ??
+      FALLBACK_SYSTEM_INSTRUCTION;
+
+    if (systemInstruction === FALLBACK_SYSTEM_INSTRUCTION) {
+      this.logger.warn(
+        `No DB prompt found for key "${promptKey}" — using hardcoded fallback`,
+      );
+    }
+
     const aiResponse = await this.aiService.generateText({
-      promptKey: GeminiTriageService.promptKey,
+      promptKey,
       promptVersion: 1,
       model: this.configService.get<string>('ai.model') ?? 'gemini-2.5-flash',
-      systemInstruction:
-        'Eres un asistente de triage clinico. Responde solo JSON valido con las llaves priority y summary. priority debe ser LOW, MODERATE o HIGH. summary debe ser neutral, sin diagnostico, sin prescripcion y sin medicacion.',
+      systemInstruction,
       inputText: JSON.stringify({ answers, redFlags }),
       correlationId,
       actor: {

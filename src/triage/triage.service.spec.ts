@@ -40,6 +40,7 @@ describe('TriageService', () => {
     isQuestionValid: jest.fn(),
     getQuestionById: jest.fn(),
     getRequiredQuestionIds: jest.fn(),
+    getRequiredQuestionIdsSync: jest.fn(),
   };
 
   const geminiTriageService = {
@@ -59,6 +60,9 @@ describe('TriageService', () => {
     jest.clearAllMocks();
     guardrailService.check.mockReturnValue({ safe: true, violations: [] });
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
+    triageQuestionsRepository.getRequiredQuestionIdsSync.mockImplementation(
+      (specialty: Specialty) => triageQuestionsRepository.getRequiredQuestionIds(specialty),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
