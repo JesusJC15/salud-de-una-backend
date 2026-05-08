@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Put,
@@ -46,5 +49,18 @@ export class PatientsController {
     @Query() query: TimelineQueryDto,
   ) {
     return this.patientsService.getTimeline(req.user!, patientId, query);
+  }
+
+  @Get('me/data-export')
+  @Roles(UserRole.PATIENT)
+  exportMyData(@Req() req: RequestContext) {
+    return this.patientsService.exportPatientData(req.user!);
+  }
+
+  @Delete('me/account')
+  @Roles(UserRole.PATIENT)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  anonymizeMyAccount(@Req() req: RequestContext) {
+    return this.patientsService.anonymizeAccount(req.user!);
   }
 }

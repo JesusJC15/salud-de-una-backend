@@ -40,6 +40,12 @@ export class Patient {
   @Prop({ type: String })
   expoPushToken?: string;
 
+  @Prop({ type: Date, default: null })
+  termsAcceptedAt?: Date | null;
+
+  @Prop({ default: false })
+  isAnonymized!: boolean;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

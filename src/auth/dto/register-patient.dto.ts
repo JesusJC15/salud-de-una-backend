@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -31,4 +32,8 @@ export class RegisterPatientDto {
   @IsOptional()
   @IsEnum(UserGender)
   gender?: UserGender;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptTerms?: boolean;
 }

@@ -1,6 +1,8 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
+  IsOptional,
   IsString,
   MaxLength,
   ValidateIf,
@@ -23,4 +25,8 @@ export class ProvisionPatientDto {
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsEnum(UserGender)
   gender?: UserGender;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptTerms?: boolean;
 }

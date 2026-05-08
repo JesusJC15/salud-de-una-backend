@@ -3,6 +3,9 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
+import { Consultation } from '../consultations/schemas/consultation.schema';
+import { Followup } from '../followups/schemas/followup.schema';
+import { TriageSession } from '../triage/schemas/triage-session.schema';
 import { UserRole } from '../common/enums/user-role.enum';
 import { PatientTimelineService } from './patient-timeline.service';
 import { PatientsService } from './patients.service';
@@ -51,7 +54,10 @@ function createPatientDocument(
 
 describe('PatientsService', () => {
   let service: PatientsService;
-  let patientModel: { findById: jest.Mock };
+  let patientModel: { findById: jest.Mock; findByIdAndUpdate: jest.Mock };
+  let consultationModel: { find: jest.Mock };
+  let triageSessionModel: { find: jest.Mock };
+  let followupModel: { find: jest.Mock };
   let connection: { startSession: jest.Mock };
   let authService: {
     ensureEmailIsAvailable: jest.Mock;
@@ -62,7 +68,10 @@ describe('PatientsService', () => {
   };
 
   beforeEach(async () => {
-    patientModel = { findById: jest.fn() };
+    patientModel = { findById: jest.fn(), findByIdAndUpdate: jest.fn() };
+    consultationModel = { find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) };
+    triageSessionModel = { find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) };
+    followupModel = { find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) };
     connection = { startSession: jest.fn() };
     authService = {
       ensureEmailIsAvailable: jest.fn(),
@@ -77,6 +86,9 @@ describe('PatientsService', () => {
         PatientsService,
         { provide: getConnectionToken(), useValue: connection },
         { provide: getModelToken(Patient.name), useValue: patientModel },
+        { provide: getModelToken(Consultation.name), useValue: consultationModel },
+        { provide: getModelToken(TriageSession.name), useValue: triageSessionModel },
+        { provide: getModelToken(Followup.name), useValue: followupModel },
         { provide: AuthService, useValue: authService },
         {
           provide: PatientTimelineService,
@@ -397,6 +409,92 @@ describe('PatientsService', () => {
     expect(result).toEqual({
       items: [],
       nextCursor: null,
+    });
+  });
+
+  describe('exportPatientData', () => {
+    const user = {
+      userId: '507f1f77bcf86cd799439011',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    };
+
+    it('should return all patient data', async () => {
+      const patientDoc = {
+        _id: '507f1f77bcf86cd799439011',
+        firstName: 'Ana',
+        lastName: 'Lopez',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+      };
+      patientModel.findById.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(patientDoc),
+      });
+
+      const result = await service.exportPatientData(user);
+
+      expect(result).toMatchObject({
+        patient: { email: 'ana@example.com' },
+        consultations: [],
+        triageSessions: [],
+        followups: [],
+      });
+      expect(result.exportedAt).toBeInstanceOf(Date);
+    });
+
+    it('should throw NotFoundException when patient not found', async () => {
+      patientModel.findById.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.exportPatientData(user)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('anonymizeAccount', () => {
+    const user = {
+      userId: '507f1f77bcf86cd799439011',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    };
+
+    it('should anonymize the patient and revoke sessions', async () => {
+      const patient = createPatientDocument();
+      patientModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(patient),
+      });
+
+      await service.anonymizeAccount(user);
+
+      expect(patient.firstName).toBe('Cuenta');
+      expect(patient.lastName).toBe('Eliminada');
+      expect(patient.email).toMatch(/^deleted-/);
+      expect(patient.isActive).toBe(false);
+      expect(patient.isAnonymized).toBe(true);
+      expect(patient.save).toHaveBeenCalled();
+      expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+    });
+
+    it('should throw NotFoundException when patient not found', async () => {
+      patientModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.anonymizeAccount(user)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });

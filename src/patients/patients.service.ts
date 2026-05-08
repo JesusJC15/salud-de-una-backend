@@ -6,9 +6,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
+import {
+  Consultation,
+  ConsultationDocument,
+} from '../consultations/schemas/consultation.schema';
+import { Followup, FollowupDocument } from '../followups/schemas/followup.schema';
+import {
+  TriageSession,
+  TriageSessionDocument,
+} from '../triage/schemas/triage-session.schema';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PatientTimelineService } from './patient-timeline.service';
@@ -24,6 +34,12 @@ export class PatientsService {
     private readonly connection: Connection,
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
+    @InjectModel(Consultation.name)
+    private readonly consultationModel: Model<ConsultationDocument>,
+    @InjectModel(TriageSession.name)
+    private readonly triageSessionModel: Model<TriageSessionDocument>,
+    @InjectModel(Followup.name)
+    private readonly followupModel: Model<FollowupDocument>,
     private readonly authService: AuthService,
     private readonly patientTimelineService: PatientTimelineService,
   ) {}
@@ -172,6 +188,72 @@ export class PatientsService {
     query: TimelineQueryDto,
   ) {
     return this.patientTimelineService.getTimeline(user, patientId, query);
+  }
+
+  async exportPatientData(user: RequestUser) {
+    const patientObjectId = new Types.ObjectId(user.userId);
+    const [patient, consultations, triageSessions, followups] =
+      await Promise.all([
+        this.patientModel
+          .findById(patientObjectId)
+          .select('-passwordHash')
+          .lean()
+          .exec(),
+        this.consultationModel
+          .find({ patientId: patientObjectId })
+          .lean()
+          .exec(),
+        this.triageSessionModel
+          .find({ patientId: patientObjectId })
+          .lean()
+          .exec(),
+        this.followupModel
+          .find({ patientId: patientObjectId })
+          .lean()
+          .exec(),
+      ]);
+
+    if (!patient) {
+      throw new NotFoundException('Paciente no encontrado');
+    }
+
+    return {
+      exportedAt: new Date(),
+      patient,
+      consultations,
+      triageSessions,
+      followups,
+    };
+  }
+
+  async anonymizeAccount(user: RequestUser) {
+    const patient = await this.patientModel.findById(user.userId).exec();
+    if (!patient) {
+      throw new NotFoundException('Paciente no encontrado');
+    }
+
+    const hash = crypto
+      .createHash('sha256')
+      .update(user.userId)
+      .digest('hex')
+      .slice(0, 16);
+
+    patient.firstName = 'Cuenta';
+    patient.lastName = 'Eliminada';
+    patient.email = `deleted-${hash}@deleted.local`;
+    patient.passwordHash = await bcrypt.hash(hash, 10);
+    patient.pushTokens = [];
+    patient.expoPushToken = undefined;
+    patient.auth0Subject = undefined;
+    patient.isActive = false;
+    patient.isAnonymized = true;
+
+    await this.authService.revokeAllRefreshSessionsForUser(
+      user.userId,
+      UserRole.PATIENT,
+      'account_deleted',
+    );
+    await patient.save();
   }
 
   private toProfileResponse(patient: {

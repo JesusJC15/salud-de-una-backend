@@ -93,6 +93,7 @@ export class AuthService {
       passwordHash,
       birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
       gender: dto.gender,
+      termsAcceptedAt: dto.acceptTerms ? new Date() : null,
     });
 
     // Best-effort: mirror the patient in Auth0 so they can log in via
@@ -331,6 +332,7 @@ export class AuthService {
       passwordHash,
       birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
       gender: dto.gender,
+      termsAcceptedAt: dto.acceptTerms ? new Date() : null,
     });
 
     return {
