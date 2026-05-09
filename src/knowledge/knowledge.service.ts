@@ -801,10 +801,34 @@ export class KnowledgeService {
   }
 
   private stripHtml(html: string): string {
-    return html
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
+    const lowerHtml = html.toLowerCase();
+    let text = '';
+    let index = 0;
+
+    while (index < html.length) {
+      if (html[index] !== '<') {
+        text += html[index];
+        index += 1;
+        continue;
+      }
+
+      const tag = this.readHtmlTag(html, index);
+      if (!tag) {
+        text += html[index];
+        index += 1;
+        continue;
+      }
+
+      if (!tag.isClosing && (tag.name === 'script' || tag.name === 'style')) {
+        index = this.skipHtmlElementContent(lowerHtml, tag.name, tag.end + 1);
+      } else {
+        index = tag.end + 1;
+      }
+
+      text += ' ';
+    }
+
+    return text
       .replace(/&nbsp;/gi, ' ')
       .replace(/&amp;/gi, '&')
       .replace(/\s+/g, ' ')
@@ -813,21 +837,132 @@ export class KnowledgeService {
 
   private extractPdfText(buffer: Buffer): string {
     const raw = buffer.toString('latin1');
-    const matches = raw.match(/\((?:\\.|[^\\)])+\)/g) ?? [];
-    const text = matches
-      .map((match) =>
-        match
-          .slice(1, -1)
-          .replace(/\\\(/g, '(')
-          .replace(/\\\)/g, ')')
-          .replace(/\\\\/g, '\\')
-          .replace(/\\n/g, '\n'),
-      )
+    const text = this.extractPdfLiteralStrings(raw)
+      .map((match) => this.decodePdfLiteralString(match))
       .join(' ')
       .replace(/[^\S\r\n]+/g, ' ')
       .trim();
 
     return text;
+  }
+
+  private readHtmlTag(
+    html: string,
+    startIndex: number,
+  ): { name: string; isClosing: boolean; end: number } | null {
+    let index = startIndex + 1;
+    let quote: '"' | "'" | null = null;
+
+    while (index < html.length) {
+      const char = html[index];
+      if (quote) {
+        if (char === quote) {
+          quote = null;
+        }
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === '>') {
+        break;
+      }
+      index += 1;
+    }
+
+    if (index >= html.length || html[index] !== '>') {
+      return null;
+    }
+
+    const content = html.slice(startIndex + 1, index).trim();
+    const isClosing = content.startsWith('/');
+    const normalized = isClosing ? content.slice(1).trimStart() : content;
+    const name = normalized
+      .slice(
+        0,
+        normalized.search(/[\s/>]/) === -1
+          ? normalized.length
+          : normalized.search(/[\s/>]/),
+      )
+      .toLowerCase();
+
+    return {
+      name,
+      isClosing,
+      end: index,
+    };
+  }
+
+  private skipHtmlElementContent(
+    lowerHtml: string,
+    tagName: 'script' | 'style',
+    startIndex: number,
+  ): number {
+    const openTag = `</${tagName}`;
+    const closingStart = lowerHtml.indexOf(openTag, startIndex);
+    if (closingStart === -1) {
+      return lowerHtml.length;
+    }
+
+    const closingTag = this.readHtmlTag(lowerHtml, closingStart);
+    return closingTag ? closingTag.end + 1 : lowerHtml.length;
+  }
+
+  private extractPdfLiteralStrings(raw: string): string[] {
+    const matches: string[] = [];
+    let current = '';
+    let depth = 0;
+    let escaping = false;
+
+    for (const char of raw) {
+      if (depth === 0) {
+        if (char === '(') {
+          current = '';
+          depth = 1;
+          escaping = false;
+        }
+        continue;
+      }
+
+      if (escaping) {
+        current += char;
+        escaping = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        current += char;
+        escaping = true;
+        continue;
+      }
+
+      if (char === '(') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          matches.push(current);
+          current = '';
+          continue;
+        }
+
+        current += char;
+        continue;
+      }
+
+      current += char;
+    }
+
+    return matches;
+  }
+
+  private decodePdfLiteralString(value: string): string {
+    return value
+      .replace(/\\\(/g, '(')
+      .replace(/\\\)/g, ')')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\n/g, '\n');
   }
 
   private normalizeText(text: string): string {

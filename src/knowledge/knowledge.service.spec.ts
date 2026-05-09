@@ -532,6 +532,39 @@ describe('KnowledgeService', () => {
     );
   });
 
+  it('ingestUploadedDocument should extract PDF literal strings without regex backtracking', async () => {
+    const service = createService();
+    const document = buildDocumentDoc();
+
+    documentModel.create.mockResolvedValue(document);
+    documentByIdQuery.exec.mockResolvedValue(document);
+
+    await service.ingestUploadedDocument(
+      {
+        title: 'Documento PDF',
+        authority: 'MSPS',
+        sourceType: 'GUIDELINE',
+        specialty: Specialty.GENERAL_MEDICINE,
+      } as never,
+      adminActor,
+      'corr-pdf',
+      {
+        originalname: 'doc.pdf',
+        mimetype: 'application/pdf',
+        buffer: Buffer.from(
+          '%PDF-1.4\n1 0 obj\n(Linea\\nuno) (Texto \\(anidado\\) final)\nendobj',
+          'latin1',
+        ),
+      },
+    );
+
+    expect(aiService.embedTexts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: ['Linea\nuno Texto (anidado) final'],
+      }),
+    );
+  });
+
   it('ingestUploadedDocument should mark document and job as failed when embedding fails', async () => {
     const service = createService();
     const document = buildDocumentDoc();
