@@ -487,6 +487,9 @@ describe('TriageService', () => {
       totalSteps: 3,
       totalQuestions: 3,
       nextQuestionId: 'MG-Q2',
+      answeredCount: 1,
+      remainingQuestions: 2,
+      progressPercent: 33,
       questions: [
         {
           id: 'MG-Q1',
