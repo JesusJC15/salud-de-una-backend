@@ -64,6 +64,9 @@ type TriageSessionDetailResponse = {
   currentStep: number;
   totalSteps: number;
   totalQuestions: number;
+  answeredCount: number;
+  remainingQuestions: number;
+  progressPercent: number;
   nextQuestionId: string | null;
   questions: TriageQuestion[];
   createdAt: string | null;
@@ -888,6 +891,9 @@ export class TriageService {
       currentStep: this.buildCurrentStep(progress),
       totalSteps: progress.totalQuestions,
       totalQuestions: progress.totalQuestions,
+      answeredCount: progress.answeredCount,
+      remainingQuestions: progress.remainingQuestions,
+      progressPercent: progress.progressPercent,
       nextQuestionId: progress.nextQuestionId,
       questions: await this.triageQuestionsRepository.getQuestionsBySpecialty(
         triageSession.specialty,
