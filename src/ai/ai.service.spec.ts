@@ -5,11 +5,40 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { AiService } from './ai.service';
 import type { AiProvider } from './interfaces/ai-provider.interface';
 
-function createPromptQuery(result: unknown) {
+type QueryMock<T> = {
+  sort: jest.MockedFunction<() => QueryMock<T>>;
+  lean: jest.MockedFunction<() => QueryMock<T>>;
+  exec: jest.Mock<Promise<T>, []>;
+};
+
+type PromptDefinitionModelMock = {
+  findOne: jest.Mock;
+  find?: jest.Mock;
+  countDocuments?: jest.Mock;
+  findById?: jest.Mock;
+  updateMany?: jest.Mock;
+};
+
+type AuditLogModelMock = {
+  create: jest.Mock;
+  find?: jest.Mock;
+};
+
+type PromptModelFactoryPayload = Record<string, unknown>;
+type PromptModelFactoryResult = PromptModelFactoryPayload & {
+  save: jest.Mock<Promise<{ id: string }>, []>;
+};
+type PromptDefinitionFactoryMock = jest.Mock<
+  PromptModelFactoryResult,
+  [PromptModelFactoryPayload]
+> &
+  PromptDefinitionModelMock;
+
+function createPromptQuery<T>(result: T): QueryMock<T> {
   return {
     sort: jest.fn().mockReturnThis(),
     lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(result),
+    exec: jest.fn<Promise<T>, []>().mockResolvedValue(result),
   };
 }
 
@@ -22,8 +51,8 @@ describe('AiService', () => {
   };
 
   let configService: { get: jest.Mock };
-  let promptDefinitionModel: any;
-  let auditLogModel: any;
+  let promptDefinitionModel: PromptDefinitionModelMock;
+  let auditLogModel: AuditLogModelMock;
   let aiProvider: jest.Mocked<AiProvider>;
 
   function createService(provider: AiProvider | null = aiProvider): AiService {
@@ -219,7 +248,7 @@ describe('AiService', () => {
     });
 
     expect(result.embeddings).toEqual([[0.1, 0.2]]);
-    expect(aiProvider.embedContents).toHaveBeenCalledWith({
+    expect(aiProvider.embedContents.mock.calls[0]?.[0]).toEqual({
       model: 'gemini-embedding-001',
       contents: ['dolor toracico'],
     });
@@ -450,7 +479,8 @@ describe('AiService', () => {
           lean: jest.fn().mockReturnThis(),
           exec: jest.fn().mockResolvedValue(mockLogs),
         }),
-      } as never;
+        create: jest.fn(),
+      };
       const service = createService();
 
       const result = await service.getUsageMetrics();
@@ -468,7 +498,8 @@ describe('AiService', () => {
           lean: jest.fn().mockReturnThis(),
           exec: jest.fn().mockResolvedValue([]),
         }),
-      } as never;
+        create: jest.fn(),
+      };
       const service = createService();
 
       const result = await service.getUsageMetrics();
@@ -524,14 +555,16 @@ describe('AiService', () => {
 
   describe('createPromptVersion', () => {
     it('creates the first prompt version using the configured default model', async () => {
-      const save = jest.fn().mockResolvedValue({ id: 'saved-prompt' });
-      const PromptModel: any = jest.fn().mockImplementation((payload) => ({
-        ...payload,
-        save,
-      }));
-      PromptModel.findOne = jest.fn().mockReturnValue(
-        createPromptQuery(null),
-      );
+      const save: jest.Mock<Promise<{ id: string }>, []> = jest
+        .fn<Promise<{ id: string }>, []>()
+        .mockResolvedValue({ id: 'saved-prompt' });
+      const PromptModel = jest.fn(
+        (payload: PromptModelFactoryPayload): PromptModelFactoryResult => ({
+          ...payload,
+          save,
+        }),
+      ) as PromptDefinitionFactoryMock;
+      PromptModel.findOne = jest.fn().mockReturnValue(createPromptQuery(null));
       PromptModel.updateMany = jest.fn().mockResolvedValue({});
       promptDefinitionModel = PromptModel as never;
       const service = createService();
@@ -558,14 +591,18 @@ describe('AiService', () => {
     });
 
     it('increments the latest version and respects an explicit model override', async () => {
-      const save = jest.fn().mockResolvedValue({ id: 'saved-prompt-2' });
-      const PromptModel: any = jest.fn().mockImplementation((payload) => ({
-        ...payload,
-        save,
-      }));
-      PromptModel.findOne = jest.fn().mockReturnValue(
-        createPromptQuery({ version: 4 }),
-      );
+      const save: jest.Mock<Promise<{ id: string }>, []> = jest
+        .fn<Promise<{ id: string }>, []>()
+        .mockResolvedValue({ id: 'saved-prompt-2' });
+      const PromptModel = jest.fn(
+        (payload: PromptModelFactoryPayload): PromptModelFactoryResult => ({
+          ...payload,
+          save,
+        }),
+      ) as PromptDefinitionFactoryMock;
+      PromptModel.findOne = jest
+        .fn()
+        .mockReturnValue(createPromptQuery({ version: 4 }));
       PromptModel.updateMany = jest.fn().mockResolvedValue({});
       promptDefinitionModel = PromptModel as never;
       const service = createService();

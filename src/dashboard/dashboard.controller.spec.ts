@@ -27,13 +27,13 @@ describe('DashboardController', () => {
     );
   });
 
-  it('delegates metrics endpoints to their services', () => {
-    controller.getTechnical();
-    controller.getBusiness();
-    controller.getConsultations();
-    controller.getAlerts();
-    controller.getAiMetrics();
-    controller.getRagMetrics();
+  it('delegates metrics endpoints to their services', async () => {
+    await controller.getTechnical();
+    await controller.getBusiness();
+    await controller.getConsultations();
+    await controller.getAlerts();
+    await controller.getAiMetrics();
+    await controller.getRagMetrics();
 
     expect(dashboardService.getTechnicalMetrics).toHaveBeenCalled();
     expect(dashboardService.getBusinessMetrics).toHaveBeenCalled();
@@ -44,16 +44,16 @@ describe('DashboardController', () => {
   });
 
   it('uses default limits for errors and rag traces when query param is absent', () => {
-    controller.getRecentErrors();
-    controller.getRagTraces();
+    void controller.getRecentErrors();
+    void controller.getRagTraces();
 
     expect(errorLogsService.getRecent).toHaveBeenCalledWith(20);
     expect(dashboardService.getRagTraces).toHaveBeenCalledWith(20);
   });
 
   it('parses custom limits for errors and rag traces', () => {
-    controller.getRecentErrors('15');
-    controller.getRagTraces('25');
+    void controller.getRecentErrors('15');
+    void controller.getRagTraces('25');
 
     expect(errorLogsService.getRecent).toHaveBeenCalledWith(15);
     expect(dashboardService.getRagTraces).toHaveBeenCalledWith(25);

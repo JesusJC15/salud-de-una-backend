@@ -437,17 +437,21 @@ describe('RagService', () => {
       'corr-grounded',
     );
 
-    expect(aiService.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        promptKey: 'RAG_ANSWER_V1',
-        systemInstruction: expect.stringContaining('staff médico'),
-        actor: {
-          actorId: actor.userId,
-          actorRole: actor.role,
-        },
-        inputText: expect.stringContaining('Contexto principal'),
-      }),
-    );
+    const [groundedGenerationArg] = aiService.generateText.mock.calls[0] as [
+      {
+        promptKey: string;
+        systemInstruction: string;
+        actor?: { actorId: string; actorRole: UserRole };
+        inputText: string;
+      },
+    ];
+    expect(groundedGenerationArg.promptKey).toBe('RAG_ANSWER_V1');
+    expect(groundedGenerationArg.systemInstruction).toContain('staff médico');
+    expect(groundedGenerationArg.actor).toEqual({
+      actorId: actor.userId,
+      actorRole: actor.role,
+    });
+    expect(groundedGenerationArg.inputText).toContain('Contexto principal');
     expect(result).toEqual({
       traceId: 'trace-grounded',
       grounded: true,
@@ -497,12 +501,11 @@ describe('RagService', () => {
       mode: 'PATIENT',
     });
 
-    expect(aiService.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        systemInstruction: expect.stringContaining('lenguaje claro'),
-        actor: undefined,
-      }),
-    );
+    const [patientGenerationArg] = aiService.generateText.mock.calls[0] as [
+      { systemInstruction: string; actor?: unknown },
+    ];
+    expect(patientGenerationArg.systemInstruction).toContain('lenguaje claro');
+    expect(patientGenerationArg.actor).toBeUndefined();
   });
 
   it('captureFeedback should persist actor context and normalize empty comment to null', async () => {
@@ -524,7 +527,7 @@ describe('RagService', () => {
       actorId: actor.userId,
       actorRole: actor.role,
     });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       id: 'feedback-1',
       traceId: 'trace-1',
       useful: true,

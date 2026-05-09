@@ -25,14 +25,14 @@ describe('KnowledgeController', () => {
     controller = new KnowledgeController(knowledgeService as never);
   });
 
-  it('delegates source and document listing endpoints', () => {
-    controller.listSources();
-    controller.createSource({ name: 'Fuente' } as never);
-    controller.updateSource('source-1', { name: 'Fuente 2' });
-    controller.listDocuments({ status: 'APPROVED' });
-    controller.getDocument('doc-1');
-    controller.getDocumentChunks('doc-1');
-    controller.listJobs();
+  it('delegates source and document listing endpoints', async () => {
+    await controller.listSources();
+    await controller.createSource({ name: 'Fuente' } as never);
+    await controller.updateSource('source-1', { name: 'Fuente 2' });
+    await controller.listDocuments({ status: 'APPROVED' });
+    await controller.getDocument('doc-1');
+    await controller.getDocumentChunks('doc-1');
+    await controller.listJobs();
 
     expect(knowledgeService.listSources).toHaveBeenCalled();
     expect(knowledgeService.createSource).toHaveBeenCalledWith({
@@ -49,20 +49,24 @@ describe('KnowledgeController', () => {
     expect(knowledgeService.listJobs).toHaveBeenCalled();
   });
 
-  it('delegates ingestion and review flows with user context', () => {
+  it('delegates ingestion and review flows with user context', async () => {
     const file = {
       originalname: 'doc.txt',
       mimetype: 'text/plain',
       buffer: Buffer.from('contenido'),
     };
 
-    controller.uploadDocument({ title: 'Doc' } as never, req as never, file);
-    controller.ingestUrl(
+    await controller.uploadDocument(
+      { title: 'Doc' } as never,
+      req as never,
+      file,
+    );
+    await controller.ingestUrl(
       { sourceUrl: 'https://example.com' } as never,
       req as never,
     );
-    controller.reprocessDocument('doc-1', req as never);
-    controller.reviewDocument(
+    await controller.reprocessDocument('doc-1', req as never);
+    await controller.reviewDocument(
       'doc-1',
       { status: 'APPROVED' } as never,
       req as never,

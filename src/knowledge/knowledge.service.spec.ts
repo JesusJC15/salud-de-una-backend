@@ -5,12 +5,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
-import { AiService } from '../ai/ai.service';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
-import { KnowledgeStorageService } from './knowledge-storage.service';
 import { KnowledgeService } from './knowledge.service';
 
 function createQueryMock<T>(initialValue: T) {
@@ -38,14 +36,18 @@ describe('KnowledgeService', () => {
   };
 
   const sourceListQuery = createQueryMock<unknown[]>([]);
-  const sourceByIdQuery = createQueryMock<unknown | null>(null);
-  const sourceUpdateQuery = createQueryMock<unknown | null>(null);
+  const sourceByIdQuery = createQueryMock<Record<string, unknown> | null>(null);
+  const sourceUpdateQuery = createQueryMock<Record<string, unknown> | null>(
+    null,
+  );
   const documentListQuery = createQueryMock<unknown[]>([]);
-  const documentByIdQuery = createQueryMock<unknown | null>(null);
+  const documentByIdQuery = createQueryMock<Record<string, unknown> | null>(
+    null,
+  );
   const chunkFindQuery = createQueryMock<unknown[]>([]);
   const reviewFindQuery = createQueryMock<unknown[]>([]);
   const jobFindQuery = createQueryMock<unknown[]>([]);
-  const doctorByIdQuery = createQueryMock<unknown | null>(null);
+  const doctorByIdQuery = createQueryMock<Record<string, unknown> | null>(null);
 
   const doctorModel = {
     findById: jest.fn(() => doctorByIdQuery),
@@ -291,13 +293,17 @@ describe('KnowledgeService', () => {
       sourceId: sourceId.toString(),
     });
 
-    expect(documentModel.find).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'APPROVED',
-        specialty: Specialty.GENERAL_MEDICINE,
-        sourceId: expect.any(Types.ObjectId),
-      }),
-    );
+    const filterArg = documentModel.find.mock.calls.at(0)?.at(0) as
+      | {
+          status?: string;
+          specialty?: Specialty;
+          sourceId?: unknown;
+        }
+      | undefined;
+    expect(filterArg).toBeDefined();
+    expect(filterArg?.status).toBe('APPROVED');
+    expect(filterArg?.specialty).toBe(Specialty.GENERAL_MEDICINE);
+    expect(filterArg?.sourceId).toBeInstanceOf(Types.ObjectId);
     expect(result).toEqual({
       items: [
         expect.objectContaining({
@@ -337,16 +343,15 @@ describe('KnowledgeService', () => {
 
     const result = await service.getDocument(document._id.toString());
 
-    expect(result.reviews).toEqual([
-      {
-        id: expect.any(String),
-        reviewerId: 'doctor-1',
-        reviewerRole: UserRole.DOCTOR,
-        status: 'APPROVED',
-        notes: 'Listo',
-        createdAt: '2025-01-03T00:00:00.000Z',
-      },
-    ]);
+    expect(result.reviews).toHaveLength(1);
+    expect(result.reviews[0]).toMatchObject({
+      reviewerId: 'doctor-1',
+      reviewerRole: UserRole.DOCTOR,
+      status: 'APPROVED',
+      notes: 'Listo',
+      createdAt: '2025-01-03T00:00:00.000Z',
+    });
+    expect(typeof result.reviews[0]?.id).toBe('string');
   });
 
   it('getDocumentChunks and listJobs should map persisted records', async () => {
@@ -385,18 +390,19 @@ describe('KnowledgeService', () => {
       service.getDocumentChunks(documentId.toString()),
     ).resolves.toEqual({
       items: [
-        {
-          id: expect.any(String),
+        expect.objectContaining({
           chunkIndex: 0,
           sectionPath: 'General',
           text: 'Contenido',
           reviewStatus: 'APPROVED',
           embeddingDimensions: 2,
           updatedAt: '2025-01-04T00:00:00.000Z',
-        },
+        }),
       ],
       total: 1,
     });
+    const chunks = await service.getDocumentChunks(documentId.toString());
+    expect(typeof chunks.items[0]?.id).toBe('string');
     await expect(service.listJobs()).resolves.toEqual({
       items: [
         expect.objectContaining({
@@ -472,14 +478,11 @@ describe('KnowledgeService', () => {
       outputDimensionality: 2,
     });
     expect(chunkModel.insertMany).toHaveBeenCalledTimes(1);
-    expect(jobModel.updateOne).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          status: 'COMPLETED',
-        }),
-      }),
-    );
+    const [, inlineUpdateArg] = jobModel.updateOne.mock.calls[0] as [
+      unknown,
+      { $set?: { status?: string } },
+    ];
+    expect(inlineUpdateArg.$set?.status).toBe('COMPLETED');
     expect(redisClient.del).toHaveBeenCalledWith([
       'salud-de-una:rag:a',
       'salud-de-una:rag:b',
@@ -553,15 +556,14 @@ describe('KnowledgeService', () => {
     expect(document.status).toBe('FAILED');
     expect(document.ingestionError).toBe('embedding failed');
     expect(document.save).toHaveBeenCalled();
-    expect(jobModel.updateOne).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          status: 'FAILED',
-          errorMessage: 'embedding failed',
-        }),
-      }),
-    );
+    const [, failedUpdateArg] = jobModel.updateOne.mock.calls[0] as [
+      unknown,
+      { $set?: { status?: string; errorMessage?: string } },
+    ];
+    expect(failedUpdateArg.$set).toMatchObject({
+      status: 'FAILED',
+      errorMessage: 'embedding failed',
+    });
   });
 
   it('ingestDocumentFromUrl should reject when the configured source forbids url ingest', async () => {
@@ -598,7 +600,7 @@ describe('KnowledgeService', () => {
     const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       headers: { get: () => 'text/plain' },
-      arrayBuffer: async () => Buffer.from('Texto remoto'),
+      arrayBuffer: () => Promise.resolve(Buffer.from('Texto remoto')),
     } as never);
 
     documentModel.create.mockResolvedValue(document);
@@ -677,14 +679,11 @@ describe('KnowledgeService', () => {
     );
 
     expect(document.status).toBe('READY_FOR_REVIEW');
-    expect(jobModel.updateOne).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          status: 'COMPLETED',
-        }),
-      }),
-    );
+    const [, reprocessUpdateArg] = jobModel.updateOne.mock.calls[0] as [
+      unknown,
+      { $set?: { status?: string } },
+    ];
+    expect(reprocessUpdateArg.$set?.status).toBe('COMPLETED');
     expect(result.id).toBe(document._id.toString());
   });
 
@@ -705,15 +704,14 @@ describe('KnowledgeService', () => {
       ),
     ).rejects.toThrow('embed reproceso');
 
-    expect(jobModel.updateOne).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          status: 'FAILED',
-          errorMessage: 'embed reproceso',
-        }),
-      }),
-    );
+    const [, reprocessFailedArg] = jobModel.updateOne.mock.calls[0] as [
+      unknown,
+      { $set?: { status?: string; errorMessage?: string } },
+    ];
+    expect(reprocessFailedArg.$set).toMatchObject({
+      status: 'FAILED',
+      errorMessage: 'embed reproceso',
+    });
   });
 
   it('reviewDocument should enforce approver rules and update chunks on success', async () => {

@@ -39,7 +39,7 @@ describe('PatientsController', () => {
         role: UserRole.PATIENT,
         isActive: true,
       },
-    } as unknown as any);
+    } as RequestContext);
 
     expect(service.getMe).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'p1' }),

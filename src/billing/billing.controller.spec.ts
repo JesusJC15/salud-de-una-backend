@@ -22,14 +22,14 @@ describe('BillingController', () => {
     controller = new BillingController(billingService as never);
   });
 
-  it('delegates patient billing endpoints', () => {
-    controller.getPrices();
-    controller.initiateCheckout({ consultationId: 'consult-1' }, {
+  it('delegates patient billing endpoints', async () => {
+    await controller.getPrices();
+    await controller.initiateCheckout({ consultationId: 'consult-1' }, {
       user,
     } as never);
-    controller.confirmCheckout('tx-1', { user } as never);
-    controller.getMyTransactions({ user } as never);
-    controller.getTransaction('tx-2', { user } as never);
+    await controller.confirmCheckout('tx-1', { user } as never);
+    await controller.getMyTransactions({ user } as never);
+    await controller.getTransaction('tx-2', { user } as never);
 
     expect(billingService.getActivePrices).toHaveBeenCalledTimes(1);
     expect(billingService.initiateCheckout).toHaveBeenCalledWith(
@@ -44,8 +44,8 @@ describe('BillingController', () => {
     );
   });
 
-  it('delegates admin billing endpoints', () => {
-    controller.getAllTransactions({
+  it('delegates admin billing endpoints', async () => {
+    await controller.getAllTransactions({
       from: '2025-01-01',
       to: '2025-01-31',
       specialty: Specialty.GENERAL_MEDICINE,
@@ -53,9 +53,9 @@ describe('BillingController', () => {
       page: 2,
       limit: 10,
     } as never);
-    controller.getRevenue();
-    controller.getAdminPrices();
-    controller.updatePrice('GENERAL_MEDICINE', { amount: 25000 });
+    await controller.getRevenue();
+    await controller.getAdminPrices();
+    await controller.updatePrice('GENERAL_MEDICINE', { amount: 25000 });
 
     expect(billingService.getAllTransactions).toHaveBeenCalledWith({
       from: '2025-01-01',

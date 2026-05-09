@@ -494,16 +494,16 @@ describe('DashboardService', () => {
       topDoctors: [],
     });
 
-    await expect(service.getAlerts()).resolves.toEqual({
-      generatedAt: expect.any(String),
-      items: [
-        {
-          key: 'system-ok',
-          level: 'OK',
-          message: 'Sin alertas activas',
-        },
-      ],
-    });
+    const result = await service.getAlerts();
+
+    expect(typeof result.generatedAt).toBe('string');
+    expect(result.items).toEqual([
+      {
+        key: 'system-ok',
+        level: 'OK',
+        message: 'Sin alertas activas',
+      },
+    ]);
   });
 
   it('getRagMetrics should aggregate corpus, jobs, retrieval and feedback metrics', async () => {

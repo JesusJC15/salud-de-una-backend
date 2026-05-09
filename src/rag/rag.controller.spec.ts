@@ -19,10 +19,13 @@ describe('RagController', () => {
     controller = new RagController(ragService as never);
   });
 
-  it('delegates retrieve, answer and feedback with request context', () => {
-    controller.retrieve({ query: 'dolor' }, req as never);
-    controller.answer({ query: 'dolor', mode: 'STAFF' } as never, req as never);
-    controller.feedback(
+  it('delegates retrieve, answer and feedback with request context', async () => {
+    await controller.retrieve({ query: 'dolor' }, req as never);
+    await controller.answer(
+      { query: 'dolor', mode: 'STAFF' } as never,
+      req as never,
+    );
+    await controller.feedback(
       { traceId: 'trace-1', useful: true, grounded: true },
       req as never,
     );
