@@ -14,12 +14,14 @@ import {
   GEMINI_CONNECTIVITY_PROMPT_KEY,
 } from './ai.constants';
 import {
+  AiEmbeddingRequest,
+  AiEmbeddingResult,
   AiGenerationRequest,
   AiGenerationResult,
   AiHealthResult,
   AiProvider,
 } from './interfaces/ai-provider.interface';
-import { AiAuditLog, AiAuditLogDocument } from './schemas/ai-audit-log.schema';
+import { AiAuditLog } from './schemas/ai-audit-log.schema';
 import {
   AiPromptDefinition,
   AiPromptDefinitionDocument,
@@ -29,6 +31,22 @@ type AiReadiness = {
   status: 'up' | 'degraded' | 'disabled';
   detail: string;
   degraded: boolean;
+};
+
+type AiAuditLogCreatePayload = {
+  provider?: string;
+  model: string;
+  promptKey?: string;
+  promptVersion?: number;
+  actorId?: string;
+  actorRole?: AiAuditLog['actorRole'];
+  correlationId?: string;
+  latencyMs: number;
+  status?: AiAuditLog['status'];
+  errorCode?: string;
+  sanitizedInputSummary?: string;
+  sanitizedOutputSummary?: string;
+  tokenUsage?: Record<string, unknown>;
 };
 
 @Injectable()
@@ -41,7 +59,7 @@ export class AiService {
     @InjectModel(AiPromptDefinition.name)
     private readonly promptDefinitionModel: Model<AiPromptDefinitionDocument>,
     @InjectModel(AiAuditLog.name)
-    private readonly auditLogModel: Model<AiAuditLogDocument>,
+    private readonly auditLogModel: Model<AiAuditLog>,
     @Inject(AI_PROVIDER_TOKEN)
     private readonly aiProvider: AiProvider | null,
   ) {}
@@ -136,6 +154,14 @@ export class AiService {
     return this.aiProvider.generateText(request);
   }
 
+  async embedTexts(request: AiEmbeddingRequest): Promise<AiEmbeddingResult> {
+    if (!this.aiProvider || !this.isEnabled()) {
+      throw new ServiceUnavailableException('AI provider is disabled');
+    }
+
+    return this.aiProvider.embedContents(request);
+  }
+
   getReadiness(): AiReadiness {
     if (!this.isEnabled()) {
       return {
@@ -226,7 +252,7 @@ export class AiService {
 
   private async persistAuditLog(payload: Partial<AiAuditLog>): Promise<void> {
     try {
-      await this.auditLogModel.create({
+      const auditLogPayload: AiAuditLogCreatePayload = {
         provider: payload.provider,
         model: payload.model ?? 'unknown',
         promptKey: payload.promptKey,
@@ -240,7 +266,9 @@ export class AiService {
         sanitizedInputSummary: payload.sanitizedInputSummary,
         sanitizedOutputSummary: payload.sanitizedOutputSummary,
         tokenUsage: payload.tokenUsage,
-      } as any);
+      };
+
+      await this.auditLogModel.create(auditLogPayload);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Failed to persist AI audit log: ${message}`);

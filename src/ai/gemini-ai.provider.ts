@@ -1,7 +1,13 @@
 import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
-import { GoogleGenAI } from '@google/genai';
 import {
+  ContentEmbedding,
+  EmbedContentResponse,
+  GoogleGenAI,
+} from '@google/genai';
+import {
+  AiEmbeddingRequest,
+  AiEmbeddingResult,
   AiGenerationRequest,
   AiGenerationResult,
   AiHealthResult,
@@ -11,6 +17,18 @@ import {
 @Injectable()
 export class GeminiAiProvider implements AiProvider {
   constructor(private readonly client: GoogleGenAI) {}
+
+  private toTokenUsage(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...value }
+      : undefined;
+  }
+
+  private toEmbeddingValues(embedding: ContentEmbedding): number[] {
+    return Array.isArray(embedding.values)
+      ? embedding.values.map((value) => Number(value))
+      : [];
+  }
 
   async generateText(
     request: AiGenerationRequest,
@@ -30,9 +48,7 @@ export class GeminiAiProvider implements AiProvider {
       text: response.text ?? '',
       latencyMs: Date.now() - startedAt,
       requestId: request.correlationId ?? randomUUID(),
-      tokenUsage:
-        (response.usageMetadata as Record<string, unknown> | undefined) ??
-        undefined,
+      tokenUsage: this.toTokenUsage(response.usageMetadata),
     };
   }
 
@@ -61,5 +77,31 @@ export class GeminiAiProvider implements AiProvider {
         error: message,
       };
     }
+  }
+
+  async embedContents(request: AiEmbeddingRequest): Promise<AiEmbeddingResult> {
+    const startedAt = Date.now();
+    const response: EmbedContentResponse =
+      await this.client.models.embedContent({
+        model: request.model,
+        contents: request.contents,
+        config: {
+          taskType: request.taskType,
+          outputDimensionality: request.outputDimensionality,
+        },
+      });
+
+    const embeddings = Array.isArray(response.embeddings)
+      ? response.embeddings.map((item) => this.toEmbeddingValues(item))
+      : [];
+
+    return {
+      provider: 'gemini',
+      model: request.model,
+      embeddings,
+      latencyMs: Date.now() - startedAt,
+      requestId: request.correlationId ?? randomUUID(),
+      tokenUsage: this.toTokenUsage(response.metadata),
+    };
   }
 }

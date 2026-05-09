@@ -12,10 +12,23 @@ import {
   FollowupDocument,
 } from '../followups/schemas/followup.schema';
 import {
+  KnowledgeDocument,
+  KnowledgeDocumentDocument,
+} from '../knowledge/schemas/knowledge-document.schema';
+import {
+  KnowledgeJob,
+  KnowledgeJobDocument,
+} from '../knowledge/schemas/knowledge-job.schema';
+import {
   Notification,
   NotificationDocument,
 } from '../notifications/schemas/notification.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import {
+  RagFeedback,
+  RagFeedbackDocument,
+} from '../rag/schemas/rag-feedback.schema';
+import { RagTrace, RagTraceDocument } from '../rag/schemas/rag-trace.schema';
 import {
   TriageSession,
   TriageSessionDocument,
@@ -38,6 +51,14 @@ export class DashboardService {
     private readonly triageSessionModel: Model<TriageSessionDocument>,
     @InjectModel(Followup.name)
     private readonly followupModel: Model<FollowupDocument>,
+    @InjectModel(KnowledgeDocument.name)
+    private readonly knowledgeDocumentModel: Model<KnowledgeDocumentDocument>,
+    @InjectModel(KnowledgeJob.name)
+    private readonly knowledgeJobModel: Model<KnowledgeJobDocument>,
+    @InjectModel(RagTrace.name)
+    private readonly ragTraceModel: Model<RagTraceDocument>,
+    @InjectModel(RagFeedback.name)
+    private readonly ragFeedbackModel: Model<RagFeedbackDocument>,
     private readonly technicalMetricsService: TechnicalMetricsService,
   ) {}
 
@@ -357,6 +378,136 @@ export class DashboardService {
     return {
       generatedAt: new Date().toISOString(),
       items: alerts,
+    };
+  }
+
+  async getRagMetrics() {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [documents, jobs, traces, feedback] = await Promise.all([
+      this.knowledgeDocumentModel.find().lean().exec(),
+      this.knowledgeJobModel
+        .find({ createdAt: { $gte: since } })
+        .lean()
+        .exec(),
+      this.ragTraceModel
+        .find({ createdAt: { $gte: since } })
+        .lean()
+        .exec(),
+      this.ragFeedbackModel
+        .find({ createdAt: { $gte: since } })
+        .lean()
+        .exec(),
+    ]);
+
+    const approvedDocuments = documents.filter(
+      (document) => document.status === 'APPROVED',
+    ).length;
+    const failedJobs = jobs.filter((job) => job.status === 'FAILED').length;
+    const retrievalCount = traces.length;
+    const groundedCount = traces.filter((trace) => trace.grounded).length;
+    const fallbackCount = traces.filter((trace) => trace.fallback).length;
+    const zeroHitRate =
+      retrievalCount === 0
+        ? 0
+        : Number(
+            (
+              (traces.filter((trace) => trace.selectedChunks.length === 0)
+                .length /
+                retrievalCount) *
+              100
+            ).toFixed(2),
+          );
+    const avgLatency =
+      retrievalCount === 0
+        ? 0
+        : Math.round(
+            traces.reduce((sum, trace) => sum + trace.totalLatencyMs, 0) /
+              retrievalCount,
+          );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      corpus: {
+        totalDocuments: documents.length,
+        approvedDocuments,
+        pendingReview: documents.filter(
+          (document) => document.status === 'READY_FOR_REVIEW',
+        ).length,
+        suspendedDocuments: documents.filter(
+          (document) => document.status === 'SUSPENDED',
+        ).length,
+      },
+      jobs: {
+        totalLast24h: jobs.length,
+        failedLast24h: failedJobs,
+      },
+      retrieval: {
+        totalLast24h: retrievalCount,
+        groundedRate:
+          retrievalCount === 0
+            ? 0
+            : Number(((groundedCount / retrievalCount) * 100).toFixed(2)),
+        fallbackRate:
+          retrievalCount === 0
+            ? 0
+            : Number(((fallbackCount / retrievalCount) * 100).toFixed(2)),
+        zeroHitRate,
+        avgLatencyMs: avgLatency,
+      },
+      feedback: {
+        total: feedback.length,
+        usefulRate:
+          feedback.length === 0
+            ? 0
+            : Number(
+                (
+                  (feedback.filter((item) => item.useful).length /
+                    feedback.length) *
+                  100
+                ).toFixed(2),
+              ),
+        groundedRate:
+          feedback.length === 0
+            ? 0
+            : Number(
+                (
+                  (feedback.filter((item) => item.grounded).length /
+                    feedback.length) *
+                  100
+                ).toFixed(2),
+              ),
+      },
+    };
+  }
+
+  async getRagTraces(limit = 20) {
+    const items = await this.ragTraceModel
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(Math.min(Math.max(limit, 1), 100))
+      .lean()
+      .exec();
+
+    return {
+      items: items.map((trace) => ({
+        id: trace._id.toString(),
+        correlationId: trace.correlationId ?? null,
+        useCase: trace.useCase,
+        normalizedQuery: trace.normalizedQuery,
+        selectedChunks: trace.selectedChunks,
+        cacheHit: trace.cacheHit,
+        grounded: trace.grounded,
+        fallback: trace.fallback,
+        retrievalLatencyMs: trace.retrievalLatencyMs,
+        generationLatencyMs: trace.generationLatencyMs,
+        totalLatencyMs: trace.totalLatencyMs,
+        actorId: trace.actorId ?? null,
+        actorRole: trace.actorRole ?? null,
+        answer: trace.answer ?? null,
+        createdAt: trace.createdAt?.toISOString() ?? null,
+      })),
+      total: items.length,
     };
   }
 

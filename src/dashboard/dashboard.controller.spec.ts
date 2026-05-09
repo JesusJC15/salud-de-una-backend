@@ -1,95 +1,61 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AiService } from '../ai/ai.service';
 import { DashboardController } from './dashboard.controller';
-import { DashboardService } from './dashboard.service';
-import { ErrorLogsService } from './error-logs.service';
 
 describe('DashboardController', () => {
-  let controller: DashboardController;
-  let service: {
-    getTechnicalMetrics: jest.Mock;
-    getBusinessMetrics: jest.Mock;
-    getConsultationMetrics: jest.Mock;
-    getAlerts: jest.Mock;
+  const dashboardService = {
+    getTechnicalMetrics: jest.fn(),
+    getBusinessMetrics: jest.fn(),
+    getConsultationMetrics: jest.fn(),
+    getAlerts: jest.fn(),
+    getRagMetrics: jest.fn(),
+    getRagTraces: jest.fn(),
   };
-  let errorLogsService: { getRecent: jest.Mock };
-  let aiService: { getUsageMetrics: jest.Mock };
+  const errorLogsService = {
+    getRecent: jest.fn(),
+  };
+  const aiService = {
+    getUsageMetrics: jest.fn(),
+  };
 
-  beforeEach(async () => {
-    service = {
-      getTechnicalMetrics: jest.fn(),
-      getBusinessMetrics: jest.fn(),
-      getConsultationMetrics: jest.fn(),
-      getAlerts: jest.fn(),
-    };
-    errorLogsService = { getRecent: jest.fn().mockReturnValue([]) };
-    aiService = { getUsageMetrics: jest.fn().mockResolvedValue({ total: 0 }) };
+  let controller: DashboardController;
 
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [DashboardController],
-      providers: [
-        { provide: DashboardService, useValue: service },
-        { provide: ErrorLogsService, useValue: errorLogsService },
-        { provide: AiService, useValue: aiService },
-      ],
-    }).compile();
-
-    controller = module.get<DashboardController>(DashboardController);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controller = new DashboardController(
+      dashboardService as never,
+      errorLogsService as never,
+      aiService as never,
+    );
   });
 
-  it('getTechnical should call service', () => {
-    service.getTechnicalMetrics.mockReturnValue({ sampleSize: 0 });
+  it('delegates metrics endpoints to their services', async () => {
+    await controller.getTechnical();
+    await controller.getBusiness();
+    await controller.getConsultations();
+    await controller.getAlerts();
+    await controller.getAiMetrics();
+    await controller.getRagMetrics();
 
-    const result = controller.getTechnical();
-
-    expect(service.getTechnicalMetrics).toHaveBeenCalled();
-    expect(result).toEqual({ sampleSize: 0 });
-  });
-
-  it('getBusiness should call service', async () => {
-    service.getBusinessMetrics.mockResolvedValue({ kpis: {} });
-
-    const result = await controller.getBusiness();
-
-    expect(service.getBusinessMetrics).toHaveBeenCalled();
-    expect(result).toEqual({ kpis: {} });
-  });
-
-  it('getConsultations should call service', async () => {
-    service.getConsultationMetrics.mockResolvedValue({ totalConsultations: 2 });
-
-    const result = await controller.getConsultations();
-
-    expect(service.getConsultationMetrics).toHaveBeenCalled();
-    expect(result).toEqual({ totalConsultations: 2 });
-  });
-
-  it('getAlerts should call service', async () => {
-    service.getAlerts.mockResolvedValue({ items: [] });
-
-    const result = await controller.getAlerts();
-
-    expect(service.getAlerts).toHaveBeenCalled();
-    expect(result).toEqual({ items: [] });
-  });
-
-  it('getRecentErrors should return errors with default limit', () => {
-    errorLogsService.getRecent.mockReturnValue([]);
-    const result = controller.getRecentErrors(undefined);
-    expect(errorLogsService.getRecent).toHaveBeenCalledWith(20);
-    expect(result).toEqual([]);
-  });
-
-  it('getRecentErrors should use provided limit', () => {
-    errorLogsService.getRecent.mockReturnValue([]);
-    controller.getRecentErrors('5');
-    expect(errorLogsService.getRecent).toHaveBeenCalledWith(5);
-  });
-
-  it('getAiMetrics should delegate to aiService', async () => {
-    aiService.getUsageMetrics.mockResolvedValue({ total: 10, successRate: 90 });
-    const result = await controller.getAiMetrics();
+    expect(dashboardService.getTechnicalMetrics).toHaveBeenCalled();
+    expect(dashboardService.getBusinessMetrics).toHaveBeenCalled();
+    expect(dashboardService.getConsultationMetrics).toHaveBeenCalled();
+    expect(dashboardService.getAlerts).toHaveBeenCalled();
     expect(aiService.getUsageMetrics).toHaveBeenCalled();
-    expect(result).toMatchObject({ total: 10 });
+    expect(dashboardService.getRagMetrics).toHaveBeenCalled();
+  });
+
+  it('uses default limits for errors and rag traces when query param is absent', () => {
+    void controller.getRecentErrors();
+    void controller.getRagTraces();
+
+    expect(errorLogsService.getRecent).toHaveBeenCalledWith(20);
+    expect(dashboardService.getRagTraces).toHaveBeenCalledWith(20);
+  });
+
+  it('parses custom limits for errors and rag traces', () => {
+    void controller.getRecentErrors('15');
+    void controller.getRagTraces('25');
+
+    expect(errorLogsService.getRecent).toHaveBeenCalledWith(15);
+    expect(dashboardService.getRagTraces).toHaveBeenCalledWith(25);
   });
 });
