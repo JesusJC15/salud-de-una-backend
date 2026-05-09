@@ -7,18 +7,22 @@ import {
 } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import { DashboardService } from '../../dashboard/dashboard.service';
+import { ErrorLogsService } from '../../dashboard/error-logs.service';
 import { RequestLoggingInterceptor } from './request-logging.interceptor';
 
 describe('RequestLoggingInterceptor', () => {
   let interceptor: RequestLoggingInterceptor;
   let dashboardService: { record: jest.Mock };
+  let errorLogsService: { append: jest.Mock };
   let logSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     dashboardService = { record: jest.fn() };
+    errorLogsService = { append: jest.fn() };
     interceptor = new RequestLoggingInterceptor(
       dashboardService as unknown as DashboardService,
+      errorLogsService as unknown as ErrorLogsService,
     );
     logSpy = jest
       .spyOn(Logger.prototype, 'log')
@@ -173,6 +177,70 @@ describe('RequestLoggingInterceptor', () => {
             statusCode: 500,
           }),
         );
+        done();
+      },
+    });
+  });
+
+  it('appends 5xx errors to ErrorLogsService when provided', (done) => {
+    const context = createContext({
+      request: { method: 'POST', originalUrl: '/v1/triage/sessions' },
+    });
+    const next: CallHandler = {
+      handle: () => throwError(() => new Error('internal failure')),
+    };
+
+    interceptor.intercept(context, next).subscribe({
+      next: () => {
+        done(new Error('expected error'));
+      },
+      error: () => {
+        expect(errorLogsService.append).toHaveBeenCalledWith(
+          expect.objectContaining({
+            statusCode: 500,
+            method: 'POST',
+            url: '/v1/triage/sessions',
+            errorMessage: 'internal failure',
+          }),
+        );
+        done();
+      },
+    });
+  });
+
+  it('does NOT append 4xx errors to ErrorLogsService', (done) => {
+    const context = createContext();
+    const next: CallHandler = {
+      handle: () =>
+        throwError(() => new HttpException('Not Found', HttpStatus.NOT_FOUND)),
+    };
+
+    interceptor.intercept(context, next).subscribe({
+      next: () => {
+        done(new Error('expected error'));
+      },
+      error: () => {
+        expect(errorLogsService.append).not.toHaveBeenCalled();
+        done();
+      },
+    });
+  });
+
+  it('works without ErrorLogsService (optional)', (done) => {
+    const interceptorNoLogs = new RequestLoggingInterceptor(
+      dashboardService as unknown as DashboardService,
+    );
+    const context = createContext();
+    const next: CallHandler = {
+      handle: () => throwError(() => new Error('boom')),
+    };
+
+    interceptorNoLogs.intercept(context, next).subscribe({
+      next: () => {
+        done(new Error('expected error'));
+      },
+      error: () => {
+        // Should not throw even without ErrorLogsService
         done();
       },
     });

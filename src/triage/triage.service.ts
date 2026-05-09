@@ -177,9 +177,10 @@ export class TriageService {
       throw error;
     }
 
-    const questions = await this.triageQuestionsRepository.getQuestionsBySpecialty(
-      dto.specialty,
-    );
+    const questions =
+      await this.triageQuestionsRepository.getQuestionsBySpecialty(
+        dto.specialty,
+      );
     const progress = this.buildProgressState(dto.specialty, new Set<string>());
 
     this.logger.log(
@@ -247,7 +248,6 @@ export class TriageService {
     const triageSession = await this.getOwnedSession(sessionId, user);
 
     return this.toSessionDetailResponse(triageSession);
-
   }
 
   async cancelSession(
@@ -321,7 +321,9 @@ export class TriageService {
     }
 
     const validQuestionIds = new Set(
-      this.triageQuestionsRepository.getRequiredQuestionIdsSync(triageSession.specialty),
+      this.triageQuestionsRepository.getRequiredQuestionIdsSync(
+        triageSession.specialty,
+      ),
     );
     const invalidQuestionIds = dto.answers
       .map((answer) => answer.questionId)
@@ -1046,7 +1048,8 @@ export class TriageService {
     triageSession.analysis = {
       priority,
       redFlags,
-      aiSummary: 'Urgencia general detectada. Atencion medica inmediata requerida.',
+      aiSummary:
+        'Urgencia general detectada. Atencion medica inmediata requerida.',
       analysisDurationMs,
       guardrailApplied: false,
     };
@@ -1087,7 +1090,8 @@ export class TriageService {
       consultationId,
       priority,
       redFlags,
-      message: 'Urgencia detectada. Tu caso fue priorizado para atencion medica inmediata.',
+      message:
+        'Urgencia detectada. Tu caso fue priorizado para atencion medica inmediata.',
       highPriorityAlert: true,
       analysisMode: 'RULE_BASED',
     };

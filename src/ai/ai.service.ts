@@ -288,7 +288,9 @@ export class AiService {
 
       return prompt?.systemInstruction ?? null;
     } catch {
-      this.logger.warn(`Failed to load prompt instruction for key "${key}" — using fallback`);
+      this.logger.warn(
+        `Failed to load prompt instruction for key "${key}" — using fallback`,
+      );
       return null;
     }
   }
@@ -321,7 +323,8 @@ export class AiService {
     systemInstruction: string;
     model?: string;
   }) {
-    const defaultModel = this.configService.get<string>('ai.model') ?? 'gemini-2.5-flash';
+    const defaultModel =
+      this.configService.get<string>('ai.model') ?? 'gemini-2.5-flash';
     const latest = await this.promptDefinitionModel
       .findOne({ key: dto.key })
       .sort({ version: -1 })

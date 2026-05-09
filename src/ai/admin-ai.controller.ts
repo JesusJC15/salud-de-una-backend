@@ -26,10 +26,7 @@ export class AdminAiController {
 
   @Get('prompts')
   @Roles(UserRole.ADMIN)
-  listPrompts(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  listPrompts(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.aiService.listPrompts(
       page ? Number(page) : 1,
       limit ? Number(limit) : 20,

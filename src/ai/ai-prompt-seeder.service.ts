@@ -45,7 +45,8 @@ export class AiPromptSeederService implements OnApplicationBootstrap {
 
     await this.upsertPrompt(GEMINI_CONNECTIVITY_PROMPT_KEY, {
       model,
-      systemInstruction: 'You are a connectivity probe. Reply with a short healthy acknowledgement only.',
+      systemInstruction:
+        'You are a connectivity probe. Reply with a short healthy acknowledgement only.',
       metadata: { purpose: 'health-check' },
     });
 
@@ -60,7 +61,11 @@ export class AiPromptSeederService implements OnApplicationBootstrap {
 
   private async upsertPrompt(
     key: string,
-    data: { model: string; systemInstruction: string; metadata?: Record<string, unknown> },
+    data: {
+      model: string;
+      systemInstruction: string;
+      metadata?: Record<string, unknown>;
+    },
   ): Promise<void> {
     await this.promptDefinitionModel.updateOne(
       { key, version: 1 },

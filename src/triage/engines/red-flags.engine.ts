@@ -119,7 +119,9 @@ export class RedFlagsEngine {
 
   private static evaluateUrgentCare(answers: TriageAnswer[]): RedFlag[] {
     const redFlags: RedFlag[] = [];
-    const breathingValue = normalizeValue(this.getAnswerValue(answers, 'UR-Q3'));
+    const breathingValue = normalizeValue(
+      this.getAnswerValue(answers, 'UR-Q3'),
+    );
 
     if (breathingValue === 'no puedo respirar bien') {
       redFlags.push({
@@ -138,7 +140,10 @@ export class RedFlagsEngine {
     }
 
     const bleedingValue = normalizeValue(this.getAnswerValue(answers, 'UR-Q4'));
-    if (bleedingValue === 'si sangrado abundante' || bleedingValue === 'si, sangrado abundante') {
+    if (
+      bleedingValue === 'si sangrado abundante' ||
+      bleedingValue === 'si, sangrado abundante'
+    ) {
       redFlags.push({
         code: 'RF-UR-002',
         specialty: Specialty.URGENT_CARE,

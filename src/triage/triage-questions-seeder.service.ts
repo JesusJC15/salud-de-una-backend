@@ -206,7 +206,10 @@ const URGENT_CARE_QUESTIONS: TriageQuestion[] = [
 
 const SEED_DATA: Array<{ specialty: Specialty; questions: TriageQuestion[] }> =
   [
-    { specialty: Specialty.GENERAL_MEDICINE, questions: GENERAL_MEDICINE_QUESTIONS },
+    {
+      specialty: Specialty.GENERAL_MEDICINE,
+      questions: GENERAL_MEDICINE_QUESTIONS,
+    },
     { specialty: Specialty.ODONTOLOGY, questions: ODONTOLOGY_QUESTIONS },
     { specialty: Specialty.URGENT_CARE, questions: URGENT_CARE_QUESTIONS },
   ];

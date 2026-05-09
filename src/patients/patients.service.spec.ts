@@ -71,9 +71,27 @@ describe('PatientsService', () => {
 
   beforeEach(async () => {
     patientModel = { findById: jest.fn(), findByIdAndUpdate: jest.fn() };
-    consultationModel = { find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) };
-    triageSessionModel = { find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) };
-    followupModel = { find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) };
+    consultationModel = {
+      find: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+      }),
+    };
+    triageSessionModel = {
+      find: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+      }),
+    };
+    followupModel = {
+      find: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+      }),
+    };
     connection = { startSession: jest.fn() };
     authService = {
       ensureEmailIsAvailable: jest.fn(),
@@ -88,8 +106,14 @@ describe('PatientsService', () => {
         PatientsService,
         { provide: getConnectionToken(), useValue: connection },
         { provide: getModelToken(Patient.name), useValue: patientModel },
-        { provide: getModelToken(Consultation.name), useValue: consultationModel },
-        { provide: getModelToken(TriageSession.name), useValue: triageSessionModel },
+        {
+          provide: getModelToken(Consultation.name),
+          useValue: consultationModel,
+        },
+        {
+          provide: getModelToken(TriageSession.name),
+          useValue: triageSessionModel,
+        },
         { provide: getModelToken(Followup.name), useValue: followupModel },
         { provide: AuthService, useValue: authService },
         {

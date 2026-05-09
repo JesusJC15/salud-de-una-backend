@@ -54,8 +54,9 @@ export class TriageQuestionEmbedded {
   step?: number;
 }
 
-const TriageQuestionEmbeddedSchema =
-  SchemaFactory.createForClass(TriageQuestionEmbedded);
+const TriageQuestionEmbeddedSchema = SchemaFactory.createForClass(
+  TriageQuestionEmbedded,
+);
 
 @Schema({ timestamps: true })
 export class TriageQuestionSet {

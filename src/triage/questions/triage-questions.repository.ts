@@ -257,7 +257,9 @@ export class TriageQuestionsRepository {
     ],
   };
 
-  async getQuestionsBySpecialty(specialty: Specialty): Promise<TriageQuestion[]> {
+  async getQuestionsBySpecialty(
+    specialty: Specialty,
+  ): Promise<TriageQuestion[]> {
     try {
       const questionSet = await this.questionSetModel
         .findOne({ specialty, active: true })
@@ -266,7 +268,9 @@ export class TriageQuestionsRepository {
         .exec();
 
       if (questionSet?.questions && questionSet.questions.length > 0) {
-        return questionSet.questions.map((q) => this.cloneQuestion(q as TriageQuestion));
+        return questionSet.questions.map((q) =>
+          this.cloneQuestion(q as TriageQuestion),
+        );
       }
     } catch {
       this.logger.warn(
@@ -287,7 +291,10 @@ export class TriageQuestionsRepository {
     return questions.find((item) => item.questionId === questionId);
   }
 
-  async isQuestionValid(specialty: Specialty, questionId: string): Promise<boolean> {
+  async isQuestionValid(
+    specialty: Specialty,
+    questionId: string,
+  ): Promise<boolean> {
     return Boolean(await this.getQuestionById(specialty, questionId));
   }
 

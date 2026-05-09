@@ -329,4 +329,180 @@ describe('AiService', () => {
     );
     warnSpy.mockRestore();
   });
+
+  describe('getActivePromptInstruction', () => {
+    it('returns systemInstruction when active prompt found', async () => {
+      promptDefinitionModel.findOne = jest.fn().mockReturnValue(
+        createPromptQuery({
+          systemInstruction: 'You are a helpful assistant.',
+        }),
+      );
+      const service = createService();
+
+      const result = await service.getActivePromptInstruction(
+        'triage.general_medicine.analyze',
+      );
+
+      expect(result).toBe('You are a helpful assistant.');
+    });
+
+    it('returns null when no prompt found', async () => {
+      promptDefinitionModel.findOne = jest
+        .fn()
+        .mockReturnValue(createPromptQuery(null));
+      const service = createService();
+
+      const result = await service.getActivePromptInstruction('unknown.key');
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null and logs warning on DB error', async () => {
+      promptDefinitionModel.findOne = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockRejectedValue(new Error('DB error')),
+      });
+      const warnSpy = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => {});
+      const service = createService();
+
+      const result = await service.getActivePromptInstruction('any.key');
+
+      expect(result).toBeNull();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('getUsageMetrics', () => {
+    it('returns aggregated metrics from audit logs', async () => {
+      const mockLogs = [
+        {
+          status: 'success',
+          latencyMs: 100,
+          promptKey: 'triage.general_medicine.analyze',
+        },
+        {
+          status: 'success',
+          latencyMs: 200,
+          promptKey: 'triage.general_medicine.analyze',
+        },
+        {
+          status: 'error',
+          latencyMs: 50,
+          promptKey: 'gemini.connectivity.check',
+        },
+      ];
+      auditLogModel = {
+        find: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue(mockLogs),
+        }),
+      } as never;
+      const service = createService();
+
+      const result = await service.getUsageMetrics();
+
+      expect(result.total).toBe(3);
+      expect(result.successCount).toBe(2);
+      expect(result.errorCount).toBe(1);
+      expect(result.successRate).toBe(67);
+      expect(result.avgLatencyMs).toBe(117);
+    });
+
+    it('returns zero metrics when no audit logs', async () => {
+      auditLogModel = {
+        find: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue([]),
+        }),
+      } as never;
+      const service = createService();
+
+      const result = await service.getUsageMetrics();
+
+      expect(result.total).toBe(0);
+      expect(result.avgLatencyMs).toBe(0);
+      expect(result.successRate).toBe(0);
+    });
+  });
+
+  describe('listPrompts', () => {
+    it('returns paginated prompt list', async () => {
+      const mockItems = [{ key: 'test.key', version: 1, active: true }];
+      promptDefinitionModel = {
+        find: jest.fn().mockReturnValue({
+          sort: jest.fn().mockReturnThis(),
+          skip: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue(mockItems),
+        }),
+        countDocuments: jest.fn().mockResolvedValue(1),
+      } as never;
+      const service = createService();
+
+      const result = await service.listPrompts(1, 20);
+
+      expect(result.items).toHaveLength(1);
+      expect(result.total).toBe(1);
+    });
+  });
+
+  describe('togglePromptActive', () => {
+    it('returns null when prompt not found', async () => {
+      promptDefinitionModel = {
+        findById: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      } as never;
+      const service = createService();
+
+      const result = await service.togglePromptActive('nonexistent-id', true);
+
+      expect(result).toBeNull();
+    });
+
+    it('activates prompt and deactivates others with same key', async () => {
+      const mockPrompt = {
+        key: 'triage.general_medicine.analyze',
+        active: false,
+        save: jest.fn().mockResolvedValue(undefined),
+        toObject: jest.fn().mockReturnValue({ active: true }),
+      };
+      promptDefinitionModel = {
+        findById: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockPrompt) }),
+        updateMany: jest.fn().mockResolvedValue({}),
+      } as never;
+      const service = createService();
+
+      await service.togglePromptActive('some-id', true);
+
+      expect(mockPrompt.active).toBe(true);
+      expect(mockPrompt.save).toHaveBeenCalled();
+    });
+
+    it('deactivates prompt without touching others', async () => {
+      const mockPrompt = {
+        key: 'triage.general_medicine.analyze',
+        active: true,
+        save: jest.fn().mockResolvedValue(undefined),
+        toObject: jest.fn().mockReturnValue({ active: false }),
+      };
+      promptDefinitionModel = {
+        findById: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockPrompt) }),
+      } as never;
+      const service = createService();
+
+      await service.togglePromptActive('some-id', false);
+
+      expect(mockPrompt.active).toBe(false);
+    });
+  });
 });

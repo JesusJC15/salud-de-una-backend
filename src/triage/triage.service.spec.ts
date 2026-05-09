@@ -61,7 +61,9 @@ describe('TriageService', () => {
     guardrailService.check.mockReturnValue({ safe: true, violations: [] });
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
     triageQuestionsRepository.getRequiredQuestionIdsSync.mockImplementation(
-      (specialty: Specialty) => triageQuestionsRepository.getRequiredQuestionIds(specialty),
+      (specialty: Specialty) =>
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        triageQuestionsRepository.getRequiredQuestionIds(specialty),
     );
 
     const module: TestingModule = await Test.createTestingModule({
@@ -935,5 +937,75 @@ describe('TriageService', () => {
       'la IA no esta implementada en este entorno',
     );
     expect(result.priority).toBe('LOW');
+  });
+
+  it('should analyze URGENT_CARE session with always-HIGH priority without calling AI', async () => {
+    const sessionId = new Types.ObjectId();
+    const answeredSession = {
+      _id: sessionId,
+      specialty: Specialty.URGENT_CARE,
+      status: 'IN_PROGRESS',
+      patientId: new Types.ObjectId(),
+      answers: [
+        {
+          questionId: 'UR-Q1',
+          questionText: 'Q1',
+          answerValue: 'Dolor muy intenso',
+          answeredAt: new Date(),
+        },
+        {
+          questionId: 'UR-Q2',
+          questionText: 'Q2',
+          answerValue: 'Menos de 15 minutos',
+          answeredAt: new Date(),
+        },
+        {
+          questionId: 'UR-Q3',
+          questionText: 'Q3',
+          answerValue: 'Si, con normalidad',
+          answeredAt: new Date(),
+        },
+        {
+          questionId: 'UR-Q4',
+          questionText: 'Q4',
+          answerValue: 'No hay sangrado',
+          answeredAt: new Date(),
+        },
+        {
+          questionId: 'UR-Q5',
+          questionText: 'Q5',
+          answerValue: 5,
+          answeredAt: new Date(),
+        },
+      ],
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    triageSessionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(answeredSession),
+    });
+    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue([
+      'UR-Q1',
+      'UR-Q2',
+      'UR-Q3',
+      'UR-Q4',
+      'UR-Q5',
+    ]);
+    consultationsService.createFromTriage.mockResolvedValue('consultation-999');
+
+    const result = await service.analyzeSession(
+      sessionId.toString(),
+      {
+        userId: new Types.ObjectId().toString(),
+        email: 'p@example.com',
+        role: UserRole.PATIENT,
+        isActive: true,
+      },
+      'corr-urgent',
+    );
+
+    expect(result.priority).toBe('HIGH');
+    expect(result.highPriorityAlert).toBe(true);
+    expect(result.analysisMode).toBe('RULE_BASED');
+    expect(geminiTriageService.analyzeTriage).not.toHaveBeenCalled();
   });
 });

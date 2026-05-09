@@ -72,4 +72,24 @@ describe('DashboardController', () => {
     expect(service.getAlerts).toHaveBeenCalled();
     expect(result).toEqual({ items: [] });
   });
+
+  it('getRecentErrors should return errors with default limit', () => {
+    errorLogsService.getRecent.mockReturnValue([]);
+    const result = controller.getRecentErrors(undefined);
+    expect(errorLogsService.getRecent).toHaveBeenCalledWith(20);
+    expect(result).toEqual([]);
+  });
+
+  it('getRecentErrors should use provided limit', () => {
+    errorLogsService.getRecent.mockReturnValue([]);
+    controller.getRecentErrors('5');
+    expect(errorLogsService.getRecent).toHaveBeenCalledWith(5);
+  });
+
+  it('getAiMetrics should delegate to aiService', async () => {
+    aiService.getUsageMetrics.mockResolvedValue({ total: 10, successRate: 90 });
+    const result = await controller.getAiMetrics();
+    expect(aiService.getUsageMetrics).toHaveBeenCalled();
+    expect(result).toMatchObject({ total: 10 });
+  });
 });

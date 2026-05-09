@@ -27,7 +27,9 @@ describe('TriageQuestionsRepository', () => {
       ],
     }).compile();
 
-    repository = module.get<TriageQuestionsRepository>(TriageQuestionsRepository);
+    repository = module.get<TriageQuestionsRepository>(
+      TriageQuestionsRepository,
+    );
   });
 
   describe('getQuestionsBySpecialty (async, DB + fallback)', () => {
@@ -39,9 +41,29 @@ describe('TriageQuestionsRepository', () => {
       expect(questions.length).toBeGreaterThan(0);
     });
 
+    it('falls back to hardcoded questions when DB throws an error', async () => {
+      questionSetModel.findOne.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockRejectedValue(new Error('connection lost')),
+      });
+
+      const questions = await repository.getQuestionsBySpecialty(
+        Specialty.GENERAL_MEDICINE,
+      );
+
+      expect(questions.length).toBeGreaterThan(0);
+    });
+
     it('returns DB questions when available', async () => {
       const dbQuestions = [
-        { id: 'DB-Q1', questionId: 'DB-Q1', title: 'DB Question', questionText: 'From DB?', type: 'SINGLE_CHOICE' },
+        {
+          id: 'DB-Q1',
+          questionId: 'DB-Q1',
+          title: 'DB Question',
+          questionText: 'From DB?',
+          type: 'SINGLE_CHOICE',
+        },
       ];
       questionSetModel.findOne.mockReturnValue({
         sort: jest.fn().mockReturnThis(),
@@ -49,16 +71,22 @@ describe('TriageQuestionsRepository', () => {
         exec: jest.fn().mockResolvedValue({ questions: dbQuestions }),
       });
 
-      const questions = await repository.getQuestionsBySpecialty(Specialty.GENERAL_MEDICINE);
+      const questions = await repository.getQuestionsBySpecialty(
+        Specialty.GENERAL_MEDICINE,
+      );
       expect(questions[0].questionId).toBe('DB-Q1');
     });
 
     it('returns cloned questions so mutations do not affect subsequent reads', async () => {
-      const questions = await repository.getQuestionsBySpecialty(Specialty.GENERAL_MEDICINE);
+      const questions = await repository.getQuestionsBySpecialty(
+        Specialty.GENERAL_MEDICINE,
+      );
       const firstQuestionId = questions[0].questionId;
 
       questions[0].questionText = 'mutated';
-      const secondRead = await repository.getQuestionsBySpecialty(Specialty.GENERAL_MEDICINE);
+      const secondRead = await repository.getQuestionsBySpecialty(
+        Specialty.GENERAL_MEDICINE,
+      );
 
       expect(secondRead[0].questionId).toBe(firstQuestionId);
       expect(secondRead[0].questionText).not.toBe('mutated');
@@ -79,23 +107,33 @@ describe('TriageQuestionsRepository', () => {
 
   describe('getQuestionById (async)', () => {
     it('finds a question by id', async () => {
-      const question = await repository.getQuestionById(Specialty.ODONTOLOGY, 'OD-Q2');
+      const question = await repository.getQuestionById(
+        Specialty.ODONTOLOGY,
+        'OD-Q2',
+      );
       expect(question?.questionText).toBeDefined();
     });
 
     it('returns undefined for unknown question id', async () => {
-      const question = await repository.getQuestionById(Specialty.ODONTOLOGY, 'OD-UNKNOWN');
+      const question = await repository.getQuestionById(
+        Specialty.ODONTOLOGY,
+        'OD-UNKNOWN',
+      );
       expect(question).toBeUndefined();
     });
   });
 
   describe('isQuestionValid (async)', () => {
     it('returns true for valid question id', async () => {
-      expect(await repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'MG-Q3')).toBe(true);
+      expect(
+        await repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'MG-Q3'),
+      ).toBe(true);
     });
 
     it('returns false for question id from wrong specialty', async () => {
-      expect(await repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'OD-Q3')).toBe(false);
+      expect(
+        await repository.isQuestionValid(Specialty.GENERAL_MEDICINE, 'OD-Q3'),
+      ).toBe(false);
     });
   });
 });

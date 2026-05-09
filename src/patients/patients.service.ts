@@ -14,7 +14,10 @@ import {
   Consultation,
   ConsultationDocument,
 } from '../consultations/schemas/consultation.schema';
-import { Followup, FollowupDocument } from '../followups/schemas/followup.schema';
+import {
+  Followup,
+  FollowupDocument,
+} from '../followups/schemas/followup.schema';
 import {
   TriageSession,
   TriageSessionDocument,
@@ -207,10 +210,7 @@ export class PatientsService {
           .find({ patientId: patientObjectId })
           .lean()
           .exec(),
-        this.followupModel
-          .find({ patientId: patientObjectId })
-          .lean()
-          .exec(),
+        this.followupModel.find({ patientId: patientObjectId }).lean().exec(),
       ]);
 
     if (!patient) {
