@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { Patient } from '../patients/schemas/patient.schema';
+import { RagService } from '../rag/rag.service';
 import { TriageSession } from '../triage/schemas/triage-session.schema';
 import { ChatService } from '../chat/chat.service';
 import { ConsultationsService } from './consultations.service';
@@ -60,6 +61,9 @@ describe('ConsultationsService', () => {
   const chatService = {
     getMessages: jest.fn(),
   };
+  const ragService = {
+    buildConsultationSummary: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -103,6 +107,10 @@ describe('ConsultationsService', () => {
         {
           provide: ChatService,
           useValue: chatService,
+        },
+        {
+          provide: RagService,
+          useValue: ragService,
         },
       ],
     }).compile();

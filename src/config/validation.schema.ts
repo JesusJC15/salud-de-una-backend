@@ -42,5 +42,20 @@ export const validationSchema = Joi.object({
     otherwise: Joi.string().allow('').optional(),
   }),
   GEMINI_MODEL: Joi.string().allow('').optional(),
+  GEMINI_EMBEDDING_MODEL: Joi.string()
+    .allow('')
+    .default('gemini-embedding-001'),
+  RAG_SUMMARY_ENABLED: Joi.boolean().default(false),
+  RAG_TRIAGE_ENABLED: Joi.boolean().default(false),
+  RAG_PATIENT_EVIDENCE_ENABLED: Joi.boolean().default(false),
+  RAG_TOP_K: Joi.number().integer().min(1).max(20).default(8),
+  RAG_MAX_CONTEXT_CHUNKS: Joi.number().integer().min(1).max(20).default(10),
+  RAG_EMBEDDING_DIMENSIONS: Joi.number()
+    .integer()
+    .valid(768, 1536, 3072)
+    .default(768),
+  RAG_VECTOR_INDEX_NAME: Joi.string()
+    .allow('')
+    .default('salud_de_una_knowledge_chunks_vector_v1'),
   AUTH0_MIGRATION_KEY: Joi.string().allow('').optional(),
 });

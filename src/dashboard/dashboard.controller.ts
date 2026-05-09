@@ -48,4 +48,16 @@ export class DashboardController {
   getAiMetrics() {
     return this.aiService.getUsageMetrics();
   }
+
+  @Get('rag-metrics')
+  @Roles(UserRole.ADMIN)
+  getRagMetrics() {
+    return this.dashboardService.getRagMetrics();
+  }
+
+  @Get('rag-traces')
+  @Roles(UserRole.ADMIN)
+  getRagTraces(@Query('limit') limit?: string) {
+    return this.dashboardService.getRagTraces(limit ? Number(limit) : 20);
+  }
 }

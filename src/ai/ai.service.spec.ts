@@ -22,8 +22,8 @@ describe('AiService', () => {
   };
 
   let configService: { get: jest.Mock };
-  let promptDefinitionModel: { findOne: jest.Mock };
-  let auditLogModel: { create: jest.Mock };
+  let promptDefinitionModel: any;
+  let auditLogModel: any;
   let aiProvider: jest.Mocked<AiProvider>;
 
   function createService(provider: AiProvider | null = aiProvider): AiService {
@@ -55,6 +55,7 @@ describe('AiService', () => {
     };
     aiProvider = {
       generateText: jest.fn(),
+      embedContents: jest.fn(),
       healthCheck: jest.fn(),
     };
   });
@@ -202,6 +203,45 @@ describe('AiService', () => {
     expect(aiProvider.generateText.mock.calls).toHaveLength(1);
   });
 
+  it('embedTexts should delegate to provider when enabled', async () => {
+    aiProvider.embedContents.mockResolvedValue({
+      provider: 'gemini',
+      model: 'gemini-embedding-001',
+      embeddings: [[0.1, 0.2]],
+      latencyMs: 9,
+      requestId: 'emb-1',
+    });
+    const service = createService();
+
+    const result = await service.embedTexts({
+      model: 'gemini-embedding-001',
+      contents: ['dolor toracico'],
+    });
+
+    expect(result.embeddings).toEqual([[0.1, 0.2]]);
+    expect(aiProvider.embedContents).toHaveBeenCalledWith({
+      model: 'gemini-embedding-001',
+      contents: ['dolor toracico'],
+    });
+  });
+
+  it('embedTexts should throw when provider is disabled', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'ai.enabled') {
+        return false;
+      }
+      return undefined;
+    });
+    const service = createService(null);
+
+    await expect(
+      service.embedTexts({
+        model: 'gemini-embedding-001',
+        contents: ['dolor toracico'],
+      }),
+    ).rejects.toThrow(ServiceUnavailableException);
+  });
+
   it('healthCheck should degrade when provider configuration is incomplete', async () => {
     configService.get.mockImplementation((key: string) => {
       const values: Record<string, unknown> = {
@@ -256,6 +296,16 @@ describe('AiService', () => {
     expect(service.getReadiness()).toMatchObject({
       status: 'degraded',
       detail: 'AI enabled but connectivity has not been verified yet',
+      degraded: true,
+    });
+  });
+
+  it('getReadiness should report degraded when provider configuration is incomplete', () => {
+    const service = createService(null);
+
+    expect(service.getReadiness()).toMatchObject({
+      status: 'degraded',
+      detail: 'AI enabled but provider configuration is incomplete',
       degraded: true,
     });
   });
@@ -448,6 +498,90 @@ describe('AiService', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);
+    });
+  });
+
+  describe('getPromptVersions', () => {
+    it('returns prompt versions sorted descending', async () => {
+      const mockItems = [{ key: 'prompt.key', version: 2 }];
+      promptDefinitionModel = {
+        find: jest.fn().mockReturnValue({
+          sort: jest.fn().mockReturnThis(),
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue(mockItems),
+        }),
+      } as never;
+      const service = createService();
+
+      const result = await service.getPromptVersions('prompt.key');
+
+      expect(promptDefinitionModel.find).toHaveBeenCalledWith({
+        key: 'prompt.key',
+      });
+      expect(result).toEqual(mockItems);
+    });
+  });
+
+  describe('createPromptVersion', () => {
+    it('creates the first prompt version using the configured default model', async () => {
+      const save = jest.fn().mockResolvedValue({ id: 'saved-prompt' });
+      const PromptModel: any = jest.fn().mockImplementation((payload) => ({
+        ...payload,
+        save,
+      }));
+      PromptModel.findOne = jest.fn().mockReturnValue(
+        createPromptQuery(null),
+      );
+      PromptModel.updateMany = jest.fn().mockResolvedValue({});
+      promptDefinitionModel = PromptModel as never;
+      const service = createService();
+
+      const result = await service.createPromptVersion({
+        key: 'triage.prompt',
+        systemInstruction: 'Be concise',
+      });
+
+      expect(PromptModel.updateMany).toHaveBeenCalledWith(
+        { key: 'triage.prompt', active: true },
+        { $set: { active: false } },
+      );
+      expect(PromptModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          key: 'triage.prompt',
+          version: 1,
+          model: 'gemini-2.5-flash',
+          active: true,
+        }),
+      );
+      expect(save).toHaveBeenCalled();
+      expect(result).toEqual({ id: 'saved-prompt' });
+    });
+
+    it('increments the latest version and respects an explicit model override', async () => {
+      const save = jest.fn().mockResolvedValue({ id: 'saved-prompt-2' });
+      const PromptModel: any = jest.fn().mockImplementation((payload) => ({
+        ...payload,
+        save,
+      }));
+      PromptModel.findOne = jest.fn().mockReturnValue(
+        createPromptQuery({ version: 4 }),
+      );
+      PromptModel.updateMany = jest.fn().mockResolvedValue({});
+      promptDefinitionModel = PromptModel as never;
+      const service = createService();
+
+      await service.createPromptVersion({
+        key: 'triage.prompt',
+        systemInstruction: 'Override model',
+        model: 'gemini-custom',
+      });
+
+      expect(PromptModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          version: 5,
+          model: 'gemini-custom',
+        }),
+      );
     });
   });
 

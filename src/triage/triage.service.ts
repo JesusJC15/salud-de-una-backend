@@ -12,6 +12,7 @@ import { Model, Types } from 'mongoose';
 import { ConsultationsService } from '../consultations/consultations.service';
 import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { RagService } from '../rag/rag.service';
 import { CreateTriageSessionDto } from './dto/create-triage-session.dto';
 import { RedFlagsEngine } from './engines/red-flags.engine';
 import { SaveTriageAnswersDto } from './dto/save-triage-answers.dto';
@@ -108,6 +109,21 @@ type AnalyzeTriageSessionResponse = {
   noticeCode?:
     | 'IA_TEMPORARILY_UNAVAILABLE_RULE_BASED_FALLBACK'
     | 'IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK';
+  evidence?: {
+    traceId: string;
+    grounded: boolean;
+    fallback: boolean;
+    answer: string;
+    citations: Array<{
+      chunkId: string;
+      documentId: string;
+      title: string;
+      sectionPath?: string;
+      authority: string;
+      snippet: string;
+      score: number;
+    }>;
+  };
 };
 
 const TRIAGE_ANALYSIS_ERROR_CODES = {
@@ -128,6 +144,7 @@ export class TriageService {
     private readonly guardrailService: GuardrailService,
     private readonly geminiTriageService: GeminiTriageService,
     private readonly consultationsService: ConsultationsService,
+    private readonly ragService: RagService,
   ) {}
 
   async createSession(
@@ -616,6 +633,29 @@ export class TriageService {
       noticeCode = 'IA_NOT_IMPLEMENTED_RULE_BASED_FALLBACK';
     }
 
+    const answersText = triageSession.answers
+      .map(
+        (answer) =>
+          `Pregunta: ${answer.questionText}\nRespuesta: ${this.formatAnswerValue(answer.answerValue)}`,
+      )
+      .join('\n\n');
+    const redFlagsText = redFlags
+      .map((flag) => `${flag.severity}: ${flag.evidence}`)
+      .join('\n');
+
+    const evidence = this.isRagTriageEnabled()
+      ? await this.tryBuildTriageEvidence(
+          triageSession.specialty,
+          {
+            answersText,
+            redFlagsText,
+            priority,
+          },
+          user,
+          correlationId,
+        )
+      : undefined;
+
     return {
       sessionId: triageSession._id.toString(),
       consultationId,
@@ -625,6 +665,7 @@ export class TriageService {
       highPriorityAlert: priority === 'HIGH',
       analysisMode: aiStrategy === 'provider' ? 'AI_ASSISTED' : 'RULE_BASED',
       noticeCode,
+      evidence,
     };
   }
 
@@ -1100,6 +1141,77 @@ export class TriageService {
         'Urgencia detectada. Tu caso fue priorizado para atencion medica inmediata.',
       highPriorityAlert: true,
       analysisMode: 'RULE_BASED',
+      evidence: this.isRagTriageEnabled()
+        ? await this.tryBuildTriageEvidence(
+            triageSession.specialty,
+            {
+              answersText: triageSession.answers
+                .map(
+                  (answer) =>
+                    `Pregunta: ${answer.questionText}\nRespuesta: ${this.formatAnswerValue(answer.answerValue)}`,
+                )
+                .join('\n\n'),
+              redFlagsText: redFlags
+                .map((flag) => `${flag.severity}: ${flag.evidence}`)
+                .join('\n'),
+              priority,
+            },
+            user,
+            correlationId,
+          )
+        : undefined,
     };
+  }
+
+  private async tryBuildTriageEvidence(
+    specialty: Specialty,
+    input: {
+      answersText: string;
+      redFlagsText: string;
+      priority: TriagePriority;
+    },
+    user: RequestUser,
+    correlationId?: string,
+  ) {
+    try {
+      return await this.ragService.buildTriageEvidence({
+        specialty,
+        query:
+          `Prioridad: ${input.priority}\n` +
+          `Respuestas:\n${input.answersText}\n\n` +
+          `Señales de alarma:\n${input.redFlagsText || 'Sin señales de alarma.'}`,
+        actor: user,
+        correlationId,
+      });
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No fue posible generar evidencia RAG de triage: ${this.normalizeError(error).message}`,
+      );
+      return undefined;
+    }
+  }
+
+  private formatAnswerValue(value: unknown): string {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint'
+    ) {
+      return String(value);
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'No informado';
+    }
+  }
+
+  private isRagTriageEnabled(): boolean {
+    return (
+      process.env.RAG_TRIAGE_ENABLED === 'true' ||
+      process.env.RAG_TRIAGE_ENABLED === '1'
+    );
   }
 }

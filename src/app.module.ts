@@ -16,6 +16,7 @@ import aiConfig from './config/ai.config';
 import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
 import notificationsConfig from './config/notifications.config';
+import ragConfig from './config/rag.config';
 import redisConfig from './config/redis.config';
 import { validationSchema } from './config/validation.schema';
 import webConfig from './config/web.config';
@@ -28,6 +29,8 @@ import { FollowupsModule } from './followups/followups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { PatientsModule } from './patients/patients.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
+import { RagModule } from './rag/rag.module';
 import { TriageModule } from './triage/triage.module';
 import { REDIS_CLIENT } from './redis/redis.constants';
 import { RedisModule } from './redis/redis.module';
@@ -42,6 +45,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
         authConfig,
         databaseConfig,
         notificationsConfig,
+        ragConfig,
         redisConfig,
         webConfig,
       ],
@@ -87,6 +91,8 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     AdminsModule,
     OutboxModule,
     BillingModule,
+    KnowledgeModule,
+    RagModule,
   ],
   controllers: [AppController],
   providers: [

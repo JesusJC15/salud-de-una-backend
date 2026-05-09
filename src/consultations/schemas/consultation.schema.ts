@@ -25,6 +25,33 @@ export const SUMMARY_FEEDBACK_VALUES = [
 export type SummaryFeedbackValue = (typeof SUMMARY_FEEDBACK_VALUES)[number];
 
 @Schema({ _id: false })
+export class ClinicalCitation {
+  @Prop({ required: true })
+  chunkId!: string;
+
+  @Prop({ required: true })
+  documentId!: string;
+
+  @Prop({ required: true })
+  title!: string;
+
+  @Prop()
+  sectionPath?: string;
+
+  @Prop({ required: true })
+  authority!: string;
+
+  @Prop()
+  snippet?: string;
+
+  @Prop({ required: true })
+  score!: number;
+}
+
+export const ClinicalCitationSchema =
+  SchemaFactory.createForClass(ClinicalCitation);
+
+@Schema({ _id: false })
 export class ConsultationSummaryFeedback {
   @Prop({ required: true, type: String, enum: SUMMARY_FEEDBACK_VALUES })
   value!: SummaryFeedbackValue;
@@ -81,6 +108,12 @@ export class Consultation {
 
   @Prop()
   clinicalSummary?: string;
+
+  @Prop({ type: [ClinicalCitationSchema], default: [] })
+  clinicalSummaryCitations?: ClinicalCitation[];
+
+  @Prop()
+  clinicalSummaryTraceId?: string;
 
   @Prop({ min: 1, max: 10 })
   baselineSymptomSeverity?: number;

@@ -7,6 +7,7 @@ import { OutboxModule } from '../outbox/outbox.module';
 import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Patient, PatientSchema } from '../patients/schemas/patient.schema';
+import { RagModule } from '../rag/rag.module';
 import {
   TriageSession,
   TriageSessionSchema,
@@ -24,6 +25,7 @@ import {
     ChatModule,
     NotificationsModule,
     OutboxModule,
+    RagModule,
     MongooseModule.forFeature([
       { name: Doctor.name, schema: DoctorSchema },
       { name: Patient.name, schema: PatientSchema },
