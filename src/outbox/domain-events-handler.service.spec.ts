@@ -174,4 +174,43 @@ describe('DomainEventsHandlerService', () => {
     expect(outboxService.reschedule).not.toHaveBeenCalled();
     expect(outboxService.markProcessed).not.toHaveBeenCalled();
   });
+
+  it('should handle CONSULTATION_CLOSED_EVENT and schedule followups', async () => {
+    outboxService.findById.mockResolvedValue({
+      id: 'event-5',
+      eventType: 'consultation.closed.v1',
+      attempts: 1,
+      payload: { consultationId: 'consultation-abc' },
+    });
+    followupsService.handleConsultationClosedEvent.mockResolvedValue(undefined);
+
+    await service.processOutboxEventById('event-5');
+
+    expect(followupsService.handleConsultationClosedEvent).toHaveBeenCalledWith(
+      'consultation-abc',
+    );
+    expect(outboxService.markProcessed).toHaveBeenCalledWith('event-5');
+  });
+
+  it('should throw on invalid CONSULTATION_CLOSED_EVENT payload', async () => {
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    outboxService.findById.mockResolvedValue({
+      id: 'event-6',
+      eventType: 'consultation.closed.v1',
+      attempts: 1,
+      payload: { consultationId: '' },
+    });
+
+    await expect(service.processOutboxEventById('event-6')).rejects.toThrow(
+      'Invalid payload for outbox event event-6',
+    );
+
+    expect(
+      followupsService.handleConsultationClosedEvent,
+    ).not.toHaveBeenCalled();
+    expect(outboxService.markProcessed).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });

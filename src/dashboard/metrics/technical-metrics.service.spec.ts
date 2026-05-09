@@ -83,6 +83,25 @@ describe('TechnicalMetricsService', () => {
     expect(loggerSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('should handle non-Error thrown by Redis using String(error)', async () => {
+    redisStore.record.mockRejectedValue('connection-timeout');
+    redisStore.getSummary.mockRejectedValue('connection-timeout');
+    inMemoryStore.getSummary.mockResolvedValue({
+      sampleSize: 0,
+      p95LatencyMs: 0,
+      errorRate: 0,
+      timestamp: '2026-03-14T12:00:00.000Z',
+      source: 'memory',
+      degraded: false,
+    });
+
+    await service.record({ latencyMs: 10, statusCode: 200 });
+    const result = await service.getSummary();
+
+    expect(inMemoryStore.record).toHaveBeenCalled();
+    expect(result.degraded).toBe(true);
+  });
+
   it('should not warn when Redis metrics store is intentionally disabled', async () => {
     redisStore.record.mockRejectedValue(
       new Error('Redis metrics store disabled'),
