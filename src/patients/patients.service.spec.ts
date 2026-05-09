@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import { Consultation } from '../consultations/schemas/consultation.schema';
 import { Followup } from '../followups/schemas/followup.schema';
 import { TriageSession } from '../triage/schemas/triage-session.schema';
+import { Transaction } from '../billing/schemas/transaction.schema';
 import { UserRole } from '../common/enums/user-role.enum';
 import { PatientTimelineService } from './patient-timeline.service';
 import { PatientsService } from './patients.service';
@@ -60,6 +61,7 @@ describe('PatientsService', () => {
   let consultationModel: { find: jest.Mock };
   let triageSessionModel: { find: jest.Mock };
   let followupModel: { find: jest.Mock };
+  let transactionModel: { find: jest.Mock };
   let connection: { startSession: jest.Mock };
   let authService: {
     ensureEmailIsAvailable: jest.Mock;
@@ -92,6 +94,13 @@ describe('PatientsService', () => {
           .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
       }),
     };
+    transactionModel = {
+      find: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+      }),
+    };
     connection = { startSession: jest.fn() };
     authService = {
       ensureEmailIsAvailable: jest.fn(),
@@ -115,6 +124,10 @@ describe('PatientsService', () => {
           useValue: triageSessionModel,
         },
         { provide: getModelToken(Followup.name), useValue: followupModel },
+        {
+          provide: getModelToken(Transaction.name),
+          useValue: transactionModel,
+        },
         { provide: AuthService, useValue: authService },
         {
           provide: PatientTimelineService,

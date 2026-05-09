@@ -19,6 +19,7 @@ import notificationsConfig from './config/notifications.config';
 import redisConfig from './config/redis.config';
 import { validationSchema } from './config/validation.schema';
 import webConfig from './config/web.config';
+import { BillingModule } from './billing/billing.module';
 import { ChatModule } from './chat/chat.module';
 import { ConsultationsModule } from './consultations/consultations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -85,6 +86,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     TriageModule,
     AdminsModule,
     OutboxModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [

@@ -22,6 +22,10 @@ import {
   TriageSession,
   TriageSessionDocument,
 } from '../triage/schemas/triage-session.schema';
+import {
+  Transaction,
+  TransactionDocument,
+} from '../billing/schemas/transaction.schema';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PatientTimelineService } from './patient-timeline.service';
@@ -43,6 +47,8 @@ export class PatientsService {
     private readonly triageSessionModel: Model<TriageSessionDocument>,
     @InjectModel(Followup.name)
     private readonly followupModel: Model<FollowupDocument>,
+    @InjectModel(Transaction.name)
+    private readonly transactionModel: Model<TransactionDocument>,
     private readonly authService: AuthService,
     private readonly patientTimelineService: PatientTimelineService,
   ) {}
@@ -195,7 +201,7 @@ export class PatientsService {
 
   async exportPatientData(user: RequestUser) {
     const patientObjectId = new Types.ObjectId(user.userId);
-    const [patient, consultations, triageSessions, followups] =
+    const [patient, consultations, triageSessions, followups, transactions] =
       await Promise.all([
         this.patientModel
           .findById(patientObjectId)
@@ -211,6 +217,10 @@ export class PatientsService {
           .lean()
           .exec(),
         this.followupModel.find({ patientId: patientObjectId }).lean().exec(),
+        this.transactionModel
+          .find({ patientId: patientObjectId })
+          .lean()
+          .exec(),
       ]);
 
     if (!patient) {
@@ -223,6 +233,7 @@ export class PatientsService {
       consultations,
       triageSessions,
       followups,
+      transactions,
     };
   }
 

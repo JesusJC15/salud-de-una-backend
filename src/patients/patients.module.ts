@@ -11,6 +11,10 @@ import {
   TriageSession,
   TriageSessionSchema,
 } from '../triage/schemas/triage-session.schema';
+import {
+  Transaction,
+  TransactionSchema,
+} from '../billing/schemas/transaction.schema';
 import { PatientTimelineService } from './patient-timeline.service';
 import { PatientsController } from './patients.controller';
 import { PatientsService } from './patients.service';
@@ -25,6 +29,7 @@ import { Patient, PatientSchema } from './schemas/patient.schema';
       { name: Consultation.name, schema: ConsultationSchema },
       { name: TriageSession.name, schema: TriageSessionSchema },
       { name: Followup.name, schema: FollowupSchema },
+      { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
   controllers: [PatientsController],

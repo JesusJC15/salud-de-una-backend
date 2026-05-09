@@ -100,6 +100,9 @@ export class Consultation {
   @Prop({ type: Types.ObjectId, ref: 'Followup' })
   sourceFollowupId?: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, index: true, sparse: true })
+  transactionId?: Types.ObjectId;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
