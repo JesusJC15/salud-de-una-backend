@@ -565,6 +565,33 @@ describe('KnowledgeService', () => {
     );
   });
 
+  it('stripHtml should preserve malformed tags and stop at unterminated script blocks', () => {
+    const service = createService() as unknown as {
+      stripHtml: (html: string) => string;
+    };
+
+    expect(
+      service.stripHtml(
+        'Texto <span data-note="1 > 0">válido</span> <tag-incompleto',
+      ),
+    ).toBe('Texto válido <tag-incompleto');
+    expect(
+      service.stripHtml('Inicio<script type="text/javascript">alert(1)'),
+    ).toBe('Inicio');
+  });
+
+  it('extractPdfText should support nested parentheses inside PDF literal strings', () => {
+    const service = createService() as unknown as {
+      extractPdfText: (buffer: Buffer) => string;
+    };
+
+    expect(
+      service.extractPdfText(
+        Buffer.from('(Texto (anidado) final) (Otra linea)', 'latin1'),
+      ),
+    ).toBe('Texto (anidado) final Otra linea');
+  });
+
   it('ingestUploadedDocument should mark document and job as failed when embedding fails', async () => {
     const service = createService();
     const document = buildDocumentDoc();
