@@ -24,6 +24,28 @@ export type AiGenerationResult = {
   tokenUsage?: Record<string, unknown>;
 };
 
+export type AiEmbeddingRequest = {
+  model: string;
+  contents: string[];
+  correlationId?: string;
+  taskType?:
+    | 'RETRIEVAL_DOCUMENT'
+    | 'RETRIEVAL_QUERY'
+    | 'SEMANTIC_SIMILARITY'
+    | 'CLASSIFICATION'
+    | 'CLUSTERING';
+  outputDimensionality?: number;
+};
+
+export type AiEmbeddingResult = {
+  provider: string;
+  model: string;
+  embeddings: number[][];
+  latencyMs: number;
+  requestId: string;
+  tokenUsage?: Record<string, unknown>;
+};
+
 export type AiHealthResult = {
   provider: string;
   model: string;
@@ -37,5 +59,6 @@ export type AiHealthResult = {
 
 export interface AiProvider {
   generateText(request: AiGenerationRequest): Promise<AiGenerationResult>;
+  embedContents(request: AiEmbeddingRequest): Promise<AiEmbeddingResult>;
   healthCheck(request: AiGenerationRequest): Promise<AiHealthResult>;
 }

@@ -14,6 +14,19 @@ import {
 import { Patient, PatientSchema } from '../patients/schemas/patient.schema';
 import { REDIS_CLIENT } from '../redis/redis.constants';
 import {
+  KnowledgeDocument,
+  KnowledgeDocumentSchema,
+} from '../knowledge/schemas/knowledge-document.schema';
+import {
+  KnowledgeJob,
+  KnowledgeJobSchema,
+} from '../knowledge/schemas/knowledge-job.schema';
+import {
+  RagFeedback,
+  RagFeedbackSchema,
+} from '../rag/schemas/rag-feedback.schema';
+import { RagTrace, RagTraceSchema } from '../rag/schemas/rag-trace.schema';
+import {
   TriageSession,
   TriageSessionSchema,
 } from '../triage/schemas/triage-session.schema';
@@ -34,6 +47,10 @@ import { TechnicalMetricsService } from './metrics/technical-metrics.service';
       { name: Consultation.name, schema: ConsultationSchema },
       { name: TriageSession.name, schema: TriageSessionSchema },
       { name: Followup.name, schema: FollowupSchema },
+      { name: KnowledgeDocument.name, schema: KnowledgeDocumentSchema },
+      { name: KnowledgeJob.name, schema: KnowledgeJobSchema },
+      { name: RagTrace.name, schema: RagTraceSchema },
+      { name: RagFeedback.name, schema: RagFeedbackSchema },
     ]),
   ],
   controllers: [DashboardController],

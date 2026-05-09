@@ -3,6 +3,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { ProgramType } from '../common/enums/program-type.enum';
 import { TitleObtainingOrigin } from '../common/enums/title-obtaining-origin.enum';
 import { RethusState } from '../common/enums/rethus-state.enum';
+import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { RethusDecisionAction } from './dto/rethus-decision.dto';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
@@ -68,15 +69,16 @@ describe('AdminController', () => {
       administrativeAct: 'ACT-2026-001',
       reportingEntity: 'MINISTERIO DE SALUD',
     };
-
-    const result = await controller.verifyDoctorLegacy('d1', dto, {
+    const req: RequestContext = {
       user: {
         userId: 'a1',
         email: 'admin@example.com',
         role: UserRole.ADMIN,
         isActive: true,
       },
-    } as unknown as any);
+    } as RequestContext;
+
+    const result = await controller.verifyDoctorLegacy('d1', dto, req);
 
     expect(service.verifyDoctor).toHaveBeenCalledWith(
       'd1',
@@ -89,17 +91,21 @@ describe('AdminController', () => {
 
   it('verifyDoctor should call service with compact decision dto', async () => {
     service.verifyDoctor.mockResolvedValue({ doctorId: 'd1' });
+    const req: RequestContext = {
+      user: {
+        userId: 'a1',
+        email: 'admin@example.com',
+        role: UserRole.ADMIN,
+        isActive: true,
+      },
+    } as RequestContext;
     const result = await controller.verifyDoctor(
       'd1',
-      { action: RethusDecisionAction.APPROVE, notes: 'ok' },
       {
-        user: {
-          userId: 'a1',
-          email: 'admin@example.com',
-          role: UserRole.ADMIN,
-          isActive: true,
-        },
-      } as unknown as any,
+        action: RethusDecisionAction.APPROVE,
+        notes: 'ok',
+      },
+      req,
     );
 
     expect(service.verifyDoctor).toHaveBeenCalledWith(

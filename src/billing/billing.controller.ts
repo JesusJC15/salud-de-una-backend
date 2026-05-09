@@ -78,6 +78,12 @@ export class BillingController {
     return this.billingService.getRevenueMetrics();
   }
 
+  @Get('admin/prices')
+  @Roles(UserRole.ADMIN)
+  getAdminPrices() {
+    return this.billingService.getActivePrices();
+  }
+
   @Patch('admin/prices/:specialty')
   @Roles(UserRole.ADMIN)
   updatePrice(

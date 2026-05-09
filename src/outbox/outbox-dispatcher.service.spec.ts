@@ -39,7 +39,7 @@ describe('OutboxDispatcherService', () => {
     jest.useRealTimers();
   });
 
-  it('should schedule dispatch on application bootstrap and clear on shutdown', () => {
+  it('should schedule dispatch on application bootstrap and clear on shutdown', async () => {
     const service = createService();
     const dispatchSpy = jest
       .spyOn(service, 'dispatchPendingEvents')
@@ -47,12 +47,12 @@ describe('OutboxDispatcherService', () => {
 
     service.onApplicationBootstrap();
     jest.advanceTimersByTime(10);
-    service.onApplicationShutdown();
+    await service.onApplicationShutdown();
 
     expect(dispatchSpy).toHaveBeenCalled();
   });
 
-  it('should use default dispatch interval when config is missing', () => {
+  it('should use default dispatch interval when config is missing', async () => {
     configService.get.mockReturnValue(undefined);
     const service = createService();
     const dispatchSpy = jest
@@ -61,7 +61,7 @@ describe('OutboxDispatcherService', () => {
 
     service.onApplicationBootstrap();
     jest.advanceTimersByTime(1000);
-    service.onApplicationShutdown();
+    await service.onApplicationShutdown();
 
     expect(dispatchSpy).toHaveBeenCalled();
   });

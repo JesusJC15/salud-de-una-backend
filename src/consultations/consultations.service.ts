@@ -21,6 +21,7 @@ import { OutboxDispatcherService } from '../outbox/outbox-dispatcher.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import { RagService } from '../rag/rag.service';
 import {
   TriageSession,
   TriageSessionDocument,
@@ -83,6 +84,7 @@ export class ConsultationsService {
     @Inject(forwardRef(() => OutboxDispatcherService))
     private readonly outboxDispatcherService: OutboxDispatcherService,
     private readonly chatService: ChatService,
+    private readonly ragService: RagService,
   ) {}
 
   async createFromTriage(
@@ -188,6 +190,17 @@ export class ConsultationsService {
       status: consultation.status,
       assignedDoctorId: consultation.assignedDoctorId?.toString(),
       clinicalSummary: consultation.clinicalSummary,
+      clinicalSummaryTraceId: consultation.clinicalSummaryTraceId ?? null,
+      clinicalSummaryCitations:
+        consultation.clinicalSummaryCitations?.map((citation) => ({
+          chunkId: citation.chunkId,
+          documentId: citation.documentId,
+          title: citation.title,
+          sectionPath: citation.sectionPath ?? null,
+          authority: citation.authority,
+          snippet: citation.snippet ?? null,
+          score: citation.score,
+        })) ?? [],
       closedAt: consultation.closedAt?.toISOString(),
       updatedAt: consultation.updatedAt?.toISOString(),
       triage: triage
@@ -375,16 +388,40 @@ export class ConsultationsService {
       redFlagsText;
 
     try {
-      const result = await this.aiService.generateText({
-        promptKey: 'CLINICAL_SUMMARY_V1',
-        promptVersion: 1,
-        model: 'gemini-2.5-flash',
-        systemInstruction: CLINICAL_SUMMARY_SYSTEM_INSTRUCTION,
-        inputText,
-        correlationId: randomUUID(),
-      });
+      if (this.isRagSummaryEnabled()) {
+        const ragResult = await this.ragService.buildConsultationSummary({
+          specialty: triageSession.specialty,
+          query: inputText,
+          audience: 'STAFF',
+        });
 
-      consultation.clinicalSummary = result.text?.trim() ?? '';
+        consultation.clinicalSummary = ragResult.answer?.trim() ?? '';
+        consultation.clinicalSummaryTraceId = ragResult.traceId;
+        consultation.clinicalSummaryCitations = ragResult.citations.map(
+          (citation) => ({
+            chunkId: citation.chunkId,
+            documentId: citation.documentId,
+            title: citation.title,
+            sectionPath: citation.sectionPath,
+            authority: citation.authority,
+            snippet: citation.snippet,
+            score: citation.score,
+          }),
+        );
+      } else {
+        const result = await this.aiService.generateText({
+          promptKey: 'CLINICAL_SUMMARY_V1',
+          promptVersion: 1,
+          model: 'gemini-2.5-flash',
+          systemInstruction: CLINICAL_SUMMARY_SYSTEM_INSTRUCTION,
+          inputText,
+          correlationId: randomUUID(),
+        });
+
+        consultation.clinicalSummary = result.text?.trim() ?? '';
+        consultation.clinicalSummaryTraceId = undefined;
+        consultation.clinicalSummaryCitations = [];
+      }
     } catch {
       const summaryLines = [
         `Especialidad: ${triageSession.specialty}`,
@@ -398,6 +435,8 @@ export class ConsultationsService {
       ].filter(Boolean);
 
       consultation.clinicalSummary = summaryLines.join('\n');
+      consultation.clinicalSummaryTraceId = undefined;
+      consultation.clinicalSummaryCitations = [];
       if (!consultation.clinicalSummary) {
         throw new ServiceUnavailableException(
           'No fue posible generar el resumen clínico en este momento',
@@ -410,6 +449,17 @@ export class ConsultationsService {
     return {
       consultationId: consultation.id,
       summary: consultation.clinicalSummary,
+      traceId: consultation.clinicalSummaryTraceId ?? null,
+      citations:
+        consultation.clinicalSummaryCitations?.map((citation) => ({
+          chunkId: citation.chunkId,
+          documentId: citation.documentId,
+          title: citation.title,
+          sectionPath: citation.sectionPath ?? null,
+          authority: citation.authority,
+          snippet: citation.snippet ?? null,
+          score: citation.score,
+        })) ?? [],
       generatedAt:
         consultation.updatedAt?.toISOString() ?? new Date().toISOString(),
     };
@@ -636,5 +686,12 @@ export class ConsultationsService {
     } catch {
       return 'No informado';
     }
+  }
+
+  private isRagSummaryEnabled(): boolean {
+    return (
+      process.env.RAG_SUMMARY_ENABLED === 'true' ||
+      process.env.RAG_SUMMARY_ENABLED === '1'
+    );
   }
 }

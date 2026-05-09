@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AiModule } from '../ai/ai.module';
 import { ConsultationsModule } from '../consultations/consultations.module';
+import { RagModule } from '../rag/rag.module';
 import { TriageController } from './triage.controller';
 import { TriageQuestionsRepository } from './questions/triage-questions.repository';
 import {
@@ -21,6 +22,7 @@ import { TriageQuestionsSeederService } from './triage-questions-seeder.service'
   imports: [
     AiModule,
     ConsultationsModule,
+    RagModule,
     MongooseModule.forFeature([
       { name: TriageSession.name, schema: TriageSessionSchema },
       { name: TriageQuestionSet.name, schema: TriageQuestionSetSchema },

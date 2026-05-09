@@ -11,6 +11,7 @@ import { Types } from 'mongoose';
 import { ConsultationsService } from '../consultations/consultations.service';
 import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
+import { RagService } from '../rag/rag.service';
 import { RedFlagsEngine } from './engines/red-flags.engine';
 import { TriageQuestionsRepository } from './questions/triage-questions.repository';
 import { GeminiTriageService } from './services/gemini-triage.service';
@@ -54,6 +55,9 @@ describe('TriageService', () => {
   const consultationsService = {
     createFromTriage: jest.fn(),
   };
+  const ragService = {
+    buildTriageEvidence: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.restoreAllMocks();
@@ -88,6 +92,10 @@ describe('TriageService', () => {
         {
           provide: ConsultationsService,
           useValue: consultationsService,
+        },
+        {
+          provide: RagService,
+          useValue: ragService,
         },
       ],
     }).compile();

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsController } from './notifications.controller';
 import { UserRole } from '../common/enums/user-role.enum';
+import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsController', () => {
@@ -28,18 +29,19 @@ describe('NotificationsController', () => {
 
   it('getMine should call service', async () => {
     service.getMine.mockResolvedValue({ items: [], unreadCount: 0 });
+    const req: RequestContext = {
+      user: {
+        userId: 'u1',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        isActive: true,
+      },
+    } as RequestContext;
 
-    const result = await controller.getMine(
-      {
-        user: {
-          userId: 'u1',
-          email: 'doc@example.com',
-          role: UserRole.DOCTOR,
-          isActive: true,
-        },
-      } as unknown as any,
-      { unreadOnly: true, limit: 10 },
-    );
+    const result = await controller.getMine(req, {
+      unreadOnly: true,
+      limit: 10,
+    });
 
     expect(service.getMine).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1' }),
@@ -51,18 +53,16 @@ describe('NotificationsController', () => {
 
   it('getMine should use defaults when query is empty', async () => {
     service.getMine.mockResolvedValue({ items: [], unreadCount: 0 });
+    const req: RequestContext = {
+      user: {
+        userId: 'u1',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        isActive: true,
+      },
+    } as RequestContext;
 
-    await controller.getMine(
-      {
-        user: {
-          userId: 'u1',
-          email: 'doc@example.com',
-          role: UserRole.DOCTOR,
-          isActive: true,
-        },
-      } as unknown as any,
-      {},
-    );
+    await controller.getMine(req, {});
 
     expect(service.getMine).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1' }),
@@ -73,18 +73,16 @@ describe('NotificationsController', () => {
 
   it('markAsRead should call service', async () => {
     service.markAsRead.mockResolvedValue({ id: 'n1', read: true });
+    const req: RequestContext = {
+      user: {
+        userId: 'u1',
+        email: 'doc@example.com',
+        role: UserRole.DOCTOR,
+        isActive: true,
+      },
+    } as RequestContext;
 
-    const result = await controller.markAsRead(
-      {
-        user: {
-          userId: 'u1',
-          email: 'doc@example.com',
-          role: UserRole.DOCTOR,
-          isActive: true,
-        },
-      } as unknown as any,
-      'n1',
-    );
+    const result = await controller.markAsRead(req, 'n1');
 
     expect(service.markAsRead).toHaveBeenCalledWith(
       'n1',
@@ -95,15 +93,16 @@ describe('NotificationsController', () => {
 
   it('markAllAsRead should call service', async () => {
     service.markAllAsRead.mockResolvedValue({ updatedCount: 3 });
-
-    const result = await controller.markAllAsRead({
+    const req: RequestContext = {
       user: {
         userId: 'u1',
         email: 'doc@example.com',
         role: UserRole.DOCTOR,
         isActive: true,
       },
-    } as unknown as any);
+    } as RequestContext;
+
+    const result = await controller.markAllAsRead(req);
 
     expect(service.markAllAsRead).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1' }),

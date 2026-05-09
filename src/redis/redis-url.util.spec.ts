@@ -44,8 +44,10 @@ describe('parseRedisUrl', () => {
 
   it('should not coerce root pathname into redis db 0', () => {
     const result = parseRedisUrl('redis://cache.example.com/', 'prefix');
+    const connectionOptions = result.connectionOptions as { db?: number };
+    const clientOptions = result.clientOptions as { db?: number };
 
-    expect(result.connectionOptions.db).toBeUndefined();
-    expect(result.clientOptions.db).toBeUndefined();
+    expect(connectionOptions.db).toBeUndefined();
+    expect(clientOptions.db).toBeUndefined();
   });
 });
