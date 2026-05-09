@@ -74,7 +74,7 @@ export class TriageController {
       example: {
         statusCode: 400,
         message: [
-          'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY',
+          'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY, URGENT_CARE',
         ],
         path: '/v1/triage/sessions',
         timestamp: '2026-04-07T18:20:00.000Z',
@@ -145,7 +145,7 @@ export class TriageController {
       example: {
         statusCode: 400,
         message: [
-          'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY',
+          'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY, URGENT_CARE',
         ],
         path: '/v1/triage/sessions/active?specialty=DENTISTRY',
         timestamp: '2026-04-07T18:20:00.000Z',

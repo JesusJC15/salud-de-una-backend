@@ -104,7 +104,7 @@ describe('E2E Triage / Session Management', () => {
     const body = response.body as HttpErrorResponseBody;
     expect(Array.isArray(body.message)).toBe(true);
     expect(body.message).toContain(
-      'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY',
+      'specialty must be one of the following values: GENERAL_MEDICINE, ODONTOLOGY, URGENT_CARE',
     );
   });
 

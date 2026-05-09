@@ -1,14 +1,25 @@
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AiService } from '../../ai/ai.service';
+import {
+  AiGenerationRequest,
+  AiGenerationResult,
+} from '../../ai/interfaces/ai-provider.interface';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { GeminiTriageService } from './gemini-triage.service';
 
 describe('GeminiTriageService', () => {
   let service: GeminiTriageService;
 
-  const aiService = {
-    generateText: jest.fn(),
+  type AiServiceMock = {
+    generateText: jest.MockedFunction<
+      (request: AiGenerationRequest) => Promise<AiGenerationResult>
+    >;
+    getActivePromptInstruction?: jest.Mock<Promise<string | null>, [string]>;
+  };
+
+  const aiService: AiServiceMock = {
+    generateText: jest.fn<Promise<AiGenerationResult>, [AiGenerationRequest]>(),
     getActivePromptInstruction: jest.fn().mockResolvedValue(null),
   };
 
@@ -162,5 +173,28 @@ describe('GeminiTriageService', () => {
       basePriority: 'LOW',
       aiSummary: 'before {"priority":"HIGH",} after',
     });
+  });
+
+  it('uses fallback instruction when prompt lookup is unavailable on the AI service mock', async () => {
+    const originalLookup = aiService.getActivePromptInstruction;
+    delete aiService.getActivePromptInstruction;
+    aiService.generateText.mockResolvedValue({
+      provider: 'gemini',
+      model: 'gemini-test-model',
+      text: '{"priority":"LOW","summary":"Resumen neutral"}',
+      latencyMs: 6,
+      requestId: 'req-7',
+    });
+
+    try {
+      await service.analyzeTriage([], [], user, 'corr-2');
+
+      const [request] = aiService.generateText.mock.calls[0] ?? [];
+      expect(request).toBeDefined();
+      expect(request?.promptKey).toBe('triage.general_medicine.analyze');
+      expect(request?.systemInstruction).toContain('Responde solo JSON valido');
+    } finally {
+      aiService.getActivePromptInstruction = originalLookup;
+    }
   });
 });

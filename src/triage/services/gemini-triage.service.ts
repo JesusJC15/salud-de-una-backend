@@ -40,7 +40,7 @@ export class GeminiTriageService {
   ): Promise<GeminiTriageResult> {
     const promptKey = `triage.${specialty.toLowerCase()}.analyze`;
     const systemInstruction =
-      (await this.aiService.getActivePromptInstruction(promptKey)) ??
+      (await this.getPromptInstruction(promptKey)) ??
       FALLBACK_SYSTEM_INSTRUCTION;
 
     if (systemInstruction === FALLBACK_SYSTEM_INSTRUCTION) {
@@ -80,6 +80,22 @@ export class GeminiTriageService {
       basePriority: priority,
       aiSummary: typeof summary === 'string' ? summary : undefined,
     };
+  }
+
+  private async getPromptInstruction(
+    promptKey: string,
+  ): Promise<string | null> {
+    const aiServiceWithPromptLookup = this.aiService as AiService & {
+      getActivePromptInstruction?: (key: string) => Promise<string | null>;
+    };
+
+    if (
+      typeof aiServiceWithPromptLookup.getActivePromptInstruction !== 'function'
+    ) {
+      return null;
+    }
+
+    return aiServiceWithPromptLookup.getActivePromptInstruction(promptKey);
   }
 
   private normalizePriority(value: unknown): TriagePriority {
