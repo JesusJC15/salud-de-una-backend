@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
+import { extractSocketToken } from '../common/utils/socket-auth.util';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 
 type SocketEventsMap = Record<string, (...args: unknown[]) => void>;
@@ -34,7 +35,7 @@ export class NotificationsGateway implements OnGatewayConnection {
   constructor(private readonly authService: AuthService) {}
 
   async handleConnection(@ConnectedSocket() client: AuthenticatedSocket) {
-    const token = this.extractToken(client);
+    const token = extractSocketToken(client);
     if (!token) {
       client.disconnect();
       return;
@@ -56,23 +57,5 @@ export class NotificationsGateway implements OnGatewayConnection {
 
   emitToUser(userId: string, notification: object): void {
     this.server.to(`user:${userId}`).emit('notification:new', notification);
-  }
-
-  private extractToken(client: Socket): string | null {
-    const auth = client.handshake.auth as Record<string, unknown> | undefined;
-    const authToken = auth?.token;
-    if (typeof authToken === 'string' && authToken.trim().length > 0) {
-      return authToken.trim();
-    }
-
-    const authorization = client.handshake.headers.authorization;
-    if (
-      typeof authorization === 'string' &&
-      authorization.toLowerCase().startsWith('bearer ')
-    ) {
-      return authorization.slice(7).trim();
-    }
-
-    return null;
   }
 }

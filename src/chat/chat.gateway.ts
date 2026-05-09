@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
+import { extractSocketToken } from '../common/utils/socket-auth.util';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ChatJoinDto } from './dto/chat-join.dto';
 import { ChatSendDto } from './dto/chat-send.dto';
@@ -46,7 +47,7 @@ export class ChatGateway implements OnGatewayConnection {
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
-    const token = this.extractToken(client);
+    const token = extractSocketToken(client);
     if (!token) {
       this.rejectUnauthorizedClient(client, 'Token ausente');
       return;
@@ -110,24 +111,6 @@ export class ChatGateway implements OnGatewayConnection {
     } catch (error) {
       client.emit('chat:error', this.toErrorPayload(error));
     }
-  }
-
-  private extractToken(client: Socket): string | null {
-    const auth = client.handshake.auth as Record<string, unknown> | undefined;
-    const authToken = auth?.token;
-    if (typeof authToken === 'string' && authToken.trim().length > 0) {
-      return authToken.trim();
-    }
-
-    const authorization = client.handshake.headers.authorization;
-    if (
-      typeof authorization === 'string' &&
-      authorization.toLowerCase().startsWith('bearer ')
-    ) {
-      return authorization.slice(7).trim();
-    }
-
-    return null;
   }
 
   private async getAuthenticatedUser(
