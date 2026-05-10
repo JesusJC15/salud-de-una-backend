@@ -80,17 +80,18 @@ export async function waitForDatabaseConnection(
 export async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
+  const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+  const redisUrl = configService.get<string>('redis.url');
   const redisClient = app.get<Redis | null>(REDIS_CLIENT);
   if (redisClient) {
     app.useWebSocketAdapter(new RedisIoAdapter(app, redisClient));
   } else {
     app.useWebSocketAdapter(new IoAdapter(app));
   }
-  const configService = app.get(ConfigService);
   const dbConnection = app.get<Connection>(getConnectionToken());
   const globalPrefix = 'v1';
   const port = Number(process.env.PORT ?? 3000);
-  const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
   const databaseUri = configService.get<string>('database.uri');
 
   dbConnection.on('connected', () => {
@@ -123,6 +124,12 @@ export async function bootstrap() {
   if (corsOrigins.length === 0 && nodeEnv !== 'test') {
     logger.warn(
       'No CORS origins configured. All cross-origin requests will be rejected. Set CORS_ORIGINS_PATIENT and/or CORS_ORIGINS_STAFF to allow specific origins.',
+    );
+  }
+
+  if (nodeEnv === 'production' && !redisUrl) {
+    throw new Error(
+      'REDIS_URL es obligatorio en production para chat, throttling y jobs distribuidos',
     );
   }
 

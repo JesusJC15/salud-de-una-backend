@@ -15,6 +15,7 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
 import aiConfig from './config/ai.config';
 import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
+import knowledgeConfig from './config/knowledge.config';
 import notificationsConfig from './config/notifications.config';
 import ragConfig from './config/rag.config';
 import redisConfig from './config/redis.config';
@@ -44,6 +45,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
         aiConfig,
         authConfig,
         databaseConfig,
+        knowledgeConfig,
         notificationsConfig,
         ragConfig,
         redisConfig,
@@ -58,8 +60,8 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     RedisModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
-      inject: [REDIS_CLIENT],
-      useFactory: (redisClient: unknown) => ({
+      inject: [REDIS_CLIENT, ConfigService],
+      useFactory: (redisClient: unknown, configService: ConfigService) => ({
         throttlers: [
           {
             ttl: 60,
@@ -68,6 +70,10 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
         ],
         storage: new RedisThrottlerStorage(
           redisClient as ConstructorParameters<typeof RedisThrottlerStorage>[0],
+          {
+            allowMemoryFallback:
+              configService.get<string>('NODE_ENV') !== 'production',
+          },
         ),
       }),
     }),

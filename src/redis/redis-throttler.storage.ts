@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import Redis from 'ioredis';
 
@@ -52,7 +56,12 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
     return { totalHits, timeToExpire, isBlocked, timeToBlockExpire }
   `;
 
-  constructor(private readonly redisClient: Redis | null) {}
+  constructor(
+    private readonly redisClient: Redis | null,
+    private readonly options: { allowMemoryFallback: boolean } = {
+      allowMemoryFallback: true,
+    },
+  ) {}
 
   async increment(
     key: string,
@@ -62,6 +71,11 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
     throttlerName: string,
   ): Promise<ThrottlerStorageRecord> {
     if (!this.redisClient || this.redisClient.status === 'end') {
+      if (!this.options.allowMemoryFallback) {
+        throw new ServiceUnavailableException(
+          'Rate limiting unavailable: Redis is required in production',
+        );
+      }
       return this.fallbackStorage.increment(
         key,
         ttl,
@@ -95,6 +109,11 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Redis throttler fallback to memory: ${message}`);
+      if (!this.options.allowMemoryFallback) {
+        throw new ServiceUnavailableException(
+          'Rate limiting unavailable: Redis is required in production',
+        );
+      }
       return this.fallbackStorage.increment(
         key,
         ttl,

@@ -1,4 +1,5 @@
-import { UsePipes, ValidationPipe } from '@nestjs/common';
+import { ForbiddenException, UsePipes, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
@@ -40,13 +41,23 @@ type AuthenticatedSocket = Socket<
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   private server!: Server;
+  private readonly eventBudget = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly authService: AuthService,
     private readonly chatService: ChatService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
+    if (!this.isAllowedOrigin(client.handshake.headers.origin)) {
+      this.rejectUnauthorizedClient(client, 'Origen no permitido');
+      return;
+    }
+
     const token = extractSocketToken(client);
     if (!token) {
       this.rejectUnauthorizedClient(client, 'Token ausente');
@@ -78,6 +89,7 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     try {
+      this.enforceEventRateLimit(user.userId, 'chat:join');
       await client.join(this.toRoom(dto.consultationId));
       const messages = await this.chatService.getHistoryForSocket(
         dto.consultationId,
@@ -100,6 +112,7 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     try {
+      this.enforceEventRateLimit(user.userId, 'chat:send');
       const message = await this.chatService.sendMessage(
         dto.consultationId,
         user,
@@ -148,5 +161,49 @@ export class ChatGateway implements OnGatewayConnection {
       code: 'FORBIDDEN',
       message: error instanceof Error ? error.message : 'Error de mensajeria',
     };
+  }
+
+  private isAllowedOrigin(origin?: string | string[]) {
+    if (!origin) {
+      return true;
+    }
+
+    const normalizedOrigin = Array.isArray(origin) ? origin[0] : origin;
+    const allowedOrigins = [
+      ...(this.configService.get<string[]>('web.corsOriginsPatient') ?? []),
+      ...(this.configService.get<string[]>('web.corsOriginsStaff') ?? []),
+    ];
+
+    if (
+      allowedOrigins.length === 0 &&
+      (this.configService.get<string>('NODE_ENV') ?? 'development') !==
+        'production'
+    ) {
+      return true;
+    }
+
+    return allowedOrigins.includes(normalizedOrigin);
+  }
+
+  private enforceEventRateLimit(userId: string, eventName: string) {
+    const key = `${userId}:${eventName}`;
+    const now = Date.now();
+    const windowMs = 10_000;
+    const limit = eventName === 'chat:send' ? 20 : 40;
+    const current = this.eventBudget.get(key);
+
+    if (!current || current.resetAt <= now) {
+      this.eventBudget.set(key, { count: 1, resetAt: now + windowMs });
+      return;
+    }
+
+    if (current.count >= limit) {
+      throw new ForbiddenException(
+        `Rate limit excedido para el evento ${eventName}`,
+      );
+    }
+
+    current.count += 1;
+    this.eventBudget.set(key, current);
   }
 }

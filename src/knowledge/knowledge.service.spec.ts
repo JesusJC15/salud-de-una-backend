@@ -678,7 +678,10 @@ describe('KnowledgeService', () => {
       'corr-url-success',
     );
 
-    expect(fetchSpy).toHaveBeenCalledWith('https://example.com/doc');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.com/doc',
+      expect.any(Object),
+    );
     expect(result.title).toBe('Documento remoto');
   });
 
@@ -703,7 +706,10 @@ describe('KnowledgeService', () => {
       ),
     ).rejects.toThrow(BadRequestException);
 
-    expect(fetchSpy).toHaveBeenCalledWith('https://example.com/doc');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.com/doc',
+      expect.any(Object),
+    );
   });
 
   it('reprocessDocument should reject missing documents or missing extracted text', async () => {

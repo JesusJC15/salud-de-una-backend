@@ -1,4 +1,10 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
 import { Model, Types } from 'mongoose';
@@ -24,6 +30,8 @@ import {
 
 @Injectable()
 export class FollowupsService {
+  private readonly logger = new Logger(FollowupsService.name);
+
   constructor(
     @InjectModel(Followup.name)
     private readonly followupModel: Model<FollowupDocument>,
@@ -52,17 +60,52 @@ export class FollowupsService {
       );
       const reminderAt = scheduledAt;
 
-      const [followup] = await this.followupModel.create([
-        {
-          consultationId: consultation._id,
-          patientId: consultation.patientId,
-          doctorId: consultation.assignedDoctorId,
-          scheduledAt,
-          reminderAt,
-          baselineSymptomSeverity: consultation.baselineSymptomSeverity ?? 5,
-          status: 'PENDING',
-        },
-      ]);
+      const followup =
+        typeof this.followupModel.findOneAndUpdate === 'function'
+          ? await this.followupModel
+              .findOneAndUpdate(
+                {
+                  consultationId: consultation._id,
+                  scheduledAt,
+                },
+                {
+                  $setOnInsert: {
+                    consultationId: consultation._id,
+                    patientId: consultation.patientId,
+                    doctorId: consultation.assignedDoctorId,
+                    scheduledAt,
+                    reminderAt,
+                    baselineSymptomSeverity:
+                      consultation.baselineSymptomSeverity ?? 5,
+                    status: 'PENDING',
+                  },
+                },
+                {
+                  upsert: true,
+                  new: true,
+                  setDefaultsOnInsert: true,
+                },
+              )
+              .exec()
+          : (
+              await this.followupModel.create([
+                {
+                  consultationId: consultation._id,
+                  patientId: consultation.patientId,
+                  doctorId: consultation.assignedDoctorId,
+                  scheduledAt,
+                  reminderAt,
+                  baselineSymptomSeverity:
+                    consultation.baselineSymptomSeverity ?? 5,
+                  status: 'PENDING',
+                },
+              ])
+            )[0];
+
+      if (!followup) {
+        continue;
+      }
+
       created.push(followup);
       await this.scheduleJobs(followup);
     }
@@ -135,6 +178,21 @@ export class FollowupsService {
         .exec();
 
       if (consultation) {
+        const existingEscalation =
+          typeof this.consultationModel.findOne === 'function'
+            ? await this.consultationModel
+                .findOne({ sourceFollowupId: followup._id })
+                .select('_id')
+                .lean()
+                .exec()
+            : null;
+
+        if (existingEscalation) {
+          throw new ConflictException(
+            'Este seguimiento ya genero una consulta priorizada',
+          );
+        }
+
         const [escalated] = await this.consultationModel.create([
           {
             patientId: consultation.patientId,
@@ -248,6 +306,9 @@ export class FollowupsService {
 
   private async scheduleJobs(followup: FollowupDocument) {
     if (!this.followupsQueue) {
+      this.logger.debug(
+        `Skipping distributed scheduling for followup ${followup.id}: queue unavailable`,
+      );
       return;
     }
 

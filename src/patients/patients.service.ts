@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
@@ -37,8 +38,9 @@ import { Patient, PatientDocument } from './schemas/patient.schema';
 @Injectable()
 export class PatientsService {
   constructor(
+    @Optional()
     @InjectConnection()
-    private readonly connection: Connection,
+    private readonly connection: Connection | null,
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
     @InjectModel(Consultation.name)
@@ -71,7 +73,7 @@ export class PatientsService {
 
   async updateMe(user: RequestUser, dto: UpdatePatientProfileDto) {
     try {
-      const session = await this.connection.startSession();
+      const session = await this.connection!.startSession();
       try {
         let response:
           | ReturnType<PatientsService['toProfileResponse']>
@@ -238,33 +240,127 @@ export class PatientsService {
   }
 
   async anonymizeAccount(user: RequestUser) {
-    const patient = await this.patientModel.findById(user.userId).exec();
-    if (!patient) {
-      throw new NotFoundException('Paciente no encontrado');
+    if (!this.connection?.startSession) {
+      const patient = await this.patientModel.findById(user.userId).exec();
+      if (!patient) {
+        throw new NotFoundException('Paciente no encontrado');
+      }
+
+      const hash = crypto
+        .createHash('sha256')
+        .update(user.userId)
+        .digest('hex')
+        .slice(0, 16);
+
+      patient.firstName = 'Cuenta';
+      patient.lastName = 'Eliminada';
+      patient.email = `deleted-${hash}@deleted.local`;
+      patient.passwordHash = await bcrypt.hash(hash, 10);
+      patient.pushTokens = [];
+      patient.expoPushToken = undefined;
+      patient.auth0Subject = undefined;
+      patient.birthDate = null;
+      patient.gender = undefined;
+      patient.termsAcceptedAt = null;
+      patient.isActive = false;
+      patient.isAnonymized = true;
+
+      await this.authService.revokeAllRefreshSessionsForUser(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+      await patient.save();
+
+      return {
+        anonymized: true,
+        accountState: 'ANONYMIZED',
+      };
     }
 
-    const hash = crypto
-      .createHash('sha256')
-      .update(user.userId)
-      .digest('hex')
-      .slice(0, 16);
+    const session = await this.connection.startSession();
+    if (!session?.withTransaction || !session.endSession) {
+      const patient = await this.patientModel.findById(user.userId).exec();
+      if (!patient) {
+        throw new NotFoundException('Paciente no encontrado');
+      }
 
-    patient.firstName = 'Cuenta';
-    patient.lastName = 'Eliminada';
-    patient.email = `deleted-${hash}@deleted.local`;
-    patient.passwordHash = await bcrypt.hash(hash, 10);
-    patient.pushTokens = [];
-    patient.expoPushToken = undefined;
-    patient.auth0Subject = undefined;
-    patient.isActive = false;
-    patient.isAnonymized = true;
+      const hash = crypto
+        .createHash('sha256')
+        .update(user.userId)
+        .digest('hex')
+        .slice(0, 16);
 
-    await this.authService.revokeAllRefreshSessionsForUser(
-      user.userId,
-      UserRole.PATIENT,
-      'account_deleted',
-    );
-    await patient.save();
+      patient.firstName = 'Cuenta';
+      patient.lastName = 'Eliminada';
+      patient.email = `deleted-${hash}@deleted.local`;
+      patient.passwordHash = await bcrypt.hash(hash, 10);
+      patient.pushTokens = [];
+      patient.expoPushToken = undefined;
+      patient.auth0Subject = undefined;
+      patient.birthDate = null;
+      patient.gender = undefined;
+      patient.termsAcceptedAt = null;
+      patient.isActive = false;
+      patient.isAnonymized = true;
+
+      await this.authService.revokeAllRefreshSessionsForUser(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+      await patient.save();
+
+      return {
+        anonymized: true,
+        accountState: 'ANONYMIZED',
+      };
+    }
+    try {
+      await session.withTransaction(async () => {
+        const patient = await this.patientModel
+          .findById(user.userId)
+          .session(session)
+          .exec();
+        if (!patient) {
+          throw new NotFoundException('Paciente no encontrado');
+        }
+
+        const hash = crypto
+          .createHash('sha256')
+          .update(user.userId)
+          .digest('hex')
+          .slice(0, 16);
+
+        patient.firstName = 'Cuenta';
+        patient.lastName = 'Eliminada';
+        patient.email = `deleted-${hash}@deleted.local`;
+        patient.passwordHash = await bcrypt.hash(hash, 10);
+        patient.pushTokens = [];
+        patient.expoPushToken = undefined;
+        patient.auth0Subject = undefined;
+        patient.birthDate = null;
+        patient.gender = undefined;
+        patient.termsAcceptedAt = null;
+        patient.isActive = false;
+        patient.isAnonymized = true;
+
+        await this.authService.revokeAllRefreshSessionsForUser(
+          user.userId,
+          UserRole.PATIENT,
+          'account_deleted',
+          session,
+        );
+        await patient.save({ session });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return {
+      anonymized: true,
+      accountState: 'ANONYMIZED',
+    };
   }
 
   private toProfileResponse(patient: {

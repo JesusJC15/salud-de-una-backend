@@ -31,6 +31,10 @@ export class FollowupsProcessor
 
   onApplicationBootstrap(): void {
     const redisUrl = this.configService.get<string>('redis.url');
+    const isProduction =
+      (this.configService.get<string>('NODE_ENV') ?? 'development') ===
+      'production';
+
     if (redisUrl && this.connectionOptions) {
       this.worker = new Worker(
         FOLLOWUPS_QUEUE_NAME,
@@ -41,6 +45,12 @@ export class FollowupsProcessor
         },
       );
       return;
+    }
+
+    if (isProduction) {
+      throw new Error(
+        'FollowupsProcessor requiere Redis en production para scheduling distribuido',
+      );
     }
 
     this.intervalHandle = setInterval(() => {

@@ -40,7 +40,16 @@ import { Followup, FollowupSchema } from './schemas/followup.schema';
         connectionOptions: ConnectionOptions | null,
       ): Queue | null => {
         const redisUrl = configService.get<string>('redis.url');
+        const isProduction =
+          (configService.get<string>('NODE_ENV') ?? 'development') ===
+          'production';
         if (!redisUrl || !connectionOptions) {
+          if (isProduction) {
+            throw new Error(
+              'FOLLOWUPS_QUEUE requiere Redis en production para evitar duplicados y drift',
+            );
+          }
+
           return null;
         }
 

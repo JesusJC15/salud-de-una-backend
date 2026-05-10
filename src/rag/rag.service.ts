@@ -35,6 +35,7 @@ type RetrievalHit = {
 
 type AtlasVectorHit = {
   _id: unknown;
+  documentId?: unknown;
   title?: unknown;
   sectionPath?: unknown;
   authority?: unknown;
@@ -170,8 +171,13 @@ export class RagService {
       };
     }
 
-    const promptContext = selectedChunks
-      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const selectedChunkMap = new Map(
+      selectedChunks.map((chunk) => [chunk._id.toString(), chunk]),
+    );
+
+    const promptContext = retrieval.items
+      .map((item) => selectedChunkMap.get(item.chunkId))
+      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk))
       .slice(0, this.configService.get<number>('rag.maxContextChunks') ?? 10)
       .map(
         (chunk, index) =>
@@ -329,6 +335,7 @@ export class RagService {
         },
         {
           $project: {
+            documentId: 1,
             title: 1,
             sectionPath: 1,
             authority: 1,
@@ -352,7 +359,7 @@ export class RagService {
 
             return {
               chunkId: String(hit._id),
-              documentId: '',
+              documentId: this.getStringValue(hit.documentId),
               title,
               sectionPath,
               authority,
@@ -506,8 +513,14 @@ export class RagService {
   }
 
   private async buildCacheKey(normalizedQuery: string, dto: RetrieveDto) {
+    const redisKeyPrefix =
+      this.configService.get<string>('redis.keyPrefix') ?? 'salud-de-una';
     const corpusVersion =
-      await this.knowledgeService.getApprovedCorpusVersion();
+      (this.redisClient
+        ? await this.redisClient
+            .get(`${redisKeyPrefix}:rag:corpus:version`)
+            .catch(() => null)
+        : null) ?? (await this.knowledgeService.getApprovedCorpusVersion());
     const raw = JSON.stringify({
       normalizedQuery,
       specialty: dto.specialty ?? null,
@@ -516,6 +529,6 @@ export class RagService {
       corpusVersion,
     });
 
-    return `salud-de-una:rag:${createHash('sha256').update(raw).digest('hex')}`;
+    return `${redisKeyPrefix}:rag:${createHash('sha256').update(raw).digest('hex')}`;
   }
 }

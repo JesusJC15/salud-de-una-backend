@@ -57,9 +57,14 @@ export class AppService {
     const isDatabaseUp = readyState === 1;
     const redisReadiness = await this.redisHealthService.getReadiness();
     const aiReadiness = this.aiService.getReadiness();
+    const isProduction = process.env.NODE_ENV === 'production';
+    const status =
+      isDatabaseUp && (!isProduction || redisReadiness.status === 'up')
+        ? 'ready'
+        : 'not_ready';
 
     return {
-      status: isDatabaseUp ? 'ready' : 'not_ready',
+      status,
       service: 'salud-de-una-backend',
       timestamp: new Date().toISOString(),
       checks: {
