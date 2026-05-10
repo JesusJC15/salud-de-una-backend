@@ -14,8 +14,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
-import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
+import { Model } from 'mongoose';
 import { Public } from '../common/decorators/public.decorator';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -86,7 +87,7 @@ export class AuthController {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: email.toLowerCase().trim(),
-      passwordHash: await bcrypt.hash(auth0UserId, 8),
+      passwordHash: await this.buildProvisionedPasswordHash(),
       birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
       gender: dto.gender,
     });
@@ -158,7 +159,7 @@ export class AuthController {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: email.toLowerCase().trim(),
-      passwordHash: await bcrypt.hash(auth0UserId, 8),
+      passwordHash: await this.buildProvisionedPasswordHash(),
       specialty: dto.specialty,
       personalId: dto.personalId,
       phoneNumber: dto.phoneNumber,
@@ -243,6 +244,14 @@ export class AuthController {
       refreshToken: session.refreshToken,
       user: session.user,
     };
+  }
+
+  private async buildProvisionedPasswordHash(): Promise<string> {
+    if (typeof this.authService.createExternalPasswordHash === 'function') {
+      return this.authService.createExternalPasswordHash();
+    }
+
+    return bcrypt.hash(randomBytes(32).toString('hex'), 12);
   }
 
   private toPatientProvisionResponse(patient: {

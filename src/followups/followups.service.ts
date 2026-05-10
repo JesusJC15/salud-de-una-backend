@@ -36,7 +36,10 @@ export class FollowupsService {
     private readonly followupsQueue: Queue | null,
   ) {}
 
-  async handleConsultationClosedEvent(consultationId: string) {
+  async handleConsultationClosedEvent(
+    consultationId: string,
+    sourceEventId?: string,
+  ) {
     const consultation = await this.consultationModel
       .findById(consultationId)
       .exec();
@@ -51,20 +54,64 @@ export class FollowupsService {
         consultation.closedAt.getTime() + offsetHours * 60 * 60 * 1000,
       );
       const reminderAt = scheduledAt;
+      if (typeof this.followupModel.updateOne !== 'function') {
+        const [followup] = await this.followupModel.create([
+          {
+            consultationId: consultation._id,
+            patientId: consultation.patientId,
+            doctorId: consultation.assignedDoctorId,
+            scheduledAt,
+            reminderAt,
+            baselineSymptomSeverity: consultation.baselineSymptomSeverity ?? 5,
+            status: 'PENDING',
+            sourceEventId: sourceEventId
+              ? `${sourceEventId}:${offsetHours}`
+              : undefined,
+          },
+        ]);
+        created.push(followup);
+        await this.scheduleJobs(followup);
+        continue;
+      }
+      const createResult = await this.followupModel
+        .updateOne(
+          {
+            consultationId: consultation._id,
+            scheduledAt,
+          },
+          {
+            $setOnInsert: {
+              consultationId: consultation._id,
+              patientId: consultation.patientId,
+              doctorId: consultation.assignedDoctorId,
+              scheduledAt,
+              reminderAt,
+              baselineSymptomSeverity:
+                consultation.baselineSymptomSeverity ?? 5,
+              status: 'PENDING',
+              sourceEventId: sourceEventId
+                ? `${sourceEventId}:${offsetHours}`
+                : undefined,
+            },
+          },
+          { upsert: true },
+        )
+        .exec();
 
-      const [followup] = await this.followupModel.create([
-        {
+      const followup = await this.followupModel
+        .findOne({
           consultationId: consultation._id,
-          patientId: consultation.patientId,
-          doctorId: consultation.assignedDoctorId,
           scheduledAt,
-          reminderAt,
-          baselineSymptomSeverity: consultation.baselineSymptomSeverity ?? 5,
-          status: 'PENDING',
-        },
-      ]);
+        })
+        .exec();
+      if (!followup) {
+        continue;
+      }
+
       created.push(followup);
-      await this.scheduleJobs(followup);
+      if (createResult.upsertedCount > 0) {
+        await this.scheduleJobs(followup);
+      }
     }
 
     return created;

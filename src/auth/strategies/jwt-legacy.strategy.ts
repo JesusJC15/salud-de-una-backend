@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'crypto';
 import { Admin, AdminDocument } from '../../admins/schemas/admin.schema';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
@@ -20,7 +21,7 @@ export class JwtLegacyStrategy extends PassportStrategy(
   'jwt-legacy',
 ) {
   constructor(
-    configService: ConfigService,
+    private readonly configService: ConfigService,
     @InjectModel(Patient.name)
     private readonly patientModel: Model<PatientDocument>,
     @InjectModel(Doctor.name)
@@ -32,11 +33,16 @@ export class JwtLegacyStrategy extends PassportStrategy(
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey:
-        configService.get<string>('auth.jwtSecret') ?? 'legacy-disabled',
+        configService.get<string>('auth.jwtSecret') ??
+        `legacy-disabled-${randomUUID()}`,
     });
   }
 
   async validate(payload: JwtPayload): Promise<RequestUser> {
+    if (this.configService.get<boolean>('auth.legacyEnabled') === false) {
+      throw new UnauthorizedException('Legacy auth disabled');
+    }
+
     if (payload.tokenType !== 'access') {
       throw new UnauthorizedException(
         'Token invalido o tipo de token no permitido',

@@ -71,6 +71,9 @@ export class Followup {
   @Prop({ type: Types.ObjectId, ref: 'Consultation' })
   createdConsultationId?: Types.ObjectId;
 
+  @Prop({ sparse: true, unique: true, index: true })
+  sourceEventId?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -78,3 +81,4 @@ export class Followup {
 export const FollowupSchema = SchemaFactory.createForClass(Followup);
 
 FollowupSchema.index({ patientId: 1, status: 1, scheduledAt: 1 });
+FollowupSchema.index({ consultationId: 1, scheduledAt: 1 }, { unique: true });

@@ -63,7 +63,13 @@ export class KnowledgeController {
 
   @Post('documents/upload')
   @Roles(UserRole.ADMIN)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: Number(process.env.KNOWLEDGE_UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024),
+      },
+    }),
+  )
   uploadDocument(
     @Body() dto: IngestDocumentDto,
     @Req() req: RequestContext,

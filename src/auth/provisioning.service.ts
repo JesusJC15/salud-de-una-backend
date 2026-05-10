@@ -4,6 +4,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  delayMs,
+  fetchWithTimeout,
+  shouldRetryHttpRequest,
+} from '../common/utils/fetch.util';
 
 interface ManagementTokenResponse {
   access_token: string;
@@ -28,7 +33,7 @@ export class ProvisioningService {
 
     const token = await this.getManagementToken();
 
-    const patchRes = await fetch(
+    const patchRes = await this.requestAuth0(
       `https://${domain}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
       {
         method: 'PATCH',
@@ -68,7 +73,7 @@ export class ProvisioningService {
     try {
       const token = await this.getManagementToken();
 
-      const createRes = await fetch(`https://${domain}/api/v2/users`, {
+      const createRes = await this.requestAuth0(`https://${domain}/api/v2/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +118,7 @@ export class ProvisioningService {
 
     const token = await this.getManagementToken();
 
-    await fetch(
+    await this.requestAuth0(
       `https://${domain}/api/v2/users/${encodeURIComponent(auth0UserId)}`,
       {
         method: 'PATCH',
@@ -146,7 +151,7 @@ export class ProvisioningService {
       return;
     }
 
-    const res = await fetch(
+    const res = await this.requestAuth0(
       `https://${domain}/api/v2/users/${encodeURIComponent(auth0UserId)}/roles`,
       {
         method: 'POST',
@@ -185,7 +190,7 @@ export class ProvisioningService {
       'auth.auth0M2mClientSecret',
     );
 
-    const res = await fetch(`https://${domain}/oauth/token`, {
+    const res = await this.requestAuth0(`https://${domain}/oauth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -206,5 +211,48 @@ export class ProvisioningService {
     this.managementToken = data.access_token;
     this.tokenExpiry = Date.now() + data.expires_in * 1000;
     return this.managementToken;
+  }
+
+  private async requestAuth0(
+    input: string | URL,
+    init: RequestInit,
+  ): Promise<Response> {
+    const timeoutMs =
+      this.configService.get<number>('auth.auth0HttpTimeoutMs') ?? 5000;
+    const maxRetries =
+      this.configService.get<number>('auth.auth0HttpMaxRetries') ?? 2;
+
+    let lastError: unknown;
+    let lastResponse: Response | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const response = await fetchWithTimeout(input, {
+          ...init,
+          timeoutMs,
+        });
+
+        if (!shouldRetryHttpRequest(response, null) || attempt === maxRetries) {
+          return response;
+        }
+
+        lastResponse = response;
+      } catch (error: unknown) {
+        lastError = error;
+        if (attempt === maxRetries) {
+          break;
+        }
+      }
+
+      await delayMs(200 * (attempt + 1));
+    }
+
+    if (lastResponse) {
+      return lastResponse;
+    }
+
+    throw new InternalServerErrorException(
+      `Error al conectar con Auth0: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    );
   }
 }

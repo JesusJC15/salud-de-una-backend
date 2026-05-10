@@ -1,4 +1,5 @@
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   OnGatewayConnection,
@@ -23,7 +24,7 @@ type AuthenticatedSocket = Socket<
   namespace: '/notifications',
   cors: {
     origin: true,
-    credentials: true,
+    credentials: false,
   },
 })
 export class NotificationsGateway implements OnGatewayConnection {
@@ -32,9 +33,18 @@ export class NotificationsGateway implements OnGatewayConnection {
 
   private readonly logger = new Logger(NotificationsGateway.name);
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    @Optional()
+    private readonly configService: ConfigService | null,
+    private readonly authService: AuthService,
+  ) {}
 
   async handleConnection(@ConnectedSocket() client: AuthenticatedSocket) {
+    if (!this.isAllowedOrigin(client.handshake.headers.origin)) {
+      client.disconnect();
+      return;
+    }
+
     const token = extractSocketToken(client);
     if (!token) {
       client.disconnect();
@@ -57,5 +67,19 @@ export class NotificationsGateway implements OnGatewayConnection {
 
   emitToUser(userId: string, notification: object): void {
     this.server.to(`user:${userId}`).emit('notification:new', notification);
+  }
+
+  private isAllowedOrigin(origin: string | string[] | undefined): boolean {
+    const candidate = Array.isArray(origin) ? origin[0] : origin;
+    if (!candidate) {
+      return true;
+    }
+
+    const allowedOrigins = [
+      ...(this.configService?.get<string[]>('web.corsOriginsPatient') ?? []),
+      ...(this.configService?.get<string[]>('web.corsOriginsStaff') ?? []),
+    ];
+
+    return allowedOrigins.length === 0 || allowedOrigins.includes(candidate);
   }
 }

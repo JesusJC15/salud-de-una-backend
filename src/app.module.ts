@@ -20,6 +20,7 @@ import ragConfig from './config/rag.config';
 import redisConfig from './config/redis.config';
 import { validationSchema } from './config/validation.schema';
 import webConfig from './config/web.config';
+import knowledgeConfig from './config/knowledge.config';
 import { BillingModule } from './billing/billing.module';
 import { ChatModule } from './chat/chat.module';
 import { ConsultationsModule } from './consultations/consultations.module';
@@ -48,6 +49,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
         ragConfig,
         redisConfig,
         webConfig,
+        knowledgeConfig,
       ],
       validationSchema,
       validationOptions: {

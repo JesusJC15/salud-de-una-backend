@@ -36,6 +36,10 @@ import { ErrorLogsService } from './error-logs.service';
 import { InMemoryTechnicalMetricsStore } from './metrics/in-memory-technical-metrics.store';
 import { RedisTechnicalMetricsStore } from './metrics/redis-technical-metrics.store';
 import { TechnicalMetricsService } from './metrics/technical-metrics.service';
+import {
+  ErrorLogRecord,
+  ErrorLogRecordSchema,
+} from './schemas/error-log-entry.schema';
 
 @Module({
   imports: [
@@ -51,6 +55,7 @@ import { TechnicalMetricsService } from './metrics/technical-metrics.service';
       { name: KnowledgeJob.name, schema: KnowledgeJobSchema },
       { name: RagTrace.name, schema: RagTraceSchema },
       { name: RagFeedback.name, schema: RagFeedbackSchema },
+      { name: ErrorLogRecord.name, schema: ErrorLogRecordSchema },
     ]),
   ],
   controllers: [DashboardController],

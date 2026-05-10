@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { extname } from 'path';
 import {
   BadRequestException,
   ForbiddenException,
@@ -12,6 +13,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Redis from 'ioredis';
 import { AiService } from '../ai/ai.service';
+import { fetchWithTimeout } from '../common/utils/fetch.util';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
 import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -228,7 +230,10 @@ export class KnowledgeService {
     }
 
     const chunks = await this.chunkModel
-      .find({ documentId: document._id })
+      .find({
+        documentId: document._id,
+        documentVersionId: document.currentVersionId,
+      })
       .sort({ chunkIndex: 1 })
       .lean()
       .exec();
@@ -346,15 +351,9 @@ export class KnowledgeService {
         );
       }
 
-      const response = await fetch(dto.sourceUrl);
-      if (!response.ok) {
-        throw new BadRequestException(
-          `No fue posible descargar la URL (${response.status})`,
-        );
-      }
-
-      const mimeType = response.headers.get('content-type') ?? 'text/plain';
-      const buffer = Buffer.from(await response.arrayBuffer());
+      const { mimeType, buffer } = await this.downloadUrlDocument(
+        dto.sourceUrl,
+      );
       const extracted = this.extractTextFromBuffer(buffer, mimeType);
 
       const document = await this.createOrReplaceDocument({
@@ -466,7 +465,9 @@ export class KnowledgeService {
     });
 
     await this.chunkModel.updateMany(
-      { documentId: document._id },
+      document.currentVersionId
+        ? { documentVersionId: document.currentVersionId }
+        : { documentId: document._id },
       { $set: { reviewStatus: dto.status } },
     );
     await this.invalidateKnowledgeCache(document._id.toString());
@@ -545,6 +546,7 @@ export class KnowledgeService {
       throw new BadRequestException('Archivo no encontrado');
     }
 
+    this.assertUploadedFile(file);
     const storageFileId = await this.storageService.saveFile(
       file.originalname,
       file.mimetype,
@@ -647,7 +649,7 @@ export class KnowledgeService {
       contentHash,
       validFrom: input.metadata.validFrom,
       validUntil: input.metadata.validUntil,
-      currentVersion: 1,
+      currentVersion: 0,
       sourceQualityTier: 100,
       tenantId: null,
     });
@@ -670,14 +672,12 @@ export class KnowledgeService {
     document: KnowledgeDocumentDocument,
     rawText: string,
   ) {
-    await this.chunkModel.deleteMany({ documentId: document._id });
-    await this.documentVersionModel.deleteMany({ documentId: document._id });
-
     const normalizedText = this.normalizeText(rawText);
     const contentHash = this.hashContent(
       `${document.title}|${document.authority}|${normalizedText}`,
     );
     const chunks = this.chunkDocument(rawText, document.sourceType);
+    const nextVersion = Math.max(document.currentVersion ?? 0, 0) + 1;
     const embeddings = await this.aiService.embedTexts({
       model:
         this.configService.get<string>('rag.embeddingModel') ??
@@ -690,7 +690,7 @@ export class KnowledgeService {
 
     const version = await this.documentVersionModel.create({
       documentId: document._id,
-      version: 1,
+      version: nextVersion,
       extractedText: rawText,
       normalizedText,
       extractionMethod: document.extractionMethod,
@@ -730,11 +730,27 @@ export class KnowledgeService {
         sourceUrl: document.sourceUrl,
         originalFileName: document.originalFileName,
       },
+      isCurrentVersion: true,
       tenantId: null,
     }));
 
     if (chunkDocs.length > 0) {
       await this.chunkModel.insertMany(chunkDocs);
+    }
+
+    if (document.currentVersionId) {
+      await this.chunkModel.updateMany(
+        {
+          documentId: document._id,
+          documentVersionId: document.currentVersionId,
+        },
+        {
+          $set: {
+            isCurrentVersion: false,
+            reviewStatus: 'REJECTED',
+          },
+        },
+      );
     }
 
     document.currentVersion = version.version;
@@ -1036,15 +1052,255 @@ export class KnowledgeService {
       return;
     }
 
-    const keys = await this.redisClient
-      .keys('salud-de-una:rag:*')
-      .catch(() => []);
-    if (keys.length > 0) {
-      await this.redisClient.del(keys).catch(() => undefined);
+    const redisKeyPrefix =
+      this.configService.get<string>('redis.keyPrefix') ?? 'salud-de-una';
+    const cachePattern = `${redisKeyPrefix}:rag:*`;
+
+    try {
+      const cacheKeys = await this.redisClient.keys(cachePattern);
+      if (cacheKeys.length === 0) {
+        return;
+      }
+
+      await this.redisClient.del(...cacheKeys);
+      this.logger.debug(
+        `Invalidated ${cacheKeys.length} RAG cache entries after document change ${documentId}`,
+      );
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No fue posible invalidar la cache RAG tras el cambio del documento ${documentId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
-    this.logger.debug(
-      `Invalidated RAG cache after document change ${documentId}`,
+  }
+
+  private assertUploadedFile(file: UploadedKnowledgeFile) {
+    const maxBytes =
+      this.configService.get<number>('knowledge.uploadMaxBytes') ??
+      5 * 1024 * 1024;
+    if (file.buffer.length > maxBytes) {
+      throw new BadRequestException(
+        `El archivo excede el tamaño máximo permitido (${maxBytes} bytes)`,
+      );
+    }
+
+    this.assertAllowedMimeType(file.mimetype, file.originalname, {
+      allowBinaryFallback: true,
+    });
+  }
+
+  private assertAllowedMimeType(
+    mimeType: string,
+    fileName: string,
+    options?: { allowBinaryFallback?: boolean },
+  ) {
+    const normalizedMime = this.normalizeMimeType(mimeType);
+    if (
+      options?.allowBinaryFallback &&
+      normalizedMime === 'application/octet-stream'
+    ) {
+      return;
+    }
+
+    const allowedMimeTypes = this.configService.get<string[]>(
+      'knowledge.allowedMimeTypes',
+    ) ?? [
+      'text/plain',
+      'text/html',
+      'text/markdown',
+      'application/json',
+      'text/csv',
+      'application/pdf',
+    ];
+    if (!allowedMimeTypes.includes(normalizedMime)) {
+      throw new BadRequestException(
+        `Tipo de archivo no permitido para knowledge ingest: ${normalizedMime}`,
+      );
+    }
+
+    if (fileName.startsWith('http://') || fileName.startsWith('https://')) {
+      return;
+    }
+
+    const extension = extname(fileName).toLowerCase();
+    const compatibleExtensionsByMime: Record<string, string[]> = {
+      'text/plain': ['.txt'],
+      'text/html': ['.html', '.htm'],
+      'text/markdown': ['.md', '.markdown'],
+      'application/json': ['.json'],
+      'text/csv': ['.csv'],
+      'application/pdf': ['.pdf'],
+    };
+
+    const compatibleExtensions =
+      compatibleExtensionsByMime[normalizedMime] ?? [];
+    if (
+      compatibleExtensions.length > 0 &&
+      !compatibleExtensions.includes(extension)
+    ) {
+      throw new BadRequestException(
+        `La extensión ${extension || '(sin extensión)'} no coincide con el tipo ${normalizedMime}`,
+      );
+    }
+  }
+
+  private normalizeMimeType(mimeType: string): string {
+    return (
+      mimeType.split(';')[0]?.trim().toLowerCase() ?? 'application/octet-stream'
     );
+  }
+
+  private async downloadUrlDocument(sourceUrl: string): Promise<{
+    mimeType: string;
+    buffer: Buffer;
+  }> {
+    const parsedUrl = new URL(sourceUrl);
+    if (parsedUrl.protocol !== 'https:') {
+      throw new BadRequestException(
+        'Solo se permite ingesta remota mediante HTTPS',
+      );
+    }
+
+    const maxRedirects =
+      this.configService.get<number>('knowledge.urlMaxRedirects') ?? 3;
+    const timeoutMs =
+      this.configService.get<number>('knowledge.urlFetchTimeoutMs') ?? 10_000;
+    const maxBytes =
+      this.configService.get<number>('knowledge.urlMaxBytes') ??
+      5 * 1024 * 1024;
+
+    let currentUrl = sourceUrl;
+    for (
+      let redirectCount = 0;
+      redirectCount <= maxRedirects;
+      redirectCount += 1
+    ) {
+      const headResponse = await fetchWithTimeout(currentUrl, {
+        method: 'HEAD',
+        redirect: 'manual',
+        timeoutMs,
+      }).catch(() => null);
+
+      if (headResponse && this.isRedirectResponse(headResponse.status)) {
+        const location = headResponse.headers.get('location');
+        if (!location) {
+          throw new BadRequestException(
+            'La URL remota respondió con redirect inválido',
+          );
+        }
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+
+      if (headResponse) {
+        this.assertResponseSize(headResponse, maxBytes);
+        const headMimeType = headResponse.headers?.get?.('content-type');
+        if (headMimeType) {
+          this.assertAllowedMimeType(headMimeType, currentUrl);
+        }
+      }
+
+      const response = await fetchWithTimeout(currentUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        timeoutMs,
+      });
+
+      if (this.isRedirectResponse(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) {
+          throw new BadRequestException(
+            'La URL remota respondió con redirect inválido',
+          );
+        }
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new BadRequestException(
+          `No fue posible descargar la URL (${response.status})`,
+        );
+      }
+
+      this.assertResponseSize(response, maxBytes);
+      const mimeType = this.normalizeMimeType(
+        response.headers.get('content-type') ?? 'text/plain',
+      );
+      this.assertAllowedMimeType(mimeType, currentUrl);
+      const buffer = await this.readResponseBuffer(response, maxBytes);
+
+      return { mimeType, buffer };
+    }
+
+    throw new BadRequestException(
+      'La URL excedió el máximo de redirecciones permitido',
+    );
+  }
+
+  private isRedirectResponse(status: number): boolean {
+    return status >= 300 && status < 400;
+  }
+
+  private assertResponseSize(response: Response, maxBytes: number) {
+    const contentLengthHeader = response.headers?.get?.('content-length');
+    if (!contentLengthHeader) {
+      return;
+    }
+
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      throw new BadRequestException(
+        `El recurso remoto excede el tamaño máximo permitido (${maxBytes} bytes)`,
+      );
+    }
+  }
+
+  private async readResponseBuffer(
+    response: Response,
+    maxBytes: number,
+  ): Promise<Buffer> {
+    if (typeof response.arrayBuffer === 'function') {
+      const rawBuffer = Buffer.from(await response.arrayBuffer());
+      if (rawBuffer.length > maxBytes) {
+        throw new BadRequestException(
+          `El recurso remoto excede el tamaño máximo permitido (${maxBytes} bytes)`,
+        );
+      }
+
+      return rawBuffer;
+    }
+
+    if (!response.body) {
+      return Buffer.alloc(0);
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalLength = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      if (!value) {
+        continue;
+      }
+
+      totalLength += value.length;
+      if (totalLength > maxBytes) {
+        throw new BadRequestException(
+          `El recurso remoto excede el tamaño máximo permitido (${maxBytes} bytes)`,
+        );
+      }
+
+      chunks.push(value);
+    }
+
+    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
   }
 
   private toDocumentResponse(document: DocumentResponseSource) {

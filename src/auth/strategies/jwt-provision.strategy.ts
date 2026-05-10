@@ -4,6 +4,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import * as jwksRsa from 'jwks-rsa';
+import { fetchWithTimeout } from '../../common/utils/fetch.util';
 import { AUTH0_CLAIM_NS, Auth0JwtPayload } from './jwt.strategy';
 
 export interface ProvisionUser {
@@ -26,6 +27,7 @@ export class JwtProvisionStrategy extends PassportStrategy(
   'jwt-provision',
 ) {
   private readonly domain: string;
+  private readonly auth0HttpTimeoutMs: number;
 
   constructor(configService: ConfigService) {
     const domain =
@@ -47,6 +49,8 @@ export class JwtProvisionStrategy extends PassportStrategy(
     });
 
     this.domain = domain;
+    this.auth0HttpTimeoutMs =
+      configService.get<number>('auth.auth0HttpTimeoutMs') ?? 5000;
   }
 
   async validate(
@@ -62,8 +66,9 @@ export class JwtProvisionStrategy extends PassportStrategy(
       const rawToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
       if (rawToken) {
         try {
-          const res = await fetch(`https://${this.domain}/userinfo`, {
+          const res = await fetchWithTimeout(`https://${this.domain}/userinfo`, {
             headers: { Authorization: `Bearer ${rawToken}` },
+            timeoutMs: this.auth0HttpTimeoutMs,
           });
           if (res.ok) {
             const userInfo = (await res.json()) as { email?: string };

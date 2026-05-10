@@ -35,6 +35,7 @@ type RetrievalHit = {
 
 type AtlasVectorHit = {
   _id: unknown;
+  documentId?: unknown;
   title?: unknown;
   sectionPath?: unknown;
   authority?: unknown;
@@ -147,6 +148,9 @@ export class RagService {
       .find({ _id: { $in: retrieval.items.map((item) => item.chunkId) } })
       .lean()
       .exec();
+    const selectedChunkMap = new Map(
+      selectedChunks.map((chunk) => [chunk._id.toString(), chunk]),
+    );
 
     if (!trace) {
       throw new Error('RAG trace no encontrada');
@@ -170,8 +174,11 @@ export class RagService {
       };
     }
 
-    const promptContext = selectedChunks
-      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const promptContext = retrieval.items
+      .map((item) => selectedChunkMap.get(item.chunkId))
+      .filter(
+        (chunk): chunk is NonNullable<typeof chunk> => chunk !== undefined,
+      )
       .slice(0, this.configService.get<number>('rag.maxContextChunks') ?? 10)
       .map(
         (chunk, index) =>
@@ -295,6 +302,7 @@ export class RagService {
 
     const filters: Record<string, unknown> = {
       reviewStatus: 'APPROVED',
+      isCurrentVersion: true,
     };
     if (dto.specialty) filters.specialty = dto.specialty;
     if (dto.audience) filters.audience = dto.audience;
@@ -316,6 +324,7 @@ export class RagService {
             limit: Math.max(topK * 3, 20),
             filter: {
               reviewStatus: 'APPROVED',
+              isCurrentVersion: true,
               ...(dto.specialty ? { specialty: dto.specialty } : {}),
               ...(dto.audience ? { audience: dto.audience } : {}),
               ...(dto.useCase ? { useCases: dto.useCase } : {}),
@@ -329,6 +338,7 @@ export class RagService {
         },
         {
           $project: {
+            documentId: 1,
             title: 1,
             sectionPath: 1,
             authority: 1,
@@ -346,13 +356,14 @@ export class RagService {
         return this.rankHits(
           vectorHits.map((hit) => {
             const title = this.getStringValue(hit.title);
+            const documentId = this.getStringValue(hit.documentId);
             const sectionPath = this.getStringValue(hit.sectionPath);
             const authority = this.getStringValue(hit.authority);
             const text = this.getStringValue(hit.text);
 
             return {
               chunkId: String(hit._id),
-              documentId: '',
+              documentId,
               title,
               sectionPath,
               authority,

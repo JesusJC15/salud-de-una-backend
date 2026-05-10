@@ -4,9 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import {
@@ -40,6 +41,9 @@ export class BillingService {
   private readonly logger = new Logger(BillingService.name);
 
   constructor(
+    @InjectConnection()
+    @Optional()
+    private readonly connection: Connection | null,
     @InjectModel(BillingPrice.name)
     private readonly billingPriceModel: Model<BillingPriceDocument>,
     @InjectModel(Transaction.name)
@@ -102,7 +106,13 @@ export class BillingService {
       .lean()
       .exec();
 
-    const amount = price?.amount ?? 15000;
+    if (!price) {
+      throw new BadRequestException(
+        'No hay precio activo configurado para esta especialidad en billing sandbox',
+      );
+    }
+
+    const amount = price.amount;
 
     const [transaction] = await this.transactionModel.create([
       {
@@ -110,7 +120,7 @@ export class BillingService {
         consultationId: new Types.ObjectId(consultationId),
         specialty: consultation.specialty,
         amount,
-        currency: price?.currency ?? 'COP',
+        currency: price.currency ?? 'COP',
         status: 'PENDING',
       },
     ]);
@@ -137,16 +147,36 @@ export class BillingService {
       );
     }
 
-    transaction.status = 'COMPLETED';
-    transaction.paidAt = new Date();
-    await transaction.save();
+    if (!this.connection) {
+      transaction.status = 'COMPLETED';
+      transaction.paidAt = new Date();
+      await transaction.save();
+      await this.consultationModel.findByIdAndUpdate(transaction.consultationId, {
+        $set: { transactionId: transaction._id },
+      });
+    } else {
+      const session = await this.connection.startSession();
+      try {
+        await session.withTransaction(async () => {
+          transaction.status = 'COMPLETED';
+          transaction.paidAt = new Date();
+          await transaction.save({ session });
 
-    await this.consultationModel.findByIdAndUpdate(transaction.consultationId, {
-      $set: { transactionId: transaction._id },
-    });
+          await this.consultationModel.findByIdAndUpdate(
+            transaction.consultationId,
+            {
+              $set: { transactionId: transaction._id },
+            },
+            { session },
+          );
+        });
+      } finally {
+        await session.endSession();
+      }
+    }
 
     this.logger.log(
-      `Payment confirmed for consultation ${transaction.consultationId.toString()} — $${transaction.amount} COP`,
+      `Sandbox payment confirmed for consultation ${transaction.consultationId.toString()} — $${transaction.amount} COP`,
     );
 
     return transaction.toObject();

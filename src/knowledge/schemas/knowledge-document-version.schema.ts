@@ -44,3 +44,4 @@ export const KnowledgeDocumentVersionSchema = SchemaFactory.createForClass(
 );
 
 KnowledgeDocumentVersionSchema.index({ documentId: 1, version: -1 });
+KnowledgeDocumentVersionSchema.index({ documentId: 1, version: 1 }, { unique: true });

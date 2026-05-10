@@ -4,11 +4,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { ConsultationsService } from '../consultations/consultations.service';
 import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -138,6 +140,9 @@ export class TriageService {
   private readonly logger = new Logger(TriageService.name);
 
   constructor(
+    @InjectConnection()
+    @Optional()
+    private readonly connection: Connection | null,
     @InjectModel(TriageSession.name)
     private readonly triageSessionModel: Model<TriageSessionDocument>,
     private readonly triageQuestionsRepository: TriageQuestionsRepository,
@@ -145,6 +150,8 @@ export class TriageService {
     private readonly geminiTriageService: GeminiTriageService,
     private readonly consultationsService: ConsultationsService,
     private readonly ragService: RagService,
+    @Optional()
+    private readonly configService?: ConfigService,
   ) {}
 
   async createSession(
@@ -572,23 +579,53 @@ export class TriageService {
       );
     }
 
-    triageSession.analysis = {
-      priority,
-      redFlags,
-      aiSummary,
-      analysisDurationMs,
-      guardrailApplied,
-    };
-    triageSession.status = 'COMPLETED';
-    triageSession.completedAt = new Date();
-    await triageSession.save();
+    let consultationId = '';
+    if (this.connection) {
+      const session = await this.connection.startSession();
+      try {
+        await session.withTransaction(async () => {
+          triageSession.analysis = {
+            priority,
+            redFlags,
+            aiSummary,
+            analysisDurationMs,
+            guardrailApplied,
+          };
+          triageSession.status = 'COMPLETED';
+          triageSession.completedAt = new Date();
+          await triageSession.save({ session });
 
-    const consultationId = await this.consultationsService.createFromTriage({
-      patientId: triageSession.patientId,
-      triageSessionId: triageSession._id,
-      specialty: triageSession.specialty,
-      priority,
-    });
+          consultationId = await this.consultationsService.createFromTriage(
+            {
+              patientId: triageSession.patientId,
+              triageSessionId: triageSession._id,
+              specialty: triageSession.specialty,
+              priority,
+            },
+            session,
+          );
+        });
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      triageSession.analysis = {
+        priority,
+        redFlags,
+        aiSummary,
+        analysisDurationMs,
+        guardrailApplied,
+      };
+      triageSession.status = 'COMPLETED';
+      triageSession.completedAt = new Date();
+      await triageSession.save();
+      consultationId = await this.consultationsService.createFromTriage({
+        patientId: triageSession.patientId,
+        triageSessionId: triageSession._id,
+        specialty: triageSession.specialty,
+        priority,
+      });
+    }
 
     this.logger.log(
       JSON.stringify({
@@ -1209,9 +1246,6 @@ export class TriageService {
   }
 
   private isRagTriageEnabled(): boolean {
-    return (
-      process.env.RAG_TRIAGE_ENABLED === 'true' ||
-      process.env.RAG_TRIAGE_ENABLED === '1'
-    );
+    return this.configService?.get<boolean>('rag.triageEnabled') === true;
   }
 }

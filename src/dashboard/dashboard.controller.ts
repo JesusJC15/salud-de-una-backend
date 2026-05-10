@@ -39,7 +39,7 @@ export class DashboardController {
 
   @Get('errors')
   @Roles(UserRole.ADMIN)
-  getRecentErrors(@Query('limit') limit?: string) {
+  async getRecentErrors(@Query('limit') limit?: string) {
     return this.errorLogsService.getRecent(limit ? Number(limit) : 20);
   }
 

@@ -105,6 +105,9 @@ export class KnowledgeChunk {
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   extraMetadata!: Record<string, unknown>;
 
+  @Prop({ type: Boolean, default: true, index: true })
+  isCurrentVersion!: boolean;
+
   @Prop({ type: Types.ObjectId, default: null, index: true })
   tenantId?: Types.ObjectId | null;
 
@@ -115,10 +118,13 @@ export class KnowledgeChunk {
 export const KnowledgeChunkSchema =
   SchemaFactory.createForClass(KnowledgeChunk);
 
-KnowledgeChunkSchema.index({ documentId: 1, chunkIndex: 1 }, { unique: true });
+KnowledgeChunkSchema.index(
+  { documentId: 1, documentVersion: 1, chunkIndex: 1 },
+  { unique: true },
+);
 KnowledgeChunkSchema.index({
-  status: 1,
   reviewStatus: 1,
+  isCurrentVersion: 1,
   specialty: 1,
   audience: 1,
 });

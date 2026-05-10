@@ -191,16 +191,231 @@ export class DashboardService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const consultations = await this.consultationModel
-      .find({})
-      .select(
-        'specialty priority status createdAt closedAt assignedAt assignedDoctorId',
-      )
-      .lean()
-      .exec();
+    if (typeof this.consultationModel.aggregate !== 'function') {
+      const consultations = await this.consultationModel
+        .find({})
+        .select(
+          'specialty priority status createdAt closedAt assignedAt assignedDoctorId',
+        )
+        .lean()
+        .exec();
 
-    const doctorIds = consultations
-      .map((consultation) => consultation.assignedDoctorId?.toString())
+      const doctorIds = consultations
+        .map((consultation) => consultation.assignedDoctorId?.toString())
+        .filter(Boolean) as string[];
+      const doctors = doctorIds.length
+        ? await this.doctorModel
+            .find({ _id: { $in: doctorIds } })
+            .select('firstName lastName specialty')
+            .lean()
+            .exec()
+        : [];
+      const doctorMap = new Map(
+        doctors.map((doctor) => [
+          doctor._id.toString(),
+          {
+            name: `${doctor.firstName} ${doctor.lastName}`.trim(),
+            specialty: doctor.specialty,
+          },
+        ]),
+      );
+
+      const totalConsultations = consultations.length;
+      const statusBreakdown = {
+        pending: consultations.filter((item) => item.status === 'PENDING').length,
+        inAttention: consultations.filter(
+          (item) => item.status === 'IN_ATTENTION',
+        ).length,
+        closed: consultations.filter((item) => item.status === 'CLOSED').length,
+      };
+      const closedConsultations = consultations.filter(
+        (item) => item.status === 'CLOSED' && item.closedAt,
+      );
+      const closedLast7Days = closedConsultations.filter(
+        (item) => item.closedAt && item.closedAt >= sevenDaysAgo,
+      ).length;
+
+      const closedWithAssignedAt = closedConsultations.filter(
+        (item) => item.assignedAt && item.closedAt,
+      );
+      const avgAttentionTimeMinutes =
+        closedWithAssignedAt.length > 0
+          ? Number(
+              (
+                closedWithAssignedAt.reduce((total, item) => {
+                  return (
+                    total +
+                    (item.closedAt!.getTime() - item.assignedAt!.getTime()) /
+                      60_000
+                  );
+                }, 0) / closedWithAssignedAt.length
+              ).toFixed(2),
+            )
+          : null;
+      const slaCompliance =
+        closedWithAssignedAt.length > 0
+          ? Number(
+              (
+                (closedWithAssignedAt.filter(
+                  (item) =>
+                    item.closedAt!.getTime() - item.assignedAt!.getTime() <=
+                    120 * 60_000,
+                ).length /
+                  closedWithAssignedAt.length) *
+                100
+              ).toFixed(2),
+            )
+          : null;
+
+      const specialties = new Map<
+        string,
+        { specialty: string; total: number; closed: number }
+      >();
+      for (const consultation of consultations) {
+        const current = specialties.get(consultation.specialty) ?? {
+          specialty: consultation.specialty,
+          total: 0,
+          closed: 0,
+        };
+        current.total += 1;
+        if (consultation.status === 'CLOSED') {
+          current.closed += 1;
+        }
+        specialties.set(consultation.specialty, current);
+      }
+
+      const topDoctorsMap = new Map<
+        string,
+        { doctorId: string; closed: number; name: string; specialty?: string }
+      >();
+      for (const consultation of closedConsultations) {
+        const doctorId = consultation.assignedDoctorId?.toString();
+        if (!doctorId) {
+          continue;
+        }
+        const doctor = doctorMap.get(doctorId);
+        const current = topDoctorsMap.get(doctorId) ?? {
+          doctorId,
+          closed: 0,
+          name: doctor?.name ?? 'Doctor sin nombre',
+          specialty: doctor?.specialty,
+        };
+        current.closed += 1;
+        topDoctorsMap.set(doctorId, current);
+      }
+
+      return {
+        generatedAt: new Date().toISOString(),
+        statusBreakdown,
+        totalConsultations,
+        closedLast7Days,
+        avgAttentionTimeMinutes,
+        slaCompliance,
+        bySpecialty: Array.from(specialties.values()),
+        topDoctors: Array.from(topDoctorsMap.values())
+          .sort((left, right) => right.closed - left.closed)
+          .slice(0, 5),
+      };
+    }
+
+    const [statusAgg, bySpecialtyAgg, slaAgg, topDoctorsAgg] =
+      await Promise.all([
+        this.consultationModel.aggregate([
+          {
+            $group: {
+              _id: null,
+              totalConsultations: { $sum: 1 },
+              pending: {
+                $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] },
+              },
+              inAttention: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'IN_ATTENTION'] }, 1, 0],
+                },
+              },
+              closed: {
+                $sum: { $cond: [{ $eq: ['$status', 'CLOSED'] }, 1, 0] },
+              },
+              closedLast7Days: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', 'CLOSED'] },
+                        { $gte: ['$closedAt', sevenDaysAgo] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+        this.consultationModel.aggregate([
+          {
+            $group: {
+              _id: '$specialty',
+              total: { $sum: 1 },
+              closed: {
+                $sum: { $cond: [{ $eq: ['$status', 'CLOSED'] }, 1, 0] },
+              },
+            },
+          },
+        ]),
+        this.consultationModel.aggregate([
+          {
+            $match: {
+              status: 'CLOSED',
+              closedAt: { $ne: null },
+              assignedAt: { $ne: null },
+            },
+          },
+          {
+            $project: {
+              durationMinutes: {
+                $divide: [{ $subtract: ['$closedAt', '$assignedAt'] }, 60_000],
+              },
+              withinSla: {
+                $lte: [
+                  { $subtract: ['$closedAt', '$assignedAt'] },
+                  120 * 60_000,
+                ],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: 1 },
+              avgAttentionTimeMinutes: { $avg: '$durationMinutes' },
+              withinSlaCount: {
+                $sum: { $cond: ['$withinSla', 1, 0] },
+              },
+            },
+          },
+        ]),
+        this.consultationModel.aggregate([
+          {
+            $match: {
+              status: 'CLOSED',
+              assignedDoctorId: { $ne: null },
+            },
+          },
+          {
+            $group: {
+              _id: '$assignedDoctorId',
+              closed: { $sum: 1 },
+            },
+          },
+          { $sort: { closed: -1 } },
+          { $limit: 5 },
+        ]),
+      ]);
+
+    const doctorIds = topDoctorsAgg
+      .map((item) => item._id?.toString())
       .filter(Boolean) as string[];
     const doctors = doctorIds.length
       ? await this.doctorModel
@@ -219,101 +434,59 @@ export class DashboardService {
       ]),
     );
 
-    const totalConsultations = consultations.length;
-    const statusBreakdown = {
-      pending: consultations.filter((item) => item.status === 'PENDING').length,
-      inAttention: consultations.filter(
-        (item) => item.status === 'IN_ATTENTION',
-      ).length,
-      closed: consultations.filter((item) => item.status === 'CLOSED').length,
+    const statusStats = (statusAgg[0] ?? {}) as {
+      totalConsultations?: number;
+      pending?: number;
+      inAttention?: number;
+      closed?: number;
+      closedLast7Days?: number;
     };
-    const closedConsultations = consultations.filter(
-      (item) => item.status === 'CLOSED' && item.closedAt,
-    );
-    const closedLast7Days = closedConsultations.filter(
-      (item) => item.closedAt && item.closedAt >= sevenDaysAgo,
-    ).length;
-
-    const closedWithAssignedAt = closedConsultations.filter(
-      (item) => item.assignedAt && item.closedAt,
-    );
+    const slaStats = (slaAgg[0] ?? {}) as {
+      count?: number;
+      avgAttentionTimeMinutes?: number;
+      withinSlaCount?: number;
+    };
+    const totalConsultations = statusStats.totalConsultations ?? 0;
+    const statusBreakdown = {
+      pending: statusStats.pending ?? 0,
+      inAttention: statusStats.inAttention ?? 0,
+      closed: statusStats.closed ?? 0,
+    };
     const avgAttentionTimeMinutes =
-      closedWithAssignedAt.length > 0
-        ? Number(
-            (
-              closedWithAssignedAt.reduce((total, item) => {
-                return (
-                  total +
-                  (item.closedAt!.getTime() - item.assignedAt!.getTime()) /
-                    60_000
-                );
-              }, 0) / closedWithAssignedAt.length
-            ).toFixed(2),
-          )
+      (slaStats.count ?? 0) > 0
+        ? Number((slaStats.avgAttentionTimeMinutes ?? 0).toFixed(2))
         : null;
     const slaCompliance =
-      closedWithAssignedAt.length > 0
+      (slaStats.count ?? 0) > 0
         ? Number(
-            (
-              (closedWithAssignedAt.filter(
-                (item) =>
-                  item.closedAt!.getTime() - item.assignedAt!.getTime() <=
-                  120 * 60_000,
-              ).length /
-                closedWithAssignedAt.length) *
-              100
-            ).toFixed(2),
+            (((slaStats.withinSlaCount ?? 0) / (slaStats.count ?? 1)) * 100).toFixed(
+              2,
+            ),
           )
         : null;
-
-    const specialties = new Map<
-      string,
-      { specialty: string; total: number; closed: number }
-    >();
-    for (const consultation of consultations) {
-      const current = specialties.get(consultation.specialty) ?? {
-        specialty: consultation.specialty,
-        total: 0,
-        closed: 0,
-      };
-      current.total += 1;
-      if (consultation.status === 'CLOSED') {
-        current.closed += 1;
-      }
-      specialties.set(consultation.specialty, current);
-    }
-
-    const topDoctorsMap = new Map<
-      string,
-      { doctorId: string; closed: number; name: string; specialty?: string }
-    >();
-    for (const consultation of closedConsultations) {
-      const doctorId = consultation.assignedDoctorId?.toString();
-      if (!doctorId) {
-        continue;
-      }
-      const doctor = doctorMap.get(doctorId);
-      const current = topDoctorsMap.get(doctorId) ?? {
-        doctorId,
-        closed: 0,
-        name: doctor?.name ?? 'Doctor sin nombre',
-        specialty: doctor?.specialty,
-      };
-      current.closed += 1;
-      topDoctorsMap.set(doctorId, current);
-    }
 
     return {
       generatedAt: new Date().toISOString(),
       statusBreakdown,
       totalConsultations,
-      closedLast7Days,
+      closedLast7Days: statusStats.closedLast7Days ?? 0,
       avgAttentionTimeMinutes,
       slaCompliance,
-      bySpecialty: Array.from(specialties.values()),
-      topDoctors: Array.from(topDoctorsMap.values())
-        .sort((left, right) => right.closed - left.closed)
-        .slice(0, 5),
+      bySpecialty: bySpecialtyAgg.map((item) => ({
+        specialty: item._id,
+        total: item.total,
+        closed: item.closed,
+      })),
+      topDoctors: topDoctorsAgg.map((item) => {
+        const doctorId = item._id.toString();
+        const doctor = doctorMap.get(doctorId);
+        return {
+          doctorId,
+          closed: item.closed,
+          name: doctor?.name ?? 'Doctor sin nombre',
+          specialty: doctor?.specialty,
+        };
+      }),
     };
   }
 

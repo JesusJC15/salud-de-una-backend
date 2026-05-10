@@ -24,7 +24,8 @@ import { ProvisioningService } from './provisioning.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret:
-          configService.get<string>('auth.jwtSecret') ?? 'legacy-disabled',
+          configService.get<string>('auth.jwtSecret') ??
+          `legacy-disabled-${Math.random().toString(36).slice(2)}`,
       }),
     }),
     MongooseModule.forFeature([

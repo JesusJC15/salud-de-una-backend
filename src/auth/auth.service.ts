@@ -807,7 +807,24 @@ export class AuthService {
   private async tryAuthenticateLocalAccessToken(
     token: string,
   ): Promise<RequestUser | null> {
-    const jwtSecret = this.configService.getOrThrow<string>('auth.jwtSecret');
+    const legacyEnabled = this.configService.get<boolean>('auth.legacyEnabled');
+    if (legacyEnabled === false) {
+      return null;
+    }
+
+    let jwtSecret = this.configService.get<string>('auth.jwtSecret');
+    if (!jwtSecret) {
+      try {
+        jwtSecret = this.configService.getOrThrow<string>('auth.jwtSecret');
+      } catch {
+        jwtSecret = undefined;
+      }
+    }
+
+    if (!jwtSecret) {
+      return null;
+    }
+
     let payload: JwtPayload;
 
     try {
@@ -1144,5 +1161,9 @@ export class AuthService {
 
   private async buildExternalPasswordHash(): Promise<string> {
     return bcrypt.hash(randomBytes(32).toString('hex'), 12);
+  }
+
+  async createExternalPasswordHash(): Promise<string> {
+    return this.buildExternalPasswordHash();
   }
 }

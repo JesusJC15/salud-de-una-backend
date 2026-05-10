@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { AiService } from './ai/ai.service';
@@ -39,6 +40,7 @@ type ReadinessStatus = {
 export class AppService {
   constructor(
     @InjectConnection() private readonly dbConnection: Connection,
+    private readonly configService: ConfigService,
     private readonly redisHealthService: RedisHealthService,
     private readonly aiService: AiService,
   ) {}
@@ -57,9 +59,14 @@ export class AppService {
     const isDatabaseUp = readyState === 1;
     const redisReadiness = await this.redisHealthService.getReadiness();
     const aiReadiness = this.aiService.getReadiness();
+    const nodeEnv = this.configService.get<string>('NODE_ENV') ?? 'development';
+    const redisRequiredInProduction =
+      this.configService.get<boolean>('redis.requiredInProduction') !== false;
+    const requiresRedis = nodeEnv === 'production' && redisRequiredInProduction;
+    const isRedisReady = !requiresRedis || redisReadiness.status === 'up';
 
     return {
-      status: isDatabaseUp ? 'ready' : 'not_ready',
+      status: isDatabaseUp && isRedisReady ? 'ready' : 'not_ready',
       service: 'salud-de-una-backend',
       timestamp: new Date().toISOString(),
       checks: {

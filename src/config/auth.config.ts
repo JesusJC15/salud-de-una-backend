@@ -1,11 +1,17 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('auth', () => ({
+  legacyEnabled:
+    process.env.AUTH_LEGACY_ENABLED != null
+      ? process.env.AUTH_LEGACY_ENABLED === 'true'
+      : process.env.NODE_ENV !== 'production',
   auth0Domain: process.env.AUTH0_DOMAIN ?? '',
   auth0Audience: process.env.AUTH0_AUDIENCE ?? '',
   auth0Issuer: process.env.AUTH0_ISSUER ?? '',
   auth0M2mClientId: process.env.AUTH0_M2M_CLIENT_ID,
   auth0M2mClientSecret: process.env.AUTH0_M2M_CLIENT_SECRET,
+  auth0HttpTimeoutMs: Number(process.env.AUTH0_HTTP_TIMEOUT_MS ?? 5000),
+  auth0HttpMaxRetries: Number(process.env.AUTH0_HTTP_MAX_RETRIES ?? 2),
   auth0RoleIds: {
     PATIENT: process.env.AUTH0_ROLE_ID_PATIENT,
     DOCTOR: process.env.AUTH0_ROLE_ID_DOCTOR,

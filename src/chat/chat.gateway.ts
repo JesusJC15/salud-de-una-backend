@@ -1,4 +1,5 @@
-import { UsePipes, ValidationPipe } from '@nestjs/common';
+import { Optional, UsePipes, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
@@ -21,14 +22,18 @@ type AuthenticatedSocket = Socket<
   SocketEventsMap,
   SocketEventsMap,
   SocketEventsMap,
-  { user?: RequestUser; authPromise?: Promise<RequestUser | null> }
+  {
+    user?: RequestUser;
+    authPromise?: Promise<RequestUser | null>;
+    eventHistory?: Record<string, number[]>;
+  }
 >;
 
 @WebSocketGateway({
   namespace: '/chat',
   cors: {
     origin: true,
-    credentials: true,
+    credentials: false,
   },
 })
 @UsePipes(
@@ -42,11 +47,18 @@ export class ChatGateway implements OnGatewayConnection {
   private server!: Server;
 
   constructor(
+    @Optional()
+    private readonly configService: ConfigService | null,
     private readonly authService: AuthService,
     private readonly chatService: ChatService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
+    if (!this.isAllowedOrigin(client.handshake.headers.origin)) {
+      this.rejectUnauthorizedClient(client, 'Origin no permitido');
+      return;
+    }
+
     const token = extractSocketToken(client);
     if (!token) {
       this.rejectUnauthorizedClient(client, 'Token ausente');
@@ -78,6 +90,13 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     try {
+      if (!this.consumeEventBudget(client, 'chat:join', 30, 60_000)) {
+        client.emit('chat:error', {
+          code: 'RATE_LIMITED',
+          message: 'Demasiados eventos de chat',
+        });
+        return;
+      }
       await client.join(this.toRoom(dto.consultationId));
       const messages = await this.chatService.getHistoryForSocket(
         dto.consultationId,
@@ -100,6 +119,13 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     try {
+      if (!this.consumeEventBudget(client, 'chat:send', 60, 60_000)) {
+        client.emit('chat:error', {
+          code: 'RATE_LIMITED',
+          message: 'Demasiados eventos de chat',
+        });
+        return;
+      }
       const message = await this.chatService.sendMessage(
         dto.consultationId,
         user,
@@ -148,5 +174,47 @@ export class ChatGateway implements OnGatewayConnection {
       code: 'FORBIDDEN',
       message: error instanceof Error ? error.message : 'Error de mensajeria',
     };
+  }
+
+  private isAllowedOrigin(origin: string | string[] | undefined): boolean {
+    const candidate = Array.isArray(origin) ? origin[0] : origin;
+    if (!candidate) {
+      return true;
+    }
+
+    const allowedOrigins = [
+      ...(this.configService?.get<string[]>('web.corsOriginsPatient') ?? []),
+      ...(this.configService?.get<string[]>('web.corsOriginsStaff') ?? []),
+    ];
+
+    return allowedOrigins.length === 0 || allowedOrigins.includes(candidate);
+  }
+
+  private consumeEventBudget(
+    client: AuthenticatedSocket,
+    eventName: string,
+    maxEvents: number,
+    windowMs: number,
+  ): boolean {
+    const now = Date.now();
+    const history = client.data.eventHistory ?? {};
+    const recent = (history[eventName] ?? []).filter(
+      (timestamp) => now - timestamp < windowMs,
+    );
+
+    if (recent.length >= maxEvents) {
+      client.data.eventHistory = {
+        ...history,
+        [eventName]: recent,
+      };
+      return false;
+    }
+
+    recent.push(now);
+    client.data.eventHistory = {
+      ...history,
+      [eventName]: recent,
+    };
+    return true;
   }
 }

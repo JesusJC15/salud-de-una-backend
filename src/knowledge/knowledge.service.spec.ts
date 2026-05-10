@@ -483,10 +483,10 @@ describe('KnowledgeService', () => {
       { $set?: { status?: string } },
     ];
     expect(inlineUpdateArg.$set?.status).toBe('COMPLETED');
-    expect(redisClient.del).toHaveBeenCalledWith([
+    expect(redisClient.del).toHaveBeenCalledWith(
       'salud-de-una:rag:a',
       'salud-de-una:rag:b',
-    ]);
+    );
     expect(result).toEqual(
       expect.objectContaining({
         id: document._id.toString(),
@@ -678,7 +678,24 @@ describe('KnowledgeService', () => {
       'corr-url-success',
     );
 
-    expect(fetchSpy).toHaveBeenCalledWith('https://example.com/doc');
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'https://example.com/doc',
+      expect.objectContaining({
+        method: 'HEAD',
+        redirect: 'manual',
+        timeoutMs: 10_000,
+      }),
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/doc',
+      expect.objectContaining({
+        method: 'GET',
+        redirect: 'manual',
+        timeoutMs: 10_000,
+      }),
+    );
     expect(result.title).toBe('Documento remoto');
   });
 
@@ -703,7 +720,24 @@ describe('KnowledgeService', () => {
       ),
     ).rejects.toThrow(BadRequestException);
 
-    expect(fetchSpy).toHaveBeenCalledWith('https://example.com/doc');
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'https://example.com/doc',
+      expect.objectContaining({
+        method: 'HEAD',
+        redirect: 'manual',
+        timeoutMs: 10_000,
+      }),
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/doc',
+      expect.objectContaining({
+        method: 'GET',
+        redirect: 'manual',
+        timeoutMs: 10_000,
+      }),
+    );
   });
 
   it('reprocessDocument should reject missing documents or missing extracted text', async () => {

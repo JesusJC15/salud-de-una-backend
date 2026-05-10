@@ -2,6 +2,7 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AiService } from './ai/ai.service';
 import { AppService } from './app.service';
+import { ConfigService } from '@nestjs/config';
 import { RedisHealthService } from './redis/redis-health.service';
 
 describe('AppService', () => {
@@ -14,6 +15,9 @@ describe('AppService', () => {
   };
   const aiService = {
     getReadiness: jest.fn(),
+  };
+  const configService = {
+    get: jest.fn(),
   };
 
   beforeAll(() => {
@@ -37,6 +41,11 @@ describe('AppService', () => {
       detail: 'AI disabled',
       degraded: true,
     });
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'NODE_ENV') return 'development';
+      if (key === 'redis.requiredInProduction') return true;
+      return undefined;
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,6 +61,10 @@ describe('AppService', () => {
         {
           provide: AiService,
           useValue: aiService,
+        },
+        {
+          provide: ConfigService,
+          useValue: configService,
         },
       ],
     }).compile();
@@ -97,5 +110,23 @@ describe('AppService', () => {
     expect(result.checks.database.detail).toBe(
       'mongoose readyState: 0 (disconnected)',
     );
+  });
+
+  it('should return not_ready in production when Redis is required and unavailable', async () => {
+    connectionMock.readyState = 1;
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'NODE_ENV') return 'production';
+      if (key === 'redis.requiredInProduction') return true;
+      return undefined;
+    });
+    redisHealthService.getReadiness.mockResolvedValue({
+      status: 'down',
+      detail: 'Redis unavailable',
+      latencyMs: null,
+      degraded: true,
+    });
+
+    const result = await appService.getReadiness();
+    expect(result.status).toBe('not_ready');
   });
 });

@@ -1,6 +1,7 @@
 import aiConfig from './ai.config';
 import authConfig from './auth.config';
 import databaseConfig from './database.config';
+import knowledgeConfig from './knowledge.config';
 import redisConfig from './redis.config';
 import webConfig from './web.config';
 
@@ -23,6 +24,7 @@ describe('config factories', () => {
     expect(config.jwtRefreshSecret).toBe('refresh');
     expect(config.accessTokenExpiresIn).toBe('15m');
     expect(config.refreshTokenExpiresIn).toBe('30d');
+    expect(config.legacyEnabled).toBe(true);
   });
 
   it('authConfig should fall back to defaults when expires are missing', () => {
@@ -47,6 +49,7 @@ describe('config factories', () => {
     const config = redisConfig();
 
     expect(config.url).toBe('rediss://default:secret@example.redis.cloud:6379');
+    expect(config.requiredInProduction).toBe(true);
     expect(config.keyPrefix).toBe('salud-de-una');
     expect(config.outboxDispatchIntervalMs).toBe(1000);
   });
@@ -151,5 +154,21 @@ describe('config factories', () => {
     process.env.REFRESH_MAX_ACTIVE_SESSIONS = '0';
     const config = webConfig();
     expect(config.refreshMaxActiveSessions).toBe(3);
+  });
+
+  it('knowledgeConfig should expose hardening defaults', () => {
+    delete process.env.KNOWLEDGE_UPLOAD_MAX_BYTES;
+    delete process.env.KNOWLEDGE_URL_FETCH_TIMEOUT_MS;
+    delete process.env.KNOWLEDGE_URL_MAX_BYTES;
+    delete process.env.KNOWLEDGE_URL_MAX_REDIRECTS;
+    delete process.env.KNOWLEDGE_ALLOWED_MIME_TYPES;
+
+    const config = knowledgeConfig();
+
+    expect(config.uploadMaxBytes).toBe(5 * 1024 * 1024);
+    expect(config.urlFetchTimeoutMs).toBe(10000);
+    expect(config.urlMaxBytes).toBe(5 * 1024 * 1024);
+    expect(config.urlMaxRedirects).toBe(3);
+    expect(config.allowedMimeTypes).toContain('application/pdf');
   });
 });
