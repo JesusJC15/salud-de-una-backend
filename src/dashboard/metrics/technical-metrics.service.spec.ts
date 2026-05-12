@@ -63,7 +63,7 @@ describe('TechnicalMetricsService', () => {
     inMemoryStore.getSummary.mockResolvedValue({
       sampleSize: 1,
       p95LatencyMs: 90,
-      errorRate: 100,
+      errorRate: 1,
       timestamp: '2026-03-14T12:00:00.000Z',
       source: 'memory',
       degraded: false,

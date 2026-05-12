@@ -786,16 +786,25 @@ describe('KnowledgeService', () => {
       status: 'READY_FOR_REVIEW',
     });
 
-    documentByIdQuery.exec.mockResolvedValueOnce(document);
+    documentByIdQuery.exec.mockResolvedValue(document);
     await expect(
       service.reviewDocument(
         document._id.toString(),
         { status: 'APPROVED' } as never,
         adminActor,
       ),
-    ).rejects.toThrow(ForbiddenException);
+    ).resolves.toMatchObject({
+      id: document._id.toString(),
+    });
 
-    documentByIdQuery.exec.mockResolvedValueOnce(document);
+    expect(reviewModel.create).toHaveBeenCalledWith({
+      documentId: document._id,
+      reviewerId: adminActor.userId,
+      reviewerRole: adminActor.role,
+      status: 'APPROVED',
+      notes: undefined,
+    });
+
     doctorByIdQuery.exec.mockResolvedValueOnce({
       doctorStatus: DoctorStatus.PENDING,
     });
@@ -807,11 +816,9 @@ describe('KnowledgeService', () => {
       ),
     ).rejects.toThrow(ForbiddenException);
 
-    documentByIdQuery.exec.mockResolvedValueOnce(document);
     doctorByIdQuery.exec.mockResolvedValueOnce({
       doctorStatus: DoctorStatus.VERIFIED,
     });
-    documentByIdQuery.exec.mockResolvedValueOnce(document);
     reviewFindQuery.exec.mockResolvedValue([]);
 
     const result = await service.reviewDocument(

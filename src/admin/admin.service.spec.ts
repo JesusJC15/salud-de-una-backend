@@ -215,6 +215,50 @@ describe('AdminService', () => {
     expect(sessionMock.endSession).toHaveBeenCalled();
   });
 
+  it('getDoctorForReview should return a single doctor with latest verification', async () => {
+    const doctorDocument = {
+      _id: new Types.ObjectId(validDoctorId),
+      firstName: 'Ana',
+      lastName: 'Rios',
+      email: 'ana@example.com',
+      specialty: Specialty.GENERAL_MEDICINE,
+      doctorStatus: DoctorStatus.VERIFIED,
+      professionalLicense: 'PRO-123',
+      personalId: '123456',
+      phoneNumber: '3001234567',
+      createdAt: new Date('2025-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2025-01-02T00:00:00.000Z'),
+    };
+
+    doctorModelMock.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(doctorDocument),
+    });
+    rethusVerificationModelMock.findOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        checkedAt: new Date('2025-01-03T00:00:00.000Z'),
+        checkedBy: 'admin@example.com',
+        rethusState: RethusState.VALID,
+        reportingEntity: 'MINISTERIO DE SALUD',
+        notes: 'ok',
+      }),
+    });
+
+    const result = await service.getDoctorForReview(validDoctorId);
+
+    expect(result).toMatchObject({
+      id: validDoctorId,
+      firstName: 'Ana',
+      latestVerification: {
+        checkedBy: 'admin@example.com',
+        rethusState: RethusState.VALID,
+      },
+    });
+  });
+
   it('should map compact decision dto to verification state', async () => {
     const doctorDocument = {
       id: validDoctorId,

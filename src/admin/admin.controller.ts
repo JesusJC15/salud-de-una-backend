@@ -31,6 +31,12 @@ export class AdminController {
     return this.adminService.listDoctorsForReview(query);
   }
 
+  @Get('doctors/:doctorId')
+  @Roles(UserRole.ADMIN)
+  getDoctor(@Param('doctorId') doctorId: string) {
+    return this.adminService.getDoctorForReview(doctorId);
+  }
+
   @Get('doctors/review')
   @Roles(UserRole.ADMIN)
   listDoctorsReviewAlias(@Query() query: ListDoctorsForReviewDto) {

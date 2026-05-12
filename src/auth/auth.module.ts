@@ -41,6 +41,6 @@ import { ProvisioningService } from './provisioning.service';
     JwtProvisionStrategy,
     ProvisioningService,
   ],
-  exports: [AuthService, ProvisioningService],
+  exports: [AuthService, ProvisioningService, JwtModule],
 })
 export class AuthModule {}

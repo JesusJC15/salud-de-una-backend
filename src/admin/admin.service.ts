@@ -304,6 +304,54 @@ export class AdminService {
     };
   }
 
+  async getDoctorForReview(doctorId: string) {
+    if (!Types.ObjectId.isValid(doctorId)) {
+      throw new BadRequestException('doctorId invalido');
+    }
+
+    const [doctor, latestVerification] = await Promise.all([
+      this.doctorModel
+        .findById(doctorId)
+        .select(
+          'firstName lastName email specialty doctorStatus professionalLicense personalId phoneNumber createdAt updatedAt',
+        )
+        .lean<DoctorProjection>()
+        .exec(),
+      this.rethusVerificationModel
+        .findOne({ doctorId })
+        .sort({ checkedAt: -1 })
+        .lean()
+        .exec(),
+    ]);
+
+    if (!doctor) {
+      throw new NotFoundException('Medico no encontrado');
+    }
+
+    return {
+      id: doctor._id.toString(),
+      firstName: doctor.firstName,
+      lastName: doctor.lastName,
+      email: doctor.email,
+      specialty: doctor.specialty,
+      doctorStatus: doctor.doctorStatus,
+      professionalLicense: doctor.professionalLicense,
+      personalId: doctor.personalId,
+      phoneNumber: doctor.phoneNumber,
+      createdAt: doctor.createdAt ?? null,
+      updatedAt: doctor.updatedAt ?? null,
+      latestVerification: latestVerification
+        ? {
+            checkedAt: latestVerification.checkedAt,
+            checkedBy: latestVerification.checkedBy,
+            rethusState: latestVerification.rethusState,
+            reportingEntity: latestVerification.reportingEntity,
+            notes: latestVerification.notes,
+          }
+        : null,
+    };
+  }
+
   async verifyDoctor(
     doctorId: string,
     dto: RethusVerifyDto | RethusDecisionDto,

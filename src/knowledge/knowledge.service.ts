@@ -469,22 +469,24 @@ export class KnowledgeService {
       throw new NotFoundException('Documento de conocimiento no encontrado');
     }
 
-    if (dto.status === 'APPROVED' && actor.role !== UserRole.DOCTOR) {
-      throw new ForbiddenException(
-        'Solo un DOCTOR puede aprobar contenido clínico',
-      );
-    }
-
     if (dto.status === 'APPROVED') {
-      const doctor = await this.doctorModel
-        .findById(actor.userId)
-        .select('doctorStatus')
-        .lean<{ doctorStatus?: DoctorStatus }>()
-        .exec();
+      if (actor.role === UserRole.ADMIN) {
+        // Admin approval is allowed by policy for clinical governance workflows.
+      } else if (actor.role === UserRole.DOCTOR) {
+        const doctor = await this.doctorModel
+          .findById(actor.userId)
+          .select('doctorStatus')
+          .lean<{ doctorStatus?: DoctorStatus }>()
+          .exec();
 
-      if (!doctor || doctor.doctorStatus !== DoctorStatus.VERIFIED) {
+        if (!doctor || doctor.doctorStatus !== DoctorStatus.VERIFIED) {
+          throw new ForbiddenException(
+            'Solo un DOCTOR VERIFIED o ADMIN puede aprobar contenido clínico',
+          );
+        }
+      } else {
         throw new ForbiddenException(
-          'Solo un DOCTOR VERIFIED puede aprobar contenido clínico',
+          'Solo un DOCTOR VERIFIED o ADMIN puede aprobar contenido clínico',
         );
       }
     }

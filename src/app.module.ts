@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -11,6 +11,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { AdminDocsMiddleware } from './common/middleware/admin-docs.middleware';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import aiConfig from './config/ai.config';
 import authConfig from './config/auth.config';
@@ -103,6 +104,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
   controllers: [AppController],
   providers: [
     AppService,
+    AdminDocsMiddleware,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
@@ -121,4 +123,14 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  constructor(private configService: ConfigService) {}
+
+  configure(consumer: MiddlewareConsumer): void {
+    const nodeEnv = this.configService.get<string>('NODE_ENV') ?? 'development';
+
+    if (nodeEnv === 'production') {
+      consumer.apply(AdminDocsMiddleware).forRoutes('v1/docs', 'v1/docs-json');
+    }
+  }
+}
