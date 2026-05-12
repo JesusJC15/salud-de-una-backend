@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ConnectionOptions, Job, Worker } from 'bullmq';
 import { REDIS_CONNECTION_OPTIONS } from '../redis/redis.constants';
+import { runtimeRoleIncludesWorker } from '../common/utils/runtime-role.util';
 import { FollowupsService } from './followups.service';
 import { FOLLOWUPS_QUEUE_NAME } from './followups.constants';
 
@@ -30,6 +31,13 @@ export class FollowupsProcessor
   ) {}
 
   onApplicationBootstrap(): void {
+    if (!runtimeRoleIncludesWorker()) {
+      this.logger.log(
+        'FollowupsProcessor skipped because APP_RUNTIME_ROLE excludes background workers',
+      );
+      return;
+    }
+
     const redisUrl = this.configService.get<string>('redis.url');
     const isProduction =
       (this.configService.get<string>('NODE_ENV') ?? 'development') ===

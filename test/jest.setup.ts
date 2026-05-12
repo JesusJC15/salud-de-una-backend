@@ -2,6 +2,10 @@ import { Logger } from '@nestjs/common';
 
 const noop = () => undefined;
 
+if (!['all', 'api', 'worker'].includes(process.env.APP_RUNTIME_ROLE ?? '')) {
+  process.env.APP_RUNTIME_ROLE = 'all';
+}
+
 Logger.overrideLogger(false);
 
 jest.spyOn(Logger.prototype, 'log').mockImplementation(noop);

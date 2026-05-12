@@ -4,6 +4,13 @@ export const validationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
     .default('development'),
+  APP_RUNTIME_ROLE: Joi.string()
+    .trim()
+    .lowercase()
+    .custom((value: string) =>
+      ['all', 'api', 'worker'].includes(value) ? value : 'all',
+    )
+    .default('all'),
   PORT: Joi.number().default(3000),
   MONGODB_URI: Joi.string().required(),
   AUTH_LEGACY_ENABLED: Joi.boolean().default(true),
@@ -85,4 +92,8 @@ export const validationSchema = Joi.object({
     .min(1_024)
     .default(5 * 1024 * 1024),
   AUTH0_MIGRATION_KEY: Joi.string().allow('').optional(),
+  OTEL_ENABLED: Joi.boolean().default(false),
+  OTEL_SERVICE_NAME: Joi.string().default('salud-de-una-backend'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string().uri().allow('').optional(),
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: Joi.string().uri().allow('').optional(),
 });

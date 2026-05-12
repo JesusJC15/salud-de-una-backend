@@ -40,9 +40,12 @@ type AppMock = {
   setGlobalPrefix: jest.Mock<void, [string]>;
   enableCors: jest.Mock<void, [CorsOptions]>;
   use: jest.Mock<void, [SecurityMiddleware]>;
+  useLogger: jest.Mock<void, [unknown]>;
+  enableShutdownHooks: jest.Mock<void, []>;
   useGlobalPipes: jest.Mock<void, [unknown]>;
   useGlobalFilters: jest.Mock<void, [unknown]>;
   useWebSocketAdapter: jest.Mock;
+  init: jest.Mock<Promise<void>, []>;
   listen: jest.Mock<Promise<void>, [number]>;
 };
 type ConfigServiceMock = {
@@ -67,9 +70,12 @@ function createBootstrapContext(
     setGlobalPrefix: jest.fn<void, [string]>(),
     enableCors: jest.fn<void, [CorsOptions]>(),
     use: jest.fn<void, [SecurityMiddleware]>(),
+    useLogger: jest.fn<void, [unknown]>(),
+    enableShutdownHooks: jest.fn<void, []>(),
     useGlobalPipes: jest.fn<void, [unknown]>(),
     useGlobalFilters: jest.fn<void, [unknown]>(),
     useWebSocketAdapter: jest.fn(),
+    init: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
     listen: jest.fn<Promise<void>, [number]>().mockResolvedValue(undefined),
   };
   const configService: ConfigServiceMock = {
@@ -217,6 +223,7 @@ describe('main bootstrap', () => {
   });
 
   it('bootstrap should configure app with CORS when origins exist', async () => {
+    delete process.env.APP_RUNTIME_ROLE;
     const handlers: Record<string, (value?: unknown) => void> = {};
     const { app } = createBootstrapContext(
       {
@@ -269,6 +276,7 @@ describe('main bootstrap', () => {
   });
 
   it('bootstrap should warn when no origins in non-test env', async () => {
+    delete process.env.APP_RUNTIME_ROLE;
     const { app } = createBootstrapContext({
       NODE_ENV: 'development',
       'database.uri': 'mongodb://localhost:27017/db',
@@ -284,6 +292,7 @@ describe('main bootstrap', () => {
   });
 
   it('bootstrap should throw in production when no CORS origins', async () => {
+    delete process.env.APP_RUNTIME_ROLE;
     const { app } = createBootstrapContext({
       NODE_ENV: 'production',
       'database.uri': 'mongodb://localhost:27017/db',
@@ -298,6 +307,7 @@ describe('main bootstrap', () => {
   });
 
   it('bootstrap should use default nodeEnv when missing', async () => {
+    delete process.env.APP_RUNTIME_ROLE;
     const { app } = createBootstrapContext({
       'database.uri': 'mongodb://localhost:27017/db',
     });
@@ -307,6 +317,30 @@ describe('main bootstrap', () => {
     ).mockResolvedValue(app as never);
     await expect(bootstrap()).resolves.toBeUndefined();
     expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('bootstrap should initialize worker mode without listening on a port', async () => {
+    const originalRole = process.env.APP_RUNTIME_ROLE;
+    process.env.APP_RUNTIME_ROLE = 'worker';
+    const { app } = createBootstrapContext({
+      NODE_ENV: 'production',
+      'database.uri': 'mongodb://localhost:27017/db',
+      'web.corsOriginsPatient': ['https://patients.example.com'],
+      'web.corsOriginsStaff': ['https://staff.example.com'],
+      'redis.url': 'redis://localhost:6379',
+    });
+
+    (
+      NestFactory.create as jest.MockedFunction<typeof NestFactory.create>
+    ).mockResolvedValue(app as never);
+
+    try {
+      await expect(bootstrap()).resolves.toBeUndefined();
+      expect(app.init).toHaveBeenCalled();
+      expect(app.listen).not.toHaveBeenCalled();
+    } finally {
+      process.env.APP_RUNTIME_ROLE = originalRole;
+    }
   });
 
   it('should auto-bootstrap when NODE_ENV is not test', () => {

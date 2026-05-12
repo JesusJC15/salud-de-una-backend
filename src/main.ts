@@ -1,3 +1,4 @@
+import './observability/telemetry';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -10,7 +11,12 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { Connection } from 'mongoose';
 import { AppModule } from './app.module';
+import { StructuredJsonLogger } from './common/logging/structured-json.logger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import {
+  getRuntimeRole,
+  runtimeRoleIncludesApi,
+} from './common/utils/runtime-role.util';
 import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
 export function sanitizeMongoUri(uri?: string): string {
@@ -79,9 +85,12 @@ export async function waitForDatabaseConnection(
 
 export async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(new StructuredJsonLogger());
+  app.enableShutdownHooks();
   const configService = app.get(ConfigService);
   const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+  const runtimeRole = getRuntimeRole();
   const redisUrl = configService.get<string>('redis.url');
   const redisClient = app.get<Redis | null>(REDIS_CLIENT);
   if (redisClient) {
@@ -186,6 +195,14 @@ export async function bootstrap() {
     SwaggerModule.setup(`${globalPrefix}/docs`, app, swaggerDocument);
   }
 
+  if (!runtimeRoleIncludesApi(runtimeRole)) {
+    await app.init();
+    logger.log(`Worker runtime initialized | role=${runtimeRole}`);
+    logger.log(`Environment: ${nodeEnv} | PID: ${process.pid}`);
+    logger.log(`Database URI: ${sanitizeMongoUri(databaseUri)}`);
+    return;
+  }
+
   await app.listen(port);
 
   logger.log(`Server started on http://localhost:${port}/${globalPrefix}`);
@@ -196,6 +213,7 @@ export async function bootstrap() {
     `Readiness endpoint: http://localhost:${port}/${globalPrefix}/ready`,
   );
   logger.log(`Environment: ${nodeEnv} | PID: ${process.pid}`);
+  logger.log(`Runtime role: ${runtimeRole}`);
   logger.log(`Database URI: ${sanitizeMongoUri(databaseUri)}`);
 }
 if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {

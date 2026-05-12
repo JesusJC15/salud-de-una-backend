@@ -28,6 +28,7 @@ services:
     init: true
     environment:
       NODE_ENV: ${NODE_ENV:-development}
+      APP_RUNTIME_ROLE: ${APP_RUNTIME_ROLE:-all}
       PORT: ${PORT:-3000}
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/salud-de-una}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set for docker-compose.yml}
