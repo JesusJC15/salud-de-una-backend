@@ -22,6 +22,7 @@ type PromptDefinitionModelMock = {
 type AuditLogModelMock = {
   create: jest.Mock;
   find?: jest.Mock;
+  aggregate?: jest.Mock;
 };
 
 type PromptModelFactoryPayload = Record<string, unknown>;

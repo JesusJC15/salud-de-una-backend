@@ -8,7 +8,10 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
-import { extractSocketToken } from '../common/utils/socket-auth.util';
+import {
+  buildSocketCorsOriginFn,
+  extractSocketToken,
+} from '../common/utils/socket-auth.util';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 
 type SocketEventsMap = Record<string, (...args: unknown[]) => void>;
@@ -23,29 +26,7 @@ type AuthenticatedSocket = Socket<
 @WebSocketGateway({
   namespace: '/notifications',
   cors: {
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      const patient =
-        process.env.CORS_ORIGINS_PATIENT?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) ?? [];
-      const staff =
-        process.env.CORS_ORIGINS_STAFF?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) ?? [];
-      const allowed = [...new Set([...patient, ...staff])];
-      if (allowed.length === 0 && process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-        return;
-      }
-      callback(null, allowed.includes(origin));
-    },
+    origin: buildSocketCorsOriginFn(),
     credentials: true,
   },
 })
