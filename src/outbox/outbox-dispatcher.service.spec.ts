@@ -47,7 +47,7 @@ describe('OutboxDispatcherService', () => {
       .mockResolvedValue(undefined);
 
     service.onApplicationBootstrap();
-    jest.advanceTimersByTime(10);
+    jest.advanceTimersByTime(20); // interval=10ms + max jitter 2ms; advance 20ms to be safe
     await service.onApplicationShutdown();
 
     expect(dispatchSpy).toHaveBeenCalled();
@@ -61,7 +61,7 @@ describe('OutboxDispatcherService', () => {
       .mockResolvedValue(undefined);
 
     service.onApplicationBootstrap();
-    jest.advanceTimersByTime(1000);
+    jest.advanceTimersByTime(1500); // interval=1000ms + max jitter 200ms; advance 1500ms to be safe
     await service.onApplicationShutdown();
 
     expect(dispatchSpy).toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe('OutboxDispatcherService', () => {
       .mockImplementation(() => undefined);
 
     service.onApplicationBootstrap();
-    jest.advanceTimersByTime(10);
+    jest.advanceTimersByTime(20); // interval=10ms + max jitter 2ms; advance 20ms to be safe
     await Promise.resolve();
 
     expect(loggerSpy).toHaveBeenCalledWith(

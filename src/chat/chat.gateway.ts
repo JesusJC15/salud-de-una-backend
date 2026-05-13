@@ -5,6 +5,7 @@ import {
   Ack,
   MessageBody,
   OnGatewayConnection,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -33,7 +34,29 @@ type ChatSendAck =
 @WebSocketGateway({
   namespace: '/chat',
   cors: {
-    origin: true,
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const patient =
+        process.env.CORS_ORIGINS_PATIENT?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) ?? [];
+      const staff =
+        process.env.CORS_ORIGINS_STAFF?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) ?? [];
+      const allowed = [...new Set([...patient, ...staff])];
+      if (allowed.length === 0 && process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+        return;
+      }
+      callback(null, allowed.includes(origin));
+    },
     credentials: true,
   },
 })
@@ -43,7 +66,7 @@ type ChatSendAck =
     transform: true,
   }),
 )
-export class ChatGateway implements OnGatewayConnection {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private server!: Server;
   private readonly eventBudget = new Map<
@@ -81,6 +104,17 @@ export class ChatGateway implements OnGatewayConnection {
       });
 
     await client.data.authPromise;
+  }
+
+  handleDisconnect(client: AuthenticatedSocket): void {
+    const userId = client.data.user?.userId;
+    if (userId) {
+      for (const key of this.eventBudget.keys()) {
+        if (key.startsWith(`${userId}:`)) {
+          this.eventBudget.delete(key);
+        }
+      }
+    }
   }
 
   @SubscribeMessage('chat:join')

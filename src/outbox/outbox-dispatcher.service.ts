@@ -38,13 +38,15 @@ export class OutboxDispatcherService
 
     const intervalMs =
       this.configService.get<number>('redis.outboxDispatchIntervalMs') ?? 1_000;
+    // Añadir jitter ±20% para evitar thundering herd en deployments multi-instancia
+    const jitter = Math.floor(Math.random() * intervalMs * 0.2);
 
     this.intervalHandle = setInterval(() => {
       void this.dispatchPendingEvents().catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(`Outbox dispatch loop failed: ${message}`);
       });
-    }, intervalMs);
+    }, intervalMs + jitter);
   }
 
   async onApplicationShutdown(): Promise<void> {

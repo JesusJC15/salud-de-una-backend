@@ -9,6 +9,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { isDuplicateKeyError } from '../common/utils/errors.util';
 import { NotificationsGateway } from './notifications.gateway';
 import { PushNotificationsService } from './push-notifications.service';
 import {
@@ -231,34 +232,7 @@ export class NotificationsService {
     };
   }
 
-  sendExpoPush(token: string, title: string, body: string): void {
-    fetch('https://exp.host/push/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ to: token, title, body, sound: 'default' }),
-    }).catch((error: unknown) => {
-      this.logger.warn(`Expo push failed: ${String(error)}`);
-    });
-  }
-
   private isDuplicateSourceEvent(error: unknown): boolean {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as Record<string, unknown>).code === 11000
-    ) {
-      const keyPattern = (error as Record<string, unknown>).keyPattern;
-      return (
-        typeof keyPattern === 'object' &&
-        keyPattern !== null &&
-        'sourceEventId' in (keyPattern as Record<string, unknown>)
-      );
-    }
-
-    return false;
+    return isDuplicateKeyError(error, 'sourceEventId');
   }
 }

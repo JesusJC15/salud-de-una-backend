@@ -23,7 +23,29 @@ type AuthenticatedSocket = Socket<
 @WebSocketGateway({
   namespace: '/notifications',
   cors: {
-    origin: true,
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const patient =
+        process.env.CORS_ORIGINS_PATIENT?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) ?? [];
+      const staff =
+        process.env.CORS_ORIGINS_STAFF?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) ?? [];
+      const allowed = [...new Set([...patient, ...staff])];
+      if (allowed.length === 0 && process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+        return;
+      }
+      callback(null, allowed.includes(origin));
+    },
     credentials: true,
   },
 })

@@ -586,7 +586,8 @@ export class ConsultationsService {
         const result = await this.aiService.generateText({
           promptKey: 'CLINICAL_SUMMARY_V1',
           promptVersion: 1,
-          model: 'gemini-2.5-flash',
+          model:
+            this.configService?.get<string>('ai.model') ?? 'gemini-2.5-flash',
           systemInstruction: CLINICAL_SUMMARY_SYSTEM_INSTRUCTION,
           inputText,
           correlationId: randomUUID(),

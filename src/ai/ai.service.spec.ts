@@ -82,6 +82,7 @@ describe('AiService', () => {
     };
     auditLogModel = {
       create: jest.fn().mockResolvedValue({}),
+      aggregate: jest.fn().mockResolvedValue([]),
     };
     aiProvider = {
       generateText: jest.fn(),
@@ -530,28 +531,19 @@ describe('AiService', () => {
 
   describe('getUsageMetrics', () => {
     it('returns aggregated metrics from audit logs', async () => {
-      const mockLogs = [
-        {
-          status: 'success',
-          latencyMs: 100,
-          promptKey: 'triage.general_medicine.analyze',
-        },
-        {
-          status: 'success',
-          latencyMs: 200,
-          promptKey: 'triage.general_medicine.analyze',
-        },
-        {
-          status: 'error',
-          latencyMs: 50,
-          promptKey: 'gemini.connectivity.check',
-        },
-      ];
       auditLogModel = {
-        find: jest.fn().mockReturnValue({
-          lean: jest.fn().mockReturnThis(),
-          exec: jest.fn().mockResolvedValue(mockLogs),
-        }),
+        aggregate: jest
+          .fn()
+          .mockResolvedValueOnce([
+            { total: 3, successCount: 2, avgLatencyMs: 116.67 },
+          ])
+          .mockResolvedValueOnce([
+            {
+              _id: 'triage.general_medicine.analyze',
+              count: 2,
+            },
+            { _id: 'gemini.connectivity.check', count: 1 },
+          ]),
         create: jest.fn(),
       };
       const service = createService();
@@ -563,14 +555,12 @@ describe('AiService', () => {
       expect(result.errorCount).toBe(1);
       expect(result.successRate).toBe(67);
       expect(result.avgLatencyMs).toBe(117);
+      expect(result.byPromptKey['triage.general_medicine.analyze']).toBe(2);
     });
 
     it('returns zero metrics when no audit logs', async () => {
       auditLogModel = {
-        find: jest.fn().mockReturnValue({
-          lean: jest.fn().mockReturnThis(),
-          exec: jest.fn().mockResolvedValue([]),
-        }),
+        aggregate: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
       };
       const service = createService();

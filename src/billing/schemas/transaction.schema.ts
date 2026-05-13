@@ -40,3 +40,4 @@ export class Transaction {
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
 TransactionSchema.index({ patientId: 1, status: 1 });
+TransactionSchema.index({ status: 1, paidAt: -1 });

@@ -28,7 +28,7 @@ describe('BillingController', () => {
       user,
     } as never);
     await controller.confirmCheckout('tx-1', { user } as never);
-    await controller.getMyTransactions({ user } as never);
+    await controller.getMyTransactions({ user } as never, undefined, undefined);
     await controller.getTransaction('tx-2', { user } as never);
 
     expect(billingService.getActivePrices).toHaveBeenCalledTimes(1);
@@ -37,7 +37,10 @@ describe('BillingController', () => {
       user,
     );
     expect(billingService.confirmCheckout).toHaveBeenCalledWith('tx-1', user);
-    expect(billingService.getMyTransactions).toHaveBeenCalledWith(user);
+    expect(billingService.getMyTransactions).toHaveBeenCalledWith(user, {
+      page: undefined,
+      limit: undefined,
+    });
     expect(billingService.getTransactionById).toHaveBeenCalledWith(
       'tx-2',
       user,

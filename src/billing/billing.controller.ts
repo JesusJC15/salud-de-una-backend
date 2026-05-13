@@ -49,8 +49,15 @@ export class BillingController {
 
   @Get('transactions/me')
   @Roles(UserRole.PATIENT)
-  getMyTransactions(@Req() req: RequestContext) {
-    return this.billingService.getMyTransactions(req.user!);
+  getMyTransactions(
+    @Req() req: RequestContext,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.billingService.getMyTransactions(req.user!, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Get('transactions/me/:id')

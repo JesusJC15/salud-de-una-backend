@@ -63,6 +63,7 @@ describe('BillingService', () => {
     find: jest.fn(),
     findById: jest.fn(),
     findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
     create: jest.fn(),
     countDocuments: jest.fn(),
     aggregate: jest.fn(),
@@ -136,15 +137,14 @@ describe('BillingService', () => {
       consultationModel.findById.mockReturnValue({
         lean: () => ({ exec: () => Promise.resolve(consultation) }),
       });
-      transactionModel.findOne.mockReturnValue({
-        lean: () => ({ exec: () => Promise.resolve(null) }),
-      });
       billingPriceModel.findOne.mockReturnValue({
         lean: () => ({
           exec: () => Promise.resolve({ amount: 15000, currency: 'COP' }),
         }),
       });
-      transactionModel.create.mockResolvedValue([transaction]);
+      transactionModel.findOneAndUpdate.mockReturnValue({
+        exec: () => Promise.resolve(transaction),
+      });
 
       const result = await service.initiateCheckout(CONSULTATION_ID, mockUser);
       expect(result).toMatchObject({
@@ -157,6 +157,7 @@ describe('BillingService', () => {
         paymentMode: 'SIMULATED',
         sandbox: true,
       });
+      expect(transactionModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
     it('throws NotFoundException when consultation not found', async () => {
@@ -200,10 +201,13 @@ describe('BillingService', () => {
       consultationModel.findById.mockReturnValue({
         lean: () => ({ exec: () => Promise.resolve(makeConsultation()) }),
       });
-      transactionModel.findOne.mockReturnValue({
+      billingPriceModel.findOne.mockReturnValue({
         lean: () => ({
-          exec: () => Promise.resolve(makeTransaction({ status: 'COMPLETED' })),
+          exec: () => Promise.resolve({ amount: 15000, currency: 'COP' }),
         }),
+      });
+      transactionModel.findOneAndUpdate.mockReturnValue({
+        exec: () => Promise.resolve(makeTransaction({ status: 'COMPLETED' })),
       });
       await expect(
         service.initiateCheckout(CONSULTATION_ID, mockUser),
@@ -215,13 +219,18 @@ describe('BillingService', () => {
       consultationModel.findById.mockReturnValue({
         lean: () => ({ exec: () => Promise.resolve(makeConsultation()) }),
       });
-      transactionModel.findOne.mockReturnValue({
-        lean: () => ({ exec: () => Promise.resolve(pendingTransaction) }),
+      billingPriceModel.findOne.mockReturnValue({
+        lean: () => ({
+          exec: () => Promise.resolve({ amount: 15000, currency: 'COP' }),
+        }),
+      });
+      transactionModel.findOneAndUpdate.mockReturnValue({
+        exec: () => Promise.resolve(pendingTransaction),
       });
 
       const result = await service.initiateCheckout(CONSULTATION_ID, mockUser);
-      expect(result).toBe(pendingTransaction);
-      expect(transactionModel.create).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ status: 'PENDING' });
+      expect(transactionModel.findOneAndUpdate).toHaveBeenCalled();
     });
   });
 
@@ -259,16 +268,21 @@ describe('BillingService', () => {
   });
 
   describe('getMyTransactions', () => {
-    it('returns patient transactions sorted by date', async () => {
+    it('returns patient transactions sorted by date with pagination', async () => {
       const transactions = [makeTransaction()];
       transactionModel.find.mockReturnValue({
         sort: () => ({
-          lean: () => ({ exec: () => Promise.resolve(transactions) }),
+          skip: () => ({
+            limit: () => ({
+              lean: () => ({ exec: () => Promise.resolve(transactions) }),
+            }),
+          }),
         }),
       });
+      transactionModel.countDocuments.mockResolvedValue(1);
 
       const result = await service.getMyTransactions(mockUser);
-      expect(result).toEqual([
+      expect(result.items).toEqual([
         expect.objectContaining({
           id: transactions[0]._id.toString(),
           consultationId: CONSULTATION_ID,
@@ -277,6 +291,9 @@ describe('BillingService', () => {
           sandbox: true,
         }),
       ]);
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
     });
   });
 

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
+import { isDuplicateKeyError } from '../common/utils/errors.util';
 import { Model, Types } from 'mongoose';
 import {
   Consultation,
@@ -28,6 +29,9 @@ import {
   FollowupDocument,
   FollowupStatus,
 } from './schemas/followup.schema';
+
+const FOLLOWUP_OFFSET_HOURS_72H = 72; // Primera revisión: 3 días post-consulta
+const FOLLOWUP_OFFSET_HOURS_7D = 24 * 7; // Segunda revisión: 1 semana post-consulta
 
 @Injectable()
 export class FollowupsService {
@@ -53,7 +57,7 @@ export class FollowupsService {
       return;
     }
 
-    const offsets = [72, 24 * 7];
+    const offsets = [FOLLOWUP_OFFSET_HOURS_72H, FOLLOWUP_OFFSET_HOURS_7D];
     const created: FollowupDocument[] = [];
     for (const offsetHours of offsets) {
       const scheduledAt = new Date(
@@ -376,7 +380,7 @@ export class FollowupsService {
       ]);
       return escalated;
     } catch (error: unknown) {
-      if (!this.isDuplicateKeyError(error)) {
+      if (!isDuplicateKeyError(error)) {
         throw error;
       }
 
@@ -394,15 +398,6 @@ export class FollowupsService {
 
       return existing;
     }
-  }
-
-  private isDuplicateKeyError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 11000
-    );
   }
 
   private toResponse(

@@ -399,31 +399,48 @@ export class AiService {
 
   async getUsageMetrics() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const logs = await this.auditLogModel
-      .find({ createdAt: { $gte: since } })
-      .lean()
-      .exec();
 
-    const total = logs.length;
-    const successCount = logs.filter((l) => l.status === 'success').length;
-    const errorCount = total - successCount;
-    const avgLatencyMs =
-      total > 0
-        ? Math.round(logs.reduce((sum, l) => sum + l.latencyMs, 0) / total)
-        : 0;
+    type SummaryAgg = {
+      total: number;
+      successCount: number;
+      avgLatencyMs: number;
+    };
+    type ByKeyAgg = { _id: string; count: number };
 
-    const byPromptKey: Record<string, number> = {};
-    for (const log of logs) {
-      byPromptKey[log.promptKey] = (byPromptKey[log.promptKey] ?? 0) + 1;
-    }
+    const [summaryResult, byKeyResult] = await Promise.all([
+      this.auditLogModel.aggregate<SummaryAgg>([
+        { $match: { createdAt: { $gte: since } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            successCount: {
+              $sum: { $cond: [{ $eq: ['$status', 'success'] }, 1, 0] },
+            },
+            avgLatencyMs: { $avg: '$latencyMs' },
+          },
+        },
+      ]),
+      this.auditLogModel.aggregate<ByKeyAgg>([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: '$promptKey', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const summary = summaryResult[0];
+    const total = summary?.total ?? 0;
+    const successCount = summary?.successCount ?? 0;
+    const byPromptKey = Object.fromEntries(
+      byKeyResult.map((r) => [r._id, r.count]),
+    );
 
     return {
       windowHours: 24,
       total,
       successCount,
-      errorCount,
+      errorCount: total - successCount,
       successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
-      avgLatencyMs,
+      avgLatencyMs: Math.round(summary?.avgLatencyMs ?? 0),
       byPromptKey,
     };
   }

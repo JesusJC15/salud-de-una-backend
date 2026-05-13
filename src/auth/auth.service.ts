@@ -25,6 +25,7 @@ import {
   RefreshSession,
   RefreshSessionDocument,
 } from './schemas/refresh-session.schema';
+import { isDuplicateKeyError } from '../common/utils/errors.util';
 import { ProvisioningService } from './provisioning.service';
 
 type JoseModule = typeof import('jose');
@@ -137,10 +138,10 @@ export class AuthService {
         professionalLicense: dto.professionalLicense,
       });
     } catch (err: unknown) {
-      if (this.isDuplicateKeyError(err, 'personalId')) {
+      if (isDuplicateKeyError(err, 'personalId')) {
         throw new ConflictException('El ID personal ya esta registrado');
       }
-      if (this.isDuplicateKeyError(err, 'email')) {
+      if (isDuplicateKeyError(err, 'email')) {
         throw new ConflictException('El correo ya esta registrado');
       }
       throw err;
@@ -665,23 +666,6 @@ export class AuthService {
 
     const candidate = payload as Record<string, unknown>;
     return typeof candidate.exp === 'number';
-  }
-
-  private isDuplicateKeyError(err: unknown, field: string): boolean {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as Record<string, unknown>).code === 11000
-    ) {
-      const keyPattern = (err as Record<string, unknown>).keyPattern;
-      return (
-        typeof keyPattern === 'object' &&
-        keyPattern !== null &&
-        field in (keyPattern as Record<string, unknown>)
-      );
-    }
-    return false;
   }
 
   private async assertEmailDoesNotExist(email: string): Promise<void> {

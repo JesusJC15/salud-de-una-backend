@@ -89,18 +89,6 @@ export class BillingService {
       );
     }
 
-    const existing = await this.transactionModel
-      .findOne({ consultationId: new Types.ObjectId(consultationId) })
-      .lean()
-      .exec();
-
-    if (existing) {
-      if (existing.status === 'COMPLETED') {
-        throw new ConflictException('Esta consulta ya fue pagada');
-      }
-      return existing;
-    }
-
     const price = await this.billingPriceModel
       .findOne({ specialty: consultation.specialty, active: true })
       .lean()
@@ -112,16 +100,31 @@ export class BillingService {
       );
     }
 
-    const [transaction] = await this.transactionModel.create([
-      {
-        patientId: new Types.ObjectId(user.userId),
-        consultationId: new Types.ObjectId(consultationId),
-        specialty: consultation.specialty,
-        amount: price.amount,
-        currency: price.currency ?? 'COP',
-        status: 'PENDING',
-      },
-    ]);
+    // Usar findOneAndUpdate + $setOnInsert + upsert para evitar duplicados en requests concurrentes
+    const transaction = await this.transactionModel
+      .findOneAndUpdate(
+        { consultationId: new Types.ObjectId(consultationId) },
+        {
+          $setOnInsert: {
+            patientId: new Types.ObjectId(user.userId),
+            consultationId: new Types.ObjectId(consultationId),
+            specialty: consultation.specialty,
+            amount: price.amount,
+            currency: price.currency ?? 'COP',
+            status: 'PENDING',
+          },
+        },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+      )
+      .exec();
+
+    if (!transaction) {
+      throw new BadRequestException('No se pudo crear la transacción');
+    }
+
+    if (transaction.status === 'COMPLETED') {
+      throw new ConflictException('Esta consulta ya fue pagada');
+    }
 
     return this.toTransactionResponse(transaction.toObject());
   }
@@ -214,14 +217,33 @@ export class BillingService {
     return response!;
   }
 
-  async getMyTransactions(user: RequestUser) {
-    const items = await this.transactionModel
-      .find({ patientId: new Types.ObjectId(user.userId) })
-      .sort({ createdAt: -1 })
-      .lean()
-      .exec();
+  async getMyTransactions(
+    user: RequestUser,
+    params: { page?: number; limit?: number } = {},
+  ) {
+    const page = Math.max(params.page ?? 1, 1);
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+    const skip = (page - 1) * limit;
 
-    return items.map((item) => this.toTransactionResponse(item));
+    const [items, total] = await Promise.all([
+      this.transactionModel
+        .find({ patientId: new Types.ObjectId(user.userId) })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.transactionModel.countDocuments({
+        patientId: new Types.ObjectId(user.userId),
+      }),
+    ]);
+
+    return {
+      items: items.map((item) => this.toTransactionResponse(item)),
+      total,
+      page,
+      limit,
+    };
   }
 
   async getTransactionById(id: string, user: RequestUser) {

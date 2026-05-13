@@ -11,6 +11,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
+import { normalizeError } from '../common/utils/errors.util';
 import { ConsultationsService } from '../consultations/consultations.service';
 import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -517,7 +518,7 @@ export class TriageService {
         triageSession.status = 'FAILED';
         await triageSession.save();
 
-        const normalizedError = this.normalizeError(error);
+        const normalizedError = normalizeError(error);
 
         this.logger.error(
           JSON.stringify({
@@ -754,7 +755,7 @@ export class TriageService {
 
         if (shouldRetry) {
           const backoffMs = TRIAGE_ANALYSIS_AI_RETRY_BACKOFF_MS[attempt - 1];
-          const normalizedError = this.normalizeError(error);
+          const normalizedError = normalizeError(error);
 
           this.logger.warn(
             JSON.stringify({
@@ -789,7 +790,7 @@ export class TriageService {
         this.isAiUnavailableByDesign(lastError))
     ) {
       const fallbackPriority = this.getRuleBasedBasePriority(redFlags);
-      const normalizedError = this.normalizeError(lastError);
+      const normalizedError = normalizeError(lastError);
       const fallbackForNoAi = this.isAiUnavailableByDesign(lastError);
 
       this.logger.warn(
@@ -827,7 +828,7 @@ export class TriageService {
   }
 
   private isTransientAiError(error: unknown): boolean {
-    const normalizedError = this.normalizeError(error);
+    const normalizedError = normalizeError(error);
     const signal =
       `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
 
@@ -848,7 +849,7 @@ export class TriageService {
   }
 
   private isAiUnavailableByDesign(error: unknown): boolean {
-    const normalizedError = this.normalizeError(error);
+    const normalizedError = normalizeError(error);
     const signal =
       `${normalizedError.name} ${normalizedError.message}`.toLowerCase();
 
@@ -860,25 +861,6 @@ export class TriageService {
       'ai is disabled',
       'not implemented',
     ].some((keyword) => signal.includes(keyword));
-  }
-
-  private normalizeError(error: unknown): {
-    name: string;
-    message: string;
-    stack?: string;
-  } {
-    if (error instanceof Error) {
-      return {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      };
-    }
-
-    return {
-      name: 'UnknownError',
-      message: String(error),
-    };
   }
 
   private async wait(ms: number): Promise<void> {
@@ -1257,7 +1239,7 @@ export class TriageService {
       });
     } catch (error: unknown) {
       this.logger.warn(
-        `No fue posible generar evidencia RAG de triage: ${this.normalizeError(error).message}`,
+        `No fue posible generar evidencia RAG de triage: ${normalizeError(error).message}`,
       );
       return undefined;
     }

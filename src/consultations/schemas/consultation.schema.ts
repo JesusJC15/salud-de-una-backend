@@ -143,6 +143,8 @@ export class Consultation {
 export const ConsultationSchema = SchemaFactory.createForClass(Consultation);
 
 ConsultationSchema.index({ status: 1, priority: 1, createdAt: 1 });
+ConsultationSchema.index({ patientId: 1, status: 1, createdAt: -1 });
+ConsultationSchema.index({ assignedDoctorId: 1, status: 1, createdAt: -1 });
 ConsultationSchema.index(
   { sourceFollowupId: 1 },
   { unique: true, sparse: true },

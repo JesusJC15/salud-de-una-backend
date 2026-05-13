@@ -54,7 +54,7 @@ import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
       ],
       validationSchema,
       validationOptions: {
-        abortEarly: true,
+        abortEarly: false,
         allowUnknown: true,
       },
     }),

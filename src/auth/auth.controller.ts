@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import {
   BadRequestException,
   Body,
@@ -105,7 +106,7 @@ export class AuthController {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: email.toLowerCase().trim(),
-      passwordHash: await bcrypt.hash(auth0UserId, 8),
+      passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
       birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
       gender: dto.gender,
     });
@@ -200,7 +201,7 @@ export class AuthController {
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: email.toLowerCase().trim(),
-      passwordHash: await bcrypt.hash(auth0UserId, 8),
+      passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
       specialty: dto.specialty,
       personalId: dto.personalId,
       phoneNumber: dto.phoneNumber,

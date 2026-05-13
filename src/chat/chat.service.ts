@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -20,6 +21,8 @@ import {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     @InjectModel(ConsultationMessage.name)
     private readonly consultationMessageModel: Model<ConsultationMessageDocument>,
@@ -160,6 +163,15 @@ export class ChatService {
     }
 
     if (user.role === UserRole.ADMIN) {
+      this.logger.log(
+        JSON.stringify({
+          event: 'admin.chat.accessed',
+          adminId: user.userId,
+          consultationId,
+          patientId: consultation.patientId.toString(),
+          timestamp: new Date().toISOString(),
+        }),
+      );
       return consultation;
     }
 

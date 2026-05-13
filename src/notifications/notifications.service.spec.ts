@@ -26,7 +26,6 @@ function createFindChain(result: unknown) {
   };
 }
 
-type FetchMock = jest.MockedFunction<typeof fetch>;
 type SendToUserMock = jest.MockedFunction<
   PushNotificationsService['sendToUser']
 >;
@@ -469,46 +468,6 @@ describe('NotificationsService', () => {
     });
     expect(result.read).toBe(true);
     expect(result.readAt).toBeInstanceOf(Date);
-  });
-
-  describe('sendExpoPush', () => {
-    const originalFetch = globalThis.fetch;
-
-    afterEach(() => {
-      globalThis.fetch = originalFetch;
-    });
-
-    it('fires a POST to the Expo push endpoint', () => {
-      const fetchMock = jest
-        .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
-        .mockResolvedValue({ ok: true } as Response);
-      globalThis.fetch = fetchMock as FetchMock;
-
-      service.sendExpoPush('ExponentPushToken[abc]', 'Title', 'Body');
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://exp.host/push/send',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-
-    it('logs a warning when the fetch fails', async () => {
-      const fetchMock = jest
-        .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
-        .mockRejectedValue(new Error('network error'));
-      globalThis.fetch = fetchMock as FetchMock;
-      const warnSpy = jest
-        .spyOn(service['logger'], 'warn')
-        .mockImplementation(() => undefined);
-
-      service.sendExpoPush('ExponentPushToken[abc]', 'Title', 'Body');
-      await new Promise((r) => setImmediate(r));
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Expo push failed'),
-      );
-      warnSpy.mockRestore();
-    });
   });
 
   it('markAllAsRead should return 0 if nothing updated', async () => {
