@@ -1,3 +1,5 @@
+type TelemetryModule = typeof import('./telemetry');
+
 describe('observability/telemetry', () => {
   const ORIGINAL_ENV = process.env;
 
@@ -12,11 +14,17 @@ describe('observability/telemetry', () => {
     process.env = ORIGINAL_ENV;
   });
 
+  const importTelemetryModule = async (): Promise<TelemetryModule> => {
+    const module = (await import('./telemetry.js')) as TelemetryModule;
+    return module;
+  };
+
   const mockOpenTelemetryDependencies = (options?: {
-    shutdown?: jest.Mock;
+    shutdown?: jest.Mock<Promise<void>, []>;
   }) => {
     const start = jest.fn();
-    const shutdown = options?.shutdown ?? jest.fn().mockResolvedValue(undefined);
+    const shutdown =
+      options?.shutdown ?? jest.fn<Promise<void>, []>().mockResolvedValue();
     const nodeSdk = { start, shutdown };
     const nodeSdkConstructor = jest.fn().mockImplementation(() => nodeSdk);
     const otlpTraceExporterConstructor = jest
@@ -44,20 +52,24 @@ describe('observability/telemetry', () => {
     };
   };
 
-  it('returns null sdk by default (test runtime)', () => {
+  it('returns null sdk by default (test runtime)', async () => {
     process.env.NODE_ENV = 'test';
-    const mod = require('./telemetry');
+
+    const mod = await importTelemetryModule();
+
     expect(mod.getTelemetrySdk()).toBeNull();
   });
 
-  it('returns null when OTEL_ENABLED=true but running in test worker', () => {
+  it('returns null when OTEL_ENABLED=true but running in test worker', async () => {
     process.env.OTEL_ENABLED = 'true';
     process.env.JEST_WORKER_ID = '1';
-    const mod = require('./telemetry');
+
+    const mod = await importTelemetryModule();
+
     expect(mod.getTelemetrySdk()).toBeNull();
   });
 
-  it('initializes SDK when OTEL_ENABLED=true and not test runtime', () => {
+  it('initializes SDK when OTEL_ENABLED=true and not test runtime', async () => {
     const {
       getNodeAutoInstrumentations,
       nodeSdk,
@@ -74,13 +86,15 @@ describe('observability/telemetry', () => {
 
     const processOnceSpy = jest
       .spyOn(process, 'once')
-      .mockImplementation(
-        ((_: NodeJS.Signals, __: () => void) => process) as typeof process.once,
-      );
+      .mockImplementation((signal, handler) => {
+        expect(['SIGTERM', 'SIGINT']).toContain(signal);
+        expect(typeof handler).toBe('function');
+        return process;
+      });
 
-    const mod = require('./telemetry');
+    const mod = await importTelemetryModule();
 
-    expect(mod.getTelemetrySdk()).not.toBeNull();
+    expect(mod.getTelemetrySdk()).toBe(nodeSdk as never);
     expect(nodeSdkConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
         serviceName: 'custom-telemetry-service',
@@ -99,7 +113,7 @@ describe('observability/telemetry', () => {
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to the generic OTLP endpoint when traces endpoint is unset', () => {
+  it('falls back to the generic OTLP endpoint when traces endpoint is unset', async () => {
     const { nodeSdkConstructor, otlpTraceExporterConstructor } =
       mockOpenTelemetryDependencies();
 
@@ -108,7 +122,7 @@ describe('observability/telemetry', () => {
     process.env.OTEL_ENABLED = 'true';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
 
-    const mod = require('./telemetry');
+    const mod = await importTelemetryModule();
 
     expect(mod.getTelemetrySdk()).not.toBeNull();
     expect(otlpTraceExporterConstructor).toHaveBeenCalledWith({
@@ -122,38 +136,42 @@ describe('observability/telemetry', () => {
   });
 
   it('shuts down best-effort when the process signal handler runs', async () => {
-    const shutdown = jest.fn().mockRejectedValue(new Error('shutdown failed'));
+    const shutdown = jest
+      .fn<Promise<void>, []>()
+      .mockRejectedValue(new Error('shutdown failed'));
     const { nodeSdk } = mockOpenTelemetryDependencies({ shutdown });
 
     delete process.env.JEST_WORKER_ID;
     delete process.env.NODE_ENV;
     process.env.OTEL_ENABLED = 'true';
 
-    const signalHandlers = new Map<NodeJS.Signals, () => void>();
-    jest.spyOn(process, 'once').mockImplementation(
-      ((signal: NodeJS.Signals, handler: () => void) => {
+    const signalHandlers = new Map<string, () => void>();
+    jest.spyOn(process, 'once').mockImplementation((signal, handler) => {
+      if (typeof signal === 'string') {
         signalHandlers.set(signal, handler);
-        return process;
-      }) as typeof process.once,
-    );
+      }
+      return process;
+    });
 
-    const mod = require('./telemetry');
-    expect(mod.getTelemetrySdk()).toBe(nodeSdk);
+    const mod = await importTelemetryModule();
+    expect(mod.getTelemetrySdk()).toBe(nodeSdk as never);
 
     signalHandlers.get('SIGTERM')?.();
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(() => resolve());
+    });
 
     expect(shutdown).toHaveBeenCalledTimes(1);
   });
 
-  it('does not create a trace exporter when no OTLP endpoint is configured', () => {
+  it('does not create a trace exporter when no OTLP endpoint is configured', async () => {
     const { nodeSdkConstructor } = mockOpenTelemetryDependencies();
 
     delete process.env.JEST_WORKER_ID;
     delete process.env.NODE_ENV;
     process.env.OTEL_ENABLED = 'true';
 
-    require('./telemetry');
+    await importTelemetryModule();
 
     expect(nodeSdkConstructor).toHaveBeenCalledWith(
       expect.objectContaining({

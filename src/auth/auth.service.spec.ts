@@ -97,6 +97,17 @@ type AuthServiceInternals = {
   parseUserRole(value: unknown): UserRole | null;
   resolveAuth0Issuer(): string | null;
   extractBearerToken(authorizationHeader?: string): string;
+  syncAuth0Subject(
+    role: UserRole,
+    userId: string,
+    auth0Subject: string,
+  ): Promise<void>;
+  linkAuth0SubjectForResolvedUser(
+    user: RequestUser,
+    currentAuth0Subject: string | null | undefined,
+    nextAuth0Subject: string,
+  ): Promise<RequestUser | null>;
+  getAuth0Jwks(auth0Issuer: string): Promise<unknown>;
 };
 
 describe('AuthService', () => {

@@ -1,28 +1,39 @@
 import knowledgeConfig from './knowledge.config';
 
+type KnowledgeConfig = {
+  uploadMaxBytes: number;
+  allowedMimeTypes: string[];
+  urlAllowlist: string[];
+  fetchTimeoutMs: number;
+  maxUrlContentBytes: number;
+};
+
 describe('knowledge.config', () => {
-  const ORIGINAL = process.env;
+  const ORIGINAL_ENV = process.env;
 
   beforeEach(() => {
-    process.env = { ...ORIGINAL };
+    process.env = { ...ORIGINAL_ENV };
   });
 
   afterAll(() => {
-    process.env = ORIGINAL;
+    process.env = ORIGINAL_ENV;
   });
+
+  const getConfig = (): KnowledgeConfig => knowledgeConfig();
 
   it('parses CSV env values into arrays and trims/lowercases entries', () => {
     process.env.KNOWLEDGE_ALLOWED_MIME_TYPES =
       ' image/PNG, text/HTML,,application/pdf ';
     process.env.KNOWLEDGE_URL_ALLOWLIST = 'https://a.COM, , http://b.com/path ';
 
-    const cfg = (knowledgeConfig as any)();
-    expect(cfg.allowedMimeTypes).toEqual([
+    const config = getConfig();
+
+    expect(config.allowedMimeTypes).toEqual([
       'image/png',
       'text/html',
       'application/pdf',
     ]);
-    expect(cfg.urlAllowlist).toEqual(['https://a.com', 'http://b.com/path']);
+    expect(config.urlAllowlist).toEqual(['https://a.com', 'http://b.com/path']);
   });
 
   it('parses positive integers and falls back on invalid values', () => {
@@ -30,11 +41,11 @@ describe('knowledge.config', () => {
     process.env.KNOWLEDGE_FETCH_TIMEOUT_MS = '20000';
     process.env.KNOWLEDGE_MAX_URL_CONTENT_BYTES = '0';
 
-    const cfg = (knowledgeConfig as any)();
-    expect(cfg.uploadMaxBytes).toBe(12345);
-    expect(cfg.fetchTimeoutMs).toBe(20000);
-    // zero is not positive -> fallback default
-    expect(cfg.maxUrlContentBytes).toBe(5 * 1024 * 1024);
+    const config = getConfig();
+
+    expect(config.uploadMaxBytes).toBe(12345);
+    expect(config.fetchTimeoutMs).toBe(20000);
+    expect(config.maxUrlContentBytes).toBe(5 * 1024 * 1024);
   });
 
   it('returns defaults when env vars are missing or invalid', () => {
@@ -44,11 +55,12 @@ describe('knowledge.config', () => {
     delete process.env.KNOWLEDGE_FETCH_TIMEOUT_MS;
     delete process.env.KNOWLEDGE_MAX_URL_CONTENT_BYTES;
 
-    const cfg = (knowledgeConfig as any)();
-    expect(cfg.allowedMimeTypes).toEqual([]);
-    expect(cfg.urlAllowlist).toEqual([]);
-    expect(cfg.uploadMaxBytes).toBe(5 * 1024 * 1024);
-    expect(cfg.fetchTimeoutMs).toBe(10000);
-    expect(cfg.maxUrlContentBytes).toBe(5 * 1024 * 1024);
+    const config = getConfig();
+
+    expect(config.allowedMimeTypes).toEqual([]);
+    expect(config.urlAllowlist).toEqual([]);
+    expect(config.uploadMaxBytes).toBe(5 * 1024 * 1024);
+    expect(config.fetchTimeoutMs).toBe(10000);
+    expect(config.maxUrlContentBytes).toBe(5 * 1024 * 1024);
   });
 });

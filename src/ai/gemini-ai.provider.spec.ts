@@ -131,10 +131,7 @@ describe('GeminiAiProvider', () => {
 
   it('embedContents should map embeddings and metadata', async () => {
     client.models.embedContent.mockResolvedValue({
-      embeddings: [
-        { values: [1, '2', 3.5] },
-        { values: ['4.25'] },
-      ],
+      embeddings: [{ values: [1, '2', 3.5] }, { values: ['4.25'] }],
       metadata: {
         billableCharacterCount: 25,
       },
@@ -159,10 +156,7 @@ describe('GeminiAiProvider', () => {
     expect(result).toMatchObject({
       provider: 'gemini',
       model: 'text-embedding-004',
-      embeddings: [
-        [1, 2, 3.5],
-        [4.25],
-      ],
+      embeddings: [[1, 2, 3.5], [4.25]],
       requestId: 'corr-embed-1',
       tokenUsage: {
         billableCharacterCount: 25,
