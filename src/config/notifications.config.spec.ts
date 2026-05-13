@@ -30,4 +30,16 @@ describe('notifications.config', () => {
     );
     expect(config.expoPushAccessToken).toBe('');
   });
+
+  it('handles whitespace-only env vars and trims them', () => {
+    process.env.EXPO_PUSH_ENDPOINT = '   ';
+    process.env.EXPO_PUSH_ACCESS_TOKEN = '  ';
+
+    const config = notificationsConfig();
+
+    expect(config.expoPushEndpoint).toBe(
+      'https://exp.host/--/api/v2/push/send',
+    );
+    expect(config.expoPushAccessToken).toBe('');
+  });
 });

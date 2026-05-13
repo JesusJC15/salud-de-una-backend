@@ -4,6 +4,7 @@ describe('GeminiAiProvider', () => {
   const client = {
     models: {
       generateContent: jest.fn(),
+      embedContent: jest.fn(),
     },
   };
 
@@ -126,5 +127,79 @@ describe('GeminiAiProvider', () => {
       status: 'down',
       error: 'timeout',
     });
+  });
+
+  it('embedContents should map embeddings and metadata', async () => {
+    client.models.embedContent.mockResolvedValue({
+      embeddings: [
+        { values: [1, '2', 3.5] },
+        { values: ['4.25'] },
+      ],
+      metadata: {
+        billableCharacterCount: 25,
+      },
+    });
+
+    const result = await provider.embedContents({
+      model: 'text-embedding-004',
+      contents: ['dolor de cabeza', 'fiebre'],
+      taskType: 'RETRIEVAL_DOCUMENT',
+      outputDimensionality: 128,
+      correlationId: 'corr-embed-1',
+    });
+
+    expect(client.models.embedContent).toHaveBeenCalledWith({
+      model: 'text-embedding-004',
+      contents: ['dolor de cabeza', 'fiebre'],
+      config: {
+        taskType: 'RETRIEVAL_DOCUMENT',
+        outputDimensionality: 128,
+      },
+    });
+    expect(result).toMatchObject({
+      provider: 'gemini',
+      model: 'text-embedding-004',
+      embeddings: [
+        [1, 2, 3.5],
+        [4.25],
+      ],
+      requestId: 'corr-embed-1',
+      tokenUsage: {
+        billableCharacterCount: 25,
+      },
+    });
+  });
+
+  it('embedContents should tolerate invalid embeddings and metadata', async () => {
+    client.models.embedContent.mockResolvedValue({
+      embeddings: [{ values: null }, {}],
+      metadata: 'n/a',
+    });
+
+    const result = await provider.embedContents({
+      model: 'text-embedding-004',
+      contents: ['solo uno'],
+      taskType: 'RETRIEVAL_QUERY',
+    });
+
+    expect(result.embeddings).toEqual([[], []]);
+    expect(result.requestId).toBeDefined();
+    expect(result.tokenUsage).toBeUndefined();
+  });
+
+  it('embedContents should return an empty array when the provider omits embeddings', async () => {
+    client.models.embedContent.mockResolvedValue({
+      embeddings: null,
+      metadata: {},
+    });
+
+    const result = await provider.embedContents({
+      model: 'text-embedding-004',
+      contents: ['solo uno'],
+      taskType: 'SEMANTIC_SIMILARITY',
+    });
+
+    expect(result.embeddings).toEqual([]);
+    expect(result.tokenUsage).toEqual({});
   });
 });

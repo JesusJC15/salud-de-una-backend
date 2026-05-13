@@ -1,3 +1,52 @@
+import { NotificationsGateway } from './notifications.gateway';
+
+describe('NotificationsGateway', () => {
+  const authService: any = {};
+
+  it('allows undefined origin when no config (dev)', () => {
+    const gw = new NotificationsGateway(authService, null);
+    expect((gw as any).isAllowedOrigin(undefined)).toBe(true);
+    expect((gw as any).isAllowedOrigin('http://example.com')).toBe(true);
+  });
+
+  it('handles origin arrays and allowed origins from config', () => {
+    const config: any = {
+      get: (key: string) => {
+        if (key === 'web.corsOriginsPatient') return ['http://a.com'];
+        if (key === 'web.corsOriginsStaff') return [];
+        return 'development';
+      },
+    };
+
+    const gw = new NotificationsGateway(authService, config);
+    expect((gw as any).isAllowedOrigin(['http://a.com', 'x'])).toBe(true);
+    expect((gw as any).isAllowedOrigin('http://a.com')).toBe(true);
+    expect((gw as any).isAllowedOrigin('http://b.com')).toBe(false);
+  });
+
+  it('rejects origins in production when no allowlist is configured', () => {
+    const config: any = {
+      get: (key: string) => {
+        if (key === 'web.corsOriginsPatient') return [];
+        if (key === 'web.corsOriginsStaff') return [];
+        return 'production';
+      },
+    };
+
+    const gw = new NotificationsGateway(authService, config);
+    expect((gw as any).isAllowedOrigin('http://example.com')).toBe(false);
+  });
+
+  it('emitToUser calls socket server emit', () => {
+    const gw = new NotificationsGateway(authService, null);
+    const emit = jest.fn();
+    const to = jest.fn().mockReturnValue({ emit });
+    (gw as any).server = { to } as any;
+    gw.emitToUser('u1', { x: 1 });
+    expect(to).toHaveBeenCalledWith('user:u1');
+    expect(emit).toHaveBeenCalledWith('notification:new', { x: 1 });
+  });
+});
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from '../auth/auth.service';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -98,6 +147,29 @@ describe('NotificationsGateway', () => {
       expect(authService.authenticateAccessToken).toHaveBeenCalledWith(
         'header-token',
       );
+    });
+
+    it('disconnects when origin is not allowed', async () => {
+      const restrictedGateway = new NotificationsGateway(
+        authService as never,
+        {
+          get: (key: string) => {
+            if (key === 'web.corsOriginsPatient')
+              return ['http://allowed.example.com'];
+            if (key === 'web.corsOriginsStaff') return [];
+            return 'production';
+          },
+        } as never,
+      );
+      const socket = makeSocket({
+        handshake: {
+          auth: { token: 'valid-token' },
+          headers: { origin: 'http://blocked.example.com' },
+        },
+      });
+      await restrictedGateway.handleConnection(socket as never);
+      expect(socket.disconnect).toHaveBeenCalled();
+      expect(authService.authenticateAccessToken).not.toHaveBeenCalled();
     });
   });
 });

@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import { UserRole } from '../common/enums/user-role.enum';
 import { PushNotificationsService } from './push-notifications.service';
 import { NotificationsService } from './notifications.service';
+import { NotificationsGateway } from './notifications.gateway';
 import { Notification } from './schemas/notification.schema';
 
 type NotificationCreatePayload = Array<{
@@ -42,9 +43,18 @@ describe('NotificationsService', () => {
   const pushNotificationsService: { sendToUser: SendToUserMock } = {
     sendToUser: jest.fn(),
   };
+  const notificationsGateway = {
+    emitToUser: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    notificationModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    ]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
@@ -56,6 +66,10 @@ describe('NotificationsService', () => {
           provide: PushNotificationsService,
           useValue: pushNotificationsService,
         },
+        {
+          provide: NotificationsGateway,
+          useValue: notificationsGateway,
+        },
       ],
     }).compile();
 
@@ -63,7 +77,12 @@ describe('NotificationsService', () => {
   });
 
   it('createDoctorStatusChange should create notification', async () => {
-    notificationModel.create.mockResolvedValue([{}]);
+    notificationModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    ]);
 
     await service.createDoctorStatusChange(
       new Types.ObjectId().toString(),
@@ -72,10 +91,16 @@ describe('NotificationsService', () => {
     );
 
     expect(notificationModel.create).toHaveBeenCalled();
+    expect(notificationsGateway.emitToUser).toHaveBeenCalled();
   });
 
   it('createDoctorStatusChange should handle missing notes', async () => {
-    notificationModel.create.mockResolvedValue([{}]);
+    notificationModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    ]);
 
     await service.createDoctorStatusChange(
       new Types.ObjectId().toString(),
@@ -118,7 +143,12 @@ describe('NotificationsService', () => {
   });
 
   it('createUserNotification should persist and send push when payload includes push data', async () => {
-    notificationModel.create.mockResolvedValue([{}]);
+    notificationModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    ]);
     pushNotificationsService.sendToUser.mockResolvedValue({
       sent: 1,
       removedTokens: [],
@@ -148,10 +178,39 @@ describe('NotificationsService', () => {
       data: { consultationId: 'consultation-1' },
     });
     expect(pushCall?.userId).toEqual(expect.any(String));
+    expect(notificationsGateway.emitToUser).toHaveBeenCalled();
+  });
+
+  it('createUserNotification should accept a session and still emit locally', async () => {
+    notificationModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    ]);
+
+    const session = {} as never;
+    await service.createUserNotification({
+      userId: new Types.ObjectId().toString(),
+      type: 'SYSTEM',
+      status: 'INFO',
+      message: 'Con session',
+      session,
+    });
+
+    expect(notificationModel.create).toHaveBeenCalledWith(expect.any(Array), {
+      session,
+    });
+    expect(notificationsGateway.emitToUser).toHaveBeenCalled();
   });
 
   it('createUserNotification should skip push delivery when push payload is absent', async () => {
-    notificationModel.create.mockResolvedValue([{}]);
+    notificationModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    ]);
 
     await service.createUserNotification({
       userId: new Types.ObjectId().toString(),
@@ -178,6 +237,26 @@ describe('NotificationsService', () => {
         sourceEventId: 'event-1',
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('isDuplicateSourceEvent should only match sourceEventId duplicates', () => {
+    expect(
+      (
+        service as unknown as {
+          isDuplicateSourceEvent(error: unknown): boolean;
+        }
+      ).isDuplicateSourceEvent({ code: 11000, keyPattern: { other: 1 } }),
+    ).toBe(false);
+    expect(
+      (
+        service as unknown as {
+          isDuplicateSourceEvent(error: unknown): boolean;
+        }
+      ).isDuplicateSourceEvent({
+        code: 11000,
+        keyPattern: { sourceEventId: 1 },
+      }),
+    ).toBe(true);
   });
 
   it('createUserNotification should rethrow non-duplicate persistence errors', async () => {

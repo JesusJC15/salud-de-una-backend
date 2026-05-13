@@ -221,6 +221,53 @@ describe('PatientsService', () => {
     expect(authService.revokeAllRefreshSessionsForUser).not.toHaveBeenCalled();
   });
 
+  it('updateMe should reject email changes without currentPassword', async () => {
+    const session = mockSession();
+    const patient = createPatientDocument();
+    patientModel.findById.mockReturnValue(createDocumentQuery(patient));
+
+    await expect(
+      service.updateMe(
+        {
+          userId: patient.id,
+          email: patient.email,
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        {
+          email: 'new@example.com',
+        },
+      ),
+    ).rejects.toThrow('currentPassword es obligatorio para cambios sensibles');
+
+    expect(session.withTransaction).toHaveBeenCalled();
+  });
+
+  it('updateMe should reject when the new password matches the current one', async () => {
+    const session = mockSession();
+    const patient = createPatientDocument({
+      passwordHash: bcrypt.hashSync('StrongP@ss1', 4),
+    });
+    patientModel.findById.mockReturnValue(createDocumentQuery(patient));
+
+    await expect(
+      service.updateMe(
+        {
+          userId: patient.id,
+          email: patient.email,
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        {
+          newPassword: 'StrongP@ss1',
+          currentPassword: 'StrongP@ss1',
+        },
+      ),
+    ).rejects.toThrow('La nueva contraseña debe ser diferente a la actual');
+
+    expect(session.withTransaction).toHaveBeenCalled();
+  });
+
   it('updateMe should update email when currentPassword is provided', async () => {
     const patient = createPatientDocument();
     patientModel.findById.mockReturnValue(createDocumentQuery(patient));
@@ -519,6 +566,49 @@ describe('PatientsService', () => {
       expect(patient.isActive).toBe(false);
       expect(patient.isAnonymized).toBe(true);
       expect(patient.save).toHaveBeenCalled();
+      expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+    });
+
+    it('should anonymize without a database session manager', async () => {
+      const localService = new PatientsService(
+        null,
+        patientModel as never,
+        consultationModel as never,
+        triageSessionModel as never,
+        followupModel as never,
+        transactionModel as never,
+        authService as never,
+        patientTimelineService as never,
+      );
+      const patient = createPatientDocument();
+      patientModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(patient),
+      });
+
+      await localService.anonymizeAccount(user);
+
+      expect(patient.isAnonymized).toBe(true);
+      expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+    });
+
+    it('should fall back when the session object lacks transaction helpers', async () => {
+      const patient = createPatientDocument();
+      patientModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(patient),
+      });
+      connection.startSession.mockResolvedValue({});
+
+      await service.anonymizeAccount(user);
+
+      expect(patient.isAnonymized).toBe(true);
       expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
         user.userId,
         UserRole.PATIENT,

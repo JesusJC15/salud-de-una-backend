@@ -1675,4 +1675,123 @@ describe('AuthService', () => {
       UnauthorizedException,
     );
   });
+
+  it('syncAuth0Subject should update the matching role collection', async () => {
+    const updateResult = { exec: jest.fn().mockResolvedValue(undefined) };
+    patientModel.updateOne.mockReturnValue(updateResult);
+    doctorModel.updateOne.mockReturnValue(updateResult);
+    adminModel.updateOne.mockReturnValue(updateResult);
+
+    await getInternals().syncAuth0Subject(
+      UserRole.PATIENT,
+      'p1',
+      'auth0|patient',
+    );
+    await getInternals().syncAuth0Subject(
+      UserRole.DOCTOR,
+      'd1',
+      'auth0|doctor',
+    );
+    await getInternals().syncAuth0Subject(UserRole.ADMIN, 'a1', 'auth0|admin');
+
+    expect(patientModel.updateOne).toHaveBeenCalledWith(
+      { _id: 'p1' },
+      { $set: { auth0Subject: 'auth0|patient' } },
+    );
+    expect(doctorModel.updateOne).toHaveBeenCalledWith(
+      { _id: 'd1' },
+      { $set: { auth0Subject: 'auth0|doctor' } },
+    );
+    expect(adminModel.updateOne).toHaveBeenCalledWith(
+      { _id: 'a1' },
+      { $set: { auth0Subject: 'auth0|admin' } },
+    );
+  });
+
+  it('linkAuth0SubjectForResolvedUser should enforce active state and subject binding', async () => {
+    const syncSpy = jest
+      .spyOn(
+        service as unknown as { syncAuth0Subject: jest.Mock },
+        'syncAuth0Subject',
+      )
+      .mockResolvedValue(undefined);
+
+    await expect(
+      getInternals().linkAuth0SubjectForResolvedUser(
+        {
+          userId: 'p1',
+          email: 'ana@example.com',
+          role: UserRole.PATIENT,
+          isActive: false,
+        },
+        null,
+        'auth0|patient',
+      ),
+    ).resolves.toBeNull();
+
+    await expect(
+      getInternals().linkAuth0SubjectForResolvedUser(
+        {
+          userId: 'p1',
+          email: 'ana@example.com',
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        'auth0|other',
+        'auth0|patient',
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const user = {
+      userId: 'd1',
+      email: 'doc@example.com',
+      role: UserRole.DOCTOR,
+      isActive: true,
+    };
+
+    await expect(
+      getInternals().linkAuth0SubjectForResolvedUser(
+        user,
+        null,
+        'auth0|doctor',
+      ),
+    ).resolves.toEqual(user);
+    expect(syncSpy).toHaveBeenCalledWith('DOCTOR', 'd1', 'auth0|doctor');
+
+    syncSpy.mockClear();
+    await expect(
+      getInternals().linkAuth0SubjectForResolvedUser(
+        user,
+        'auth0|doctor',
+        'auth0|doctor',
+      ),
+    ).resolves.toEqual(user);
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  it('getAuth0Jwks should cache the JWKS loader per issuer', async () => {
+    const createRemoteJWKSet = jest.fn().mockReturnValue({ kid: 'cached' });
+    const getJoseModuleSpy = jest
+      .spyOn(
+        service as unknown as { getJoseModule: jest.Mock },
+        'getJoseModule',
+      )
+      .mockResolvedValue({ createRemoteJWKSet });
+
+    const first = await getInternals().getAuth0Jwks(
+      'https://issuer.example.com/',
+    );
+    const second = await getInternals().getAuth0Jwks(
+      'https://issuer.example.com/',
+    );
+    const third = await getInternals().getAuth0Jwks(
+      'https://other.example.com/',
+    );
+
+    expect(first).toEqual({ kid: 'cached' });
+    expect(second).toBe(first);
+    expect(third).toEqual({ kid: 'cached' });
+    expect(createRemoteJWKSet).toHaveBeenCalledTimes(2);
+    expect(getJoseModuleSpy).toHaveBeenCalledTimes(3);
+  });
 });

@@ -66,6 +66,45 @@ describe('OutboxService', () => {
     );
   });
 
+  it('should create consultation closed event without session', async () => {
+    outboxEventModel.create.mockResolvedValue([{ id: 'event-closed' }]);
+
+    const result = await service.createConsultationClosedEvent(
+      { consultationId: 'consultation-1' },
+      'corr-3',
+    );
+
+    expect(outboxEventModel.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          eventType: 'consultation.closed.v1',
+          aggregateType: 'consultation',
+          aggregateId: 'consultation-1',
+          correlationId: 'corr-3',
+          status: 'pending',
+        }),
+      ],
+      undefined,
+    );
+    expect(result).toEqual({ id: 'event-closed' });
+  });
+
+  it('should create consultation closed event with session', async () => {
+    const session = { id: 'session-2' };
+    outboxEventModel.create.mockResolvedValue([{ id: 'event-closed-session' }]);
+
+    await service.createConsultationClosedEvent(
+      { consultationId: 'consultation-2' },
+      'corr-4',
+      session as never,
+    );
+
+    expect(outboxEventModel.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ aggregateId: 'consultation-2' })],
+      { session },
+    );
+  });
+
   it('should claim next pending event', async () => {
     outboxEventModel.findOneAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ id: 'event-2' }),

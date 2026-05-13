@@ -81,6 +81,35 @@ describe('AppService', () => {
     );
   });
 
+  it('in production requires redis up to be ready', async () => {
+    process.env.NODE_ENV = 'production';
+    connectionMock.readyState = 1;
+    redisHealthService.getReadiness.mockResolvedValue({
+      status: 'up',
+      detail: 'Redis ok',
+      latencyMs: 5,
+      degraded: false,
+    });
+
+    const result = await appService.getReadiness();
+    expect(result.status).toBe('ready');
+    expect(result.checks.redis.status).toBe('up');
+  });
+
+  it('in production with redis down returns not_ready', async () => {
+    process.env.NODE_ENV = 'production';
+    connectionMock.readyState = 1;
+    redisHealthService.getReadiness.mockResolvedValue({
+      status: 'down',
+      detail: 'Redis down',
+      latencyMs: null,
+      degraded: true,
+    });
+
+    const result = await appService.getReadiness();
+    expect(result.status).toBe('not_ready');
+  });
+
   it('should return not_ready for unknown readyState', async () => {
     connectionMock.readyState = 3;
     const result = await appService.getReadiness();
