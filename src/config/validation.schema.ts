@@ -59,6 +59,11 @@ export const validationSchema = Joi.object({
     otherwise: Joi.string().allow('').optional(),
   }),
   GEMINI_MODEL: Joi.string().allow('').optional(),
+  AI_REQUEST_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(1_000)
+    .max(120_000)
+    .default(20_000),
   GEMINI_EMBEDDING_MODEL: Joi.string()
     .allow('')
     .default('gemini-embedding-001'),

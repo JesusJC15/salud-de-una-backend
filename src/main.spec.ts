@@ -264,7 +264,7 @@ describe('main bootstrap', () => {
     handlers.error?.(new Error('db-error'));
     handlers.disconnected?.();
 
-    const [middleware] = app.use.mock.calls[0];
+    const [middleware] = app.use.mock.calls[1];
     const res = { setHeader: jest.fn() };
     const next = jest.fn();
     middleware({}, res, next);

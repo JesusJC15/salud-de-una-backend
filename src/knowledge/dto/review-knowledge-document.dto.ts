@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { KNOWLEDGE_REVIEW_STATUSES } from '../knowledge.constants';
 
 export class ReviewKnowledgeDocumentDto {
@@ -8,5 +8,6 @@ export class ReviewKnowledgeDocumentDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 }

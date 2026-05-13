@@ -10,6 +10,7 @@ import { RedisIoAdapter } from './chat/redis-io.adapter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { Connection } from 'mongoose';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { StructuredJsonLogger } from './common/logging/structured-json.logger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -159,6 +160,30 @@ export async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'x-correlation-id'],
     exposedHeaders: ['x-correlation-id'],
   });
+
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        nodeEnv === 'production'
+          ? {
+              directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:'],
+              },
+            }
+          : false,
+      crossOriginResourcePolicy: { policy: 'same-site' },
+      hsts:
+        nodeEnv === 'production'
+          ? {
+              maxAge: 15552000,
+              includeSubDomains: true,
+            }
+          : false,
+    }),
+  );
 
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');

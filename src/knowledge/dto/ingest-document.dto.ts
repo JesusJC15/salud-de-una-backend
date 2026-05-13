@@ -1,4 +1,12 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
 import { Specialty } from '../../common/enums/specialty.enum';
 import {
   KNOWLEDGE_AUDIENCES,
@@ -9,14 +17,17 @@ import {
 export class IngestDocumentDto {
   @IsOptional()
   @IsString()
+  @MaxLength(24)
   sourceId?: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(180)
   title!: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(180)
   authority!: string;
 
   @IsString()
@@ -29,22 +40,27 @@ export class IngestDocumentDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2)
   country?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   clinicalTags?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   symptoms?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   redFlags?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   drugNames?: string;
 
   @IsOptional()
@@ -54,31 +70,36 @@ export class IngestDocumentDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   useCases?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(8)
   language?: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   validFrom?: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   validUntil?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(20000)
   contentText?: string;
 }
 
 export class IngestDocumentUrlDto extends IngestDocumentDto {
   @IsUrl({ require_tld: false })
+  @MaxLength(2000)
   sourceUrl!: string;
 }
 

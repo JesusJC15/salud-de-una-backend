@@ -12,6 +12,7 @@ import {
   Consultation,
   ConsultationDocument,
 } from '../consultations/schemas/consultation.schema';
+import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -82,7 +83,7 @@ export class FollowupsService {
                 },
                 {
                   upsert: true,
-                  new: true,
+                  returnDocument: 'after',
                   setDefaultsOnInsert: true,
                 },
               )
@@ -187,27 +188,35 @@ export class FollowupsService {
                 .exec()
             : null;
 
-        if (existingEscalation) {
-          throw new ConflictException(
-            'Este seguimiento ya genero una consulta priorizada',
-          );
-        }
-
-        const [escalated] = await this.consultationModel.create([
-          {
+        const escalated =
+          existingEscalation ??
+          (await this.createEscalatedConsultation({
             patientId: consultation.patientId,
             triageSessionId: consultation.triageSessionId,
             specialty: consultation.specialty,
             priority: this.bumpPriority(consultation.priority),
-            status: 'PENDING',
             sourceFollowupId: followup._id,
-          },
-        ]);
+          }));
         followup.priorityEscalated = true;
         followup.createdConsultationId = escalated._id;
-        createdConsultationId = escalated.id;
+        createdConsultationId =
+          (escalated as { id?: string }).id ?? escalated._id.toString();
 
-        if (followup.doctorId) {
+        this.logger.log(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'info',
+            service: 'api',
+            endpoint_or_event: 'followup.priority_escalated',
+            followup_id: followup.id,
+            consultation_id: createdConsultationId,
+            patient_id: followup.patientId.toString(),
+            doctor_id: followup.doctorId?.toString() ?? null,
+            idempotent_reuse: Boolean(existingEscalation),
+          }),
+        );
+
+        if (!existingEscalation && followup.doctorId) {
           await this.notificationsService.createUserNotification({
             userId: followup.doctorId.toString(),
             type: 'FOLLOWUP_PRIORITY_ESCALATED',
@@ -345,6 +354,55 @@ export class FollowupsService {
       return 'MODERATE';
     }
     return 'HIGH';
+  }
+
+  private async createEscalatedConsultation(input: {
+    patientId: Types.ObjectId;
+    triageSessionId: Types.ObjectId;
+    specialty: Specialty;
+    priority: TriagePriority;
+    sourceFollowupId: Types.ObjectId;
+  }): Promise<ConsultationDocument | { _id: Types.ObjectId; id?: string }> {
+    try {
+      const [escalated] = await this.consultationModel.create([
+        {
+          patientId: input.patientId,
+          triageSessionId: input.triageSessionId,
+          specialty: input.specialty,
+          priority: input.priority,
+          status: 'PENDING' as const,
+          sourceFollowupId: input.sourceFollowupId,
+        },
+      ]);
+      return escalated;
+    } catch (error: unknown) {
+      if (!this.isDuplicateKeyError(error)) {
+        throw error;
+      }
+
+      const existing = await this.consultationModel
+        .findOne({ sourceFollowupId: input.sourceFollowupId })
+        .select('_id')
+        .lean()
+        .exec();
+
+      if (!existing) {
+        throw new ConflictException(
+          'Este seguimiento ya genero una consulta priorizada',
+        );
+      }
+
+      return existing;
+    }
+  }
+
+  private isDuplicateKeyError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 11000
+    );
   }
 
   private toResponse(

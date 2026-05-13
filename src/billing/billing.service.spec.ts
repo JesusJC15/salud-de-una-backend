@@ -123,7 +123,7 @@ describe('BillingService', () => {
       expect(billingPriceModel.findOneAndUpdate).toHaveBeenCalledWith(
         { specialty: Specialty.GENERAL_MEDICINE },
         { $set: { amount: 20000, active: true } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     });
   });

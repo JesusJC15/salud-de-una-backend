@@ -151,7 +151,46 @@ export class AiService {
       throw new ServiceUnavailableException('AI provider is disabled');
     }
 
-    return this.aiProvider.generateText(request);
+    const startedAt = Date.now();
+    try {
+      const result = await this.withTimeout(
+        this.aiProvider.generateText(request),
+        this.getRequestTimeoutMs(),
+        `AI generation timed out after ${this.getRequestTimeoutMs()}ms`,
+      );
+      await this.persistAuditLog({
+        provider: result.provider,
+        model: result.model,
+        promptKey: request.promptKey,
+        promptVersion: request.promptVersion,
+        actorId: request.actor?.actorId,
+        actorRole: request.actor?.actorRole,
+        correlationId: request.correlationId,
+        latencyMs: result.latencyMs,
+        status: 'success',
+        sanitizedInputSummary: this.summarizeText(request.inputText),
+        sanitizedOutputSummary: this.summarizeText(result.text),
+        tokenUsage: result.tokenUsage,
+      });
+      return result;
+    } catch (error: unknown) {
+      const normalized = this.normalizeError(error);
+      await this.persistAuditLog({
+        provider: this.configService.get<string>('ai.provider') ?? 'gemini',
+        model: request.model,
+        promptKey: request.promptKey,
+        promptVersion: request.promptVersion,
+        actorId: request.actor?.actorId,
+        actorRole: request.actor?.actorRole,
+        correlationId: request.correlationId,
+        latencyMs: Date.now() - startedAt,
+        status: 'error',
+        errorCode: normalized.name,
+        sanitizedInputSummary: this.summarizeText(request.inputText),
+        sanitizedOutputSummary: normalized.message,
+      });
+      throw error;
+    }
   }
 
   async embedTexts(request: AiEmbeddingRequest): Promise<AiEmbeddingResult> {
@@ -159,7 +198,42 @@ export class AiService {
       throw new ServiceUnavailableException('AI provider is disabled');
     }
 
-    return this.aiProvider.embedContents(request);
+    const startedAt = Date.now();
+    try {
+      const result = await this.withTimeout(
+        this.aiProvider.embedContents(request),
+        this.getRequestTimeoutMs(),
+        `AI embedding timed out after ${this.getRequestTimeoutMs()}ms`,
+      );
+      await this.persistAuditLog({
+        provider: result.provider,
+        model: result.model,
+        promptKey: 'EMBEDDINGS',
+        promptVersion: 1,
+        correlationId: request.correlationId,
+        latencyMs: result.latencyMs,
+        status: 'success',
+        sanitizedInputSummary: `contents=${request.contents.length};chars=${request.contents.reduce((sum, item) => sum + item.length, 0)}`,
+        sanitizedOutputSummary: `embeddings=${result.embeddings.length};dimensions=${result.embeddings[0]?.length ?? 0}`,
+        tokenUsage: result.tokenUsage,
+      });
+      return result;
+    } catch (error: unknown) {
+      const normalized = this.normalizeError(error);
+      await this.persistAuditLog({
+        provider: this.configService.get<string>('ai.provider') ?? 'gemini',
+        model: request.model,
+        promptKey: 'EMBEDDINGS',
+        promptVersion: 1,
+        correlationId: request.correlationId,
+        latencyMs: Date.now() - startedAt,
+        status: 'error',
+        errorCode: normalized.name,
+        sanitizedInputSummary: `contents=${request.contents.length};chars=${request.contents.reduce((sum, item) => sum + item.length, 0)}`,
+        sanitizedOutputSummary: normalized.message,
+      });
+      throw error;
+    }
   }
 
   getReadiness(): AiReadiness {
@@ -273,6 +347,54 @@ export class AiService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Failed to persist AI audit log: ${message}`);
     }
+  }
+
+  private getRequestTimeoutMs(): number {
+    return this.configService.get<number>('ai.requestTimeoutMs') ?? 20_000;
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+  ): Promise<T> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new ServiceUnavailableException(message));
+        }, timeoutMs);
+      });
+
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  private summarizeText(value: string): string {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= 240) {
+      return normalized;
+    }
+
+    return `${normalized.slice(0, 237)}...`;
+  }
+
+  private normalizeError(error: unknown): { name: string; message: string } {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+      };
+    }
+
+    return {
+      name: 'UnknownError',
+      message: String(error),
+    };
   }
 
   async getUsageMetrics() {

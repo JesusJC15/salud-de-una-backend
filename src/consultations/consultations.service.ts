@@ -5,6 +5,7 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -71,6 +72,8 @@ const CONSULTATION_CLOSED: ConsultationStatus = 'CLOSED';
 
 @Injectable()
 export class ConsultationsService {
+  private readonly logger = new Logger(ConsultationsService.name);
+
   constructor(
     @Optional()
     @InjectConnection()
@@ -298,6 +301,10 @@ export class ConsultationsService {
       throw new BadRequestException('doctorId invalido');
     }
 
+    if (!Types.ObjectId.isValid(consultationId)) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
     const doctor = await this.doctorModel
       .findById(user.userId)
       .select('doctorStatus availabilityStatus')
@@ -315,22 +322,38 @@ export class ConsultationsService {
     }
 
     const consultation = await this.consultationModel
-      .findById(consultationId)
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(consultationId),
+          status: CONSULTATION_PENDING,
+        },
+        {
+          $set: {
+            status: CONSULTATION_IN_ATTENTION,
+            assignedDoctorId: new Types.ObjectId(user.userId),
+            assignedAt: new Date(),
+          },
+        },
+        {
+          returnDocument: 'after',
+        },
+      )
       .exec();
     if (!consultation) {
-      throw new NotFoundException('Consulta no encontrada');
-    }
+      const existing = await this.consultationModel
+        .findById(consultationId)
+        .select('status')
+        .lean()
+        .exec();
 
-    if (consultation.status !== CONSULTATION_PENDING) {
-      throw new BadRequestException(
-        'Solo se pueden asignar consultas pendientes',
+      if (!existing) {
+        throw new NotFoundException('Consulta no encontrada');
+      }
+
+      throw new ConflictException(
+        'La consulta ya fue asignada o no esta pendiente',
       );
     }
-
-    consultation.status = CONSULTATION_IN_ATTENTION;
-    consultation.assignedDoctorId = new Types.ObjectId(user.userId);
-    consultation.assignedAt = new Date();
-    await consultation.save();
 
     await this.notificationsService.createUserNotification({
       userId: consultation.patientId.toString(),
@@ -344,10 +367,23 @@ export class ConsultationsService {
       },
     });
 
+    this.logger.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        service: 'api',
+        endpoint_or_event: 'consultation.assigned',
+        consultation_id: consultation.id,
+        patient_id: consultation.patientId.toString(),
+        doctor_id: user.userId,
+        status: consultation.status,
+      }),
+    );
+
     return {
       id: consultation.id,
       status: consultation.status,
-      assignedDoctorId: consultation.assignedDoctorId.toString(),
+      assignedDoctorId: consultation.assignedDoctorId?.toString(),
       updatedAt:
         consultation.updatedAt?.toISOString() ?? new Date().toISOString(),
     };

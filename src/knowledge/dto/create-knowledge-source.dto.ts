@@ -7,6 +7,7 @@ import {
   IsString,
   IsUrl,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { KNOWLEDGE_SOURCE_TYPES } from '../knowledge.constants';
@@ -14,10 +15,12 @@ import { KNOWLEDGE_SOURCE_TYPES } from '../knowledge.constants';
 export class CreateKnowledgeSourceDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(120)
   name!: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(120)
   authority!: string;
 
   @IsString()
@@ -26,10 +29,12 @@ export class CreateKnowledgeSourceDto {
 
   @IsOptional()
   @IsUrl({ require_tld: false })
+  @MaxLength(2000)
   baseUrl?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2)
   country?: string;
 
   @IsOptional()
@@ -48,5 +53,6 @@ export class CreateKnowledgeSourceDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 }

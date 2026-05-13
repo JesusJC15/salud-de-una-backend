@@ -9,6 +9,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { DoctorVerifiedGuard } from '../common/guards/doctor-verified.guard';
@@ -19,6 +26,8 @@ import { RateConsultationDto } from './dto/rate-consultation.dto';
 import { SummaryFeedbackDto } from './dto/summary-feedback.dto';
 import { ConsultationsService } from './consultations.service';
 
+@ApiTags('consultations')
+@ApiBearerAuth()
 @Controller('consultations')
 export class ConsultationsController {
   constructor(private readonly consultationsService: ConsultationsService) {}
@@ -60,6 +69,13 @@ export class ConsultationsController {
   @Patch(':consultationId/assign')
   @Roles(UserRole.DOCTOR)
   @UseGuards(DoctorVerifiedGuard)
+  @ApiOperation({
+    summary: 'Assign a pending consultation atomically to the current doctor',
+  })
+  @ApiOkResponse({ description: 'Consultation assigned to the doctor' })
+  @ApiConflictResponse({
+    description: 'The consultation was already assigned or is not pending',
+  })
   assign(
     @Req() req: RequestContext,
     @Param('consultationId') consultationId: string,
@@ -70,6 +86,10 @@ export class ConsultationsController {
   @Patch(':consultationId/close')
   @Roles(UserRole.DOCTOR)
   @UseGuards(DoctorVerifiedGuard)
+  @ApiOperation({ summary: 'Close an assigned consultation' })
+  @ApiOkResponse({
+    description: 'Consultation closed and outbox event emitted',
+  })
   close(
     @Req() req: RequestContext,
     @Param('consultationId') consultationId: string,

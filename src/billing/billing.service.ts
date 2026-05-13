@@ -61,7 +61,7 @@ export class BillingService {
       .findOneAndUpdate(
         { specialty },
         { $set: { amount, active: true } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       )
       .lean()
       .exec();

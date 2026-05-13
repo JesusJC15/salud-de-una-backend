@@ -38,7 +38,7 @@
     "test:e2e:system": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/system"
   },
   "dependencies": {
-    "@google/genai": "^1.52.0",
+    "@google/genai": "^2.2.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.19",
     "@nestjs/config": "^4.0.4",
@@ -56,17 +56,18 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
     "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-node": "^0.217.0",
-    "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@opentelemetry/semantic-conventions": "^1.41.1",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcrypt": "^6.0.0",
-    "bullmq": "^5.76.5",
+    "bullmq": "^5.76.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
     "joi": "^18.2.1",
     "jose": "^6.2.3",
     "jwks-rsa": "^4.0.1",
-    "mongoose": "^9.6.1",
+    "mongoose": "^9.6.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
@@ -83,14 +84,14 @@
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.7.0",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.0",
-    "eslint": "^10.0.3",
+    "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.6.0",
-    "jest": "^30.3.0",
+    "jest": "^30.4.2",
     "mongodb-memory-server": "^11.1.0",
     "prettier": "^3.8.3",
     "socket.io-client": "^4.8.3",
@@ -101,7 +102,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.2"
+    "typescript-eslint": "^8.59.3"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -143,5 +144,8 @@
         "lines": 80
       }
     }
+  },
+  "overrides": {
+    "protobufjs": "8.2.0"
   }
 }

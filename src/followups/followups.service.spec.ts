@@ -22,6 +22,7 @@ describe('FollowupsService', () => {
   const consultationModel = {
     create: jest.fn(),
     findById: jest.fn(),
+    findOne: jest.fn(),
   };
   const triageSessionModel = {};
   const notificationsService = {
@@ -238,6 +239,11 @@ describe('FollowupsService', () => {
         priority: 'LOW',
       }),
     });
+    consultationModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
     consultationModel.create.mockResolvedValue([
       { _id: new Types.ObjectId(), id: 'consult-escalated' },
     ]);
@@ -269,6 +275,108 @@ describe('FollowupsService', () => {
     );
     expect(result.priorityEscalated).toBe(true);
     expect(result.createdConsultationId).toBe('consult-escalated');
+  });
+
+  it('submits a worsening followup idempotently when escalation already exists', async () => {
+    const existingEscalationId = new Types.ObjectId();
+    const existingFollowup = followupDocument({
+      status: 'PENDING',
+      doctorId,
+      baselineSymptomSeverity: 3,
+    });
+    followupModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(existingFollowup),
+    });
+    consultationModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        patientId,
+        triageSessionId: new Types.ObjectId(),
+        specialty: 'GENERAL_MEDICINE',
+        priority: 'LOW',
+      }),
+    });
+    consultationModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        _id: existingEscalationId,
+      }),
+    });
+
+    const result = await service.submit(
+      buildRequestUser({
+        userId: patientId.toString(),
+        role: UserRole.PATIENT,
+        email: 'patient@test.com',
+      }),
+      {
+        followupId: followupId.toString(),
+        currentSymptomSeverity: 6,
+        change: 'WORSE',
+        medicationTaken: false,
+      },
+    );
+
+    expect(consultationModel.create).not.toHaveBeenCalled();
+    expect(notificationsService.createUserNotification).not.toHaveBeenCalled();
+    expect(result.priorityEscalated).toBe(true);
+    expect(result.createdConsultationId).toBe(existingEscalationId.toString());
+  });
+
+  it('recovers an existing escalation when a duplicate key race occurs', async () => {
+    const existingEscalationId = new Types.ObjectId();
+    const existingFollowup = followupDocument({
+      status: 'PENDING',
+      doctorId,
+      baselineSymptomSeverity: 3,
+    });
+    followupModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(existingFollowup),
+    });
+    consultationModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        patientId,
+        triageSessionId: new Types.ObjectId(),
+        specialty: 'GENERAL_MEDICINE',
+        priority: 'LOW',
+      }),
+    });
+    consultationModel.findOne
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      })
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue({
+          _id: existingEscalationId,
+        }),
+      });
+    consultationModel.create.mockRejectedValue({
+      code: 11000,
+    });
+
+    const result = await service.submit(
+      buildRequestUser({
+        userId: patientId.toString(),
+        role: UserRole.PATIENT,
+        email: 'patient@test.com',
+      }),
+      {
+        followupId: followupId.toString(),
+        currentSymptomSeverity: 6,
+        change: 'WORSE',
+        medicationTaken: false,
+      },
+    );
+
+    expect(result.createdConsultationId).toBe(existingEscalationId.toString());
   });
 
   it('marks due followups and sends reminder notification', async () => {

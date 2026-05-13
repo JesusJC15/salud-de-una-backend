@@ -163,7 +163,7 @@ export class DoctorsService {
       .findByIdAndUpdate(
         doctorId,
         { availabilityStatus: status },
-        { new: true, select: 'availabilityStatus' },
+        { returnDocument: 'after', select: 'availabilityStatus' },
       )
       .lean()
       .exec();

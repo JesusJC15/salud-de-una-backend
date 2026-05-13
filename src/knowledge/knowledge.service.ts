@@ -165,7 +165,7 @@ export class KnowledgeService {
 
   async updateSource(sourceId: string, dto: UpdateKnowledgeSourceDto) {
     const source = await this.sourceModel
-      .findByIdAndUpdate(sourceId, { $set: dto }, { new: true })
+      .findByIdAndUpdate(sourceId, { $set: dto }, { returnDocument: 'after' })
       .lean()
       .exec();
 

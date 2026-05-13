@@ -36,6 +36,7 @@ describe('ConsultationsService', () => {
     create: jest.fn(),
     find: jest.fn().mockReturnValue(findChain),
     findById: jest.fn(),
+    findOneAndUpdate: jest.fn(),
     countDocuments: jest.fn(),
   };
   const doctorModel = {
@@ -415,11 +416,11 @@ describe('ConsultationsService', () => {
     const consultation = {
       id: consultationId.toString(),
       patientId,
-      status: 'PENDING',
-      save: jest.fn(),
+      status: 'IN_ATTENTION',
+      assignedDoctorId: doctorId,
       updatedAt: new Date('2025-01-03T00:00:00.000Z'),
     };
-    consultationModel.findById.mockReturnValue({
+    consultationModel.findOneAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue(consultation),
     });
 
@@ -432,7 +433,30 @@ describe('ConsultationsService', () => {
       }),
     );
 
-    expect(consultation.save).toHaveBeenCalled();
+    expect(consultationModel.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        _id: consultationId,
+        status: 'PENDING',
+      },
+      expect.any(Object),
+      { returnDocument: 'after' },
+    );
+    const [, updateArg] = consultationModel.findOneAndUpdate.mock.calls[0] as [
+      unknown,
+      {
+        $set: {
+          status: string;
+          assignedDoctorId: Types.ObjectId;
+          assignedAt: Date;
+        };
+      },
+      unknown,
+    ];
+    expect(updateArg.$set.status).toBe('IN_ATTENTION');
+    expect(updateArg.$set.assignedDoctorId.toString()).toBe(
+      doctorId.toString(),
+    );
+    expect(updateArg.$set.assignedAt).toBeInstanceOf(Date);
     expect(notificationsService.createUserNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: patientId.toString(),
@@ -440,6 +464,39 @@ describe('ConsultationsService', () => {
       }),
     );
     expect(result.status).toBe('IN_ATTENTION');
+  });
+
+  it('assign rejects races when the consultation was already claimed', async () => {
+    const consultationId = new Types.ObjectId();
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        doctorStatus: 'VERIFIED',
+        availabilityStatus: 'AVAILABLE',
+      }),
+    });
+    consultationModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    consultationModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        status: 'IN_ATTENTION',
+      }),
+    });
+
+    await expect(
+      service.assign(
+        consultationId.toString(),
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('closes an assigned consultation and emits the outbox event', async () => {
@@ -740,7 +797,12 @@ describe('ConsultationsService', () => {
         availabilityStatus: 'AVAILABLE',
       }),
     });
+    consultationModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
     consultationModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue(null),
     });
 
@@ -756,7 +818,7 @@ describe('ConsultationsService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('assign rejects consultations that are not pending', async () => {
+  it('assign rejects consultations that are not pending with a conflict', async () => {
     doctorModel.findById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockReturnThis(),
@@ -765,7 +827,12 @@ describe('ConsultationsService', () => {
         availabilityStatus: 'AVAILABLE',
       }),
     });
+    consultationModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
     consultationModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue({
         status: 'IN_ATTENTION',
       }),
@@ -780,7 +847,7 @@ describe('ConsultationsService', () => {
           email: 'doctor@test.com',
         }),
       ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('close rejects consultations that are not in attention', async () => {
