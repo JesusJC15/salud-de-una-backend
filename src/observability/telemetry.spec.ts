@@ -14,8 +14,10 @@ describe('observability/telemetry', () => {
     process.env = ORIGINAL_ENV;
   });
 
-  const importTelemetryModule = async (): Promise<TelemetryModule> => {
-    const module = (await import('./telemetry.js')) as TelemetryModule;
+  const importTelemetryModule = (): TelemetryModule => {
+    const module = jest.requireActual(
+      './telemetry',
+    ) as unknown as TelemetryModule;
     return module;
   };
 
@@ -52,24 +54,24 @@ describe('observability/telemetry', () => {
     };
   };
 
-  it('returns null sdk by default (test runtime)', async () => {
+  it('returns null sdk by default (test runtime)', () => {
     process.env.NODE_ENV = 'test';
 
-    const mod = await importTelemetryModule();
+    const mod = importTelemetryModule();
 
     expect(mod.getTelemetrySdk()).toBeNull();
   });
 
-  it('returns null when OTEL_ENABLED=true but running in test worker', async () => {
+  it('returns null when OTEL_ENABLED=true but running in test worker', () => {
     process.env.OTEL_ENABLED = 'true';
     process.env.JEST_WORKER_ID = '1';
 
-    const mod = await importTelemetryModule();
+    const mod = importTelemetryModule();
 
     expect(mod.getTelemetrySdk()).toBeNull();
   });
 
-  it('initializes SDK when OTEL_ENABLED=true and not test runtime', async () => {
+  it('initializes SDK when OTEL_ENABLED=true and not test runtime', () => {
     const {
       getNodeAutoInstrumentations,
       nodeSdk,
@@ -92,7 +94,7 @@ describe('observability/telemetry', () => {
         return process;
       });
 
-    const mod = await importTelemetryModule();
+    const mod = importTelemetryModule();
 
     expect(mod.getTelemetrySdk()).toBe(nodeSdk as never);
     expect(nodeSdkConstructor).toHaveBeenCalledWith(
@@ -113,7 +115,7 @@ describe('observability/telemetry', () => {
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to the generic OTLP endpoint when traces endpoint is unset', async () => {
+  it('falls back to the generic OTLP endpoint when traces endpoint is unset', () => {
     const { nodeSdkConstructor, otlpTraceExporterConstructor } =
       mockOpenTelemetryDependencies();
 
@@ -122,7 +124,7 @@ describe('observability/telemetry', () => {
     process.env.OTEL_ENABLED = 'true';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
 
-    const mod = await importTelemetryModule();
+    const mod = importTelemetryModule();
 
     expect(mod.getTelemetrySdk()).not.toBeNull();
     expect(otlpTraceExporterConstructor).toHaveBeenCalledWith({
@@ -153,7 +155,7 @@ describe('observability/telemetry', () => {
       return process;
     });
 
-    const mod = await importTelemetryModule();
+    const mod = importTelemetryModule();
     expect(mod.getTelemetrySdk()).toBe(nodeSdk as never);
 
     signalHandlers.get('SIGTERM')?.();
@@ -164,14 +166,14 @@ describe('observability/telemetry', () => {
     expect(shutdown).toHaveBeenCalledTimes(1);
   });
 
-  it('does not create a trace exporter when no OTLP endpoint is configured', async () => {
+  it('does not create a trace exporter when no OTLP endpoint is configured', () => {
     const { nodeSdkConstructor } = mockOpenTelemetryDependencies();
 
     delete process.env.JEST_WORKER_ID;
     delete process.env.NODE_ENV;
     process.env.OTEL_ENABLED = 'true';
 
-    await importTelemetryModule();
+    importTelemetryModule();
 
     expect(nodeSdkConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
