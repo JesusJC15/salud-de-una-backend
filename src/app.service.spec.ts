@@ -65,6 +65,7 @@ describe('AppService', () => {
     expect(result.service).toBe('salud-de-una-backend');
     expect(result.timestamp).toBe('2026-03-14T12:00:00.000Z');
     expect(typeof result.uptimeSeconds).toBe('number');
+    expect(result.runtimeRole).toBe('all');
   });
 
   it('should return a ready payload when mongoose is connected', async () => {
@@ -73,10 +74,40 @@ describe('AppService', () => {
     const result = await appService.getReadiness();
 
     expect(result.status).toBe('ready');
+    expect(result.runtimeRole).toBe('all');
     expect(result.checks.database.status).toBe('up');
     expect(result.checks.database.detail).toBe(
       'mongoose readyState: 1 (connected)',
     );
+  });
+
+  it('in production requires redis up to be ready', async () => {
+    process.env.NODE_ENV = 'production';
+    connectionMock.readyState = 1;
+    redisHealthService.getReadiness.mockResolvedValue({
+      status: 'up',
+      detail: 'Redis ok',
+      latencyMs: 5,
+      degraded: false,
+    });
+
+    const result = await appService.getReadiness();
+    expect(result.status).toBe('ready');
+    expect(result.checks.redis.status).toBe('up');
+  });
+
+  it('in production with redis down returns not_ready', async () => {
+    process.env.NODE_ENV = 'production';
+    connectionMock.readyState = 1;
+    redisHealthService.getReadiness.mockResolvedValue({
+      status: 'down',
+      detail: 'Redis down',
+      latencyMs: null,
+      degraded: true,
+    });
+
+    const result = await appService.getReadiness();
+    expect(result.status).toBe('not_ready');
   });
 
   it('should return not_ready for unknown readyState', async () => {

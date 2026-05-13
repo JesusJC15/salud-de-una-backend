@@ -87,6 +87,12 @@ type UploadedKnowledgeFile = {
   buffer: Buffer;
 };
 
+type RebuildDocumentVersionResult = {
+  versionId: Types.ObjectId;
+  version: number;
+  contentHash: string;
+};
+
 type DocumentResponseSource = {
   _id: Types.ObjectId;
   sourceId?: Types.ObjectId | null;
@@ -159,7 +165,7 @@ export class KnowledgeService {
 
   async updateSource(sourceId: string, dto: UpdateKnowledgeSourceDto) {
     const source = await this.sourceModel
-      .findByIdAndUpdate(sourceId, { $set: dto }, { new: true })
+      .findByIdAndUpdate(sourceId, { $set: dto }, { returnDocument: 'after' })
       .lean()
       .exec();
 
@@ -228,7 +234,11 @@ export class KnowledgeService {
     }
 
     const chunks = await this.chunkModel
-      .find({ documentId: document._id })
+      .find(
+        document.currentVersionId
+          ? { documentVersionId: document.currentVersionId }
+          : { documentId: document._id },
+      )
       .sort({ chunkIndex: 1 })
       .lean()
       .exec();
@@ -346,7 +356,9 @@ export class KnowledgeService {
         );
       }
 
-      const response = await fetch(dto.sourceUrl);
+      this.assertUrlIsAllowed(dto.sourceUrl);
+
+      const response = await this.fetchKnowledgeUrl(dto.sourceUrl);
       if (!response.ok) {
         throw new BadRequestException(
           `No fue posible descargar la URL (${response.status})`,
@@ -354,7 +366,26 @@ export class KnowledgeService {
       }
 
       const mimeType = response.headers.get('content-type') ?? 'text/plain';
+      this.assertAllowedMimeType(mimeType);
+      const declaredLength = Number(
+        response.headers.get('content-length') ?? 0,
+      );
+      const maxContentBytes =
+        this.configService.get<number>('knowledge.maxUrlContentBytes') ??
+        5 * 1024 * 1024;
+
+      if (declaredLength > maxContentBytes) {
+        throw new BadRequestException(
+          'La URL excede el tamano maximo permitido para ingesta',
+        );
+      }
+
       const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.byteLength > maxContentBytes) {
+        throw new BadRequestException(
+          'La URL excede el tamano maximo permitido para ingesta',
+        );
+      }
       const extracted = this.extractTextFromBuffer(buffer, mimeType);
 
       const document = await this.createOrReplaceDocument({
@@ -404,7 +435,13 @@ export class KnowledgeService {
     const startedAt = Date.now();
 
     try {
-      await this.rebuildDocumentVersion(document, document.extractedText);
+      const rebuilt = await this.rebuildDocumentVersion(
+        document,
+        document.extractedText,
+      );
+      document.currentVersion = rebuilt.version;
+      document.currentVersionId = rebuilt.versionId;
+      document.contentHash = rebuilt.contentHash;
       document.status = 'READY_FOR_REVIEW';
       document.ingestionError = undefined;
       await document.save();
@@ -432,22 +469,24 @@ export class KnowledgeService {
       throw new NotFoundException('Documento de conocimiento no encontrado');
     }
 
-    if (dto.status === 'APPROVED' && actor.role !== UserRole.DOCTOR) {
-      throw new ForbiddenException(
-        'Solo un DOCTOR puede aprobar contenido clínico',
-      );
-    }
-
     if (dto.status === 'APPROVED') {
-      const doctor = await this.doctorModel
-        .findById(actor.userId)
-        .select('doctorStatus')
-        .lean<{ doctorStatus?: DoctorStatus }>()
-        .exec();
+      if (actor.role === UserRole.ADMIN) {
+        // Admin approval is allowed by policy for clinical governance workflows.
+      } else if (actor.role === UserRole.DOCTOR) {
+        const doctor = await this.doctorModel
+          .findById(actor.userId)
+          .select('doctorStatus')
+          .lean<{ doctorStatus?: DoctorStatus }>()
+          .exec();
 
-      if (!doctor || doctor.doctorStatus !== DoctorStatus.VERIFIED) {
+        if (!doctor || doctor.doctorStatus !== DoctorStatus.VERIFIED) {
+          throw new ForbiddenException(
+            'Solo un DOCTOR VERIFIED o ADMIN puede aprobar contenido clínico',
+          );
+        }
+      } else {
         throw new ForbiddenException(
-          'Solo un DOCTOR VERIFIED puede aprobar contenido clínico',
+          'Solo un DOCTOR VERIFIED o ADMIN puede aprobar contenido clínico',
         );
       }
     }
@@ -466,9 +505,22 @@ export class KnowledgeService {
     });
 
     await this.chunkModel.updateMany(
-      { documentId: document._id },
+      document.currentVersionId
+        ? { documentVersionId: document.currentVersionId }
+        : { documentId: document._id },
       { $set: { reviewStatus: dto.status } },
     );
+    if (dto.status === 'APPROVED') {
+      await this.chunkModel.updateMany(
+        {
+          documentId: document._id,
+          ...(document.currentVersionId
+            ? { documentVersionId: { $ne: document.currentVersionId } }
+            : {}),
+        },
+        { $set: { reviewStatus: 'REJECTED' } },
+      );
+    }
     await this.invalidateKnowledgeCache(document._id.toString());
 
     return this.getDocument(documentId);
@@ -532,6 +584,7 @@ export class KnowledgeService {
     file?: UploadedKnowledgeFile,
   ) {
     if (dto.contentText?.trim()) {
+      this.assertAllowedMimeType('text/plain');
       return {
         text: dto.contentText.trim(),
         storageFileId: undefined,
@@ -544,6 +597,8 @@ export class KnowledgeService {
     if (!file) {
       throw new BadRequestException('Archivo no encontrado');
     }
+
+    this.assertAllowedMimeType(file.mimetype);
 
     const storageFileId = await this.storageService.saveFile(
       file.originalname,
@@ -653,7 +708,10 @@ export class KnowledgeService {
     });
 
     try {
-      await this.rebuildDocumentVersion(document, input.text);
+      const rebuilt = await this.rebuildDocumentVersion(document, input.text);
+      document.currentVersion = rebuilt.version;
+      document.currentVersionId = rebuilt.versionId;
+      document.contentHash = rebuilt.contentHash;
       document.status = 'READY_FOR_REVIEW';
       await document.save();
       await this.invalidateKnowledgeCache(document._id.toString());
@@ -669,10 +727,7 @@ export class KnowledgeService {
   private async rebuildDocumentVersion(
     document: KnowledgeDocumentDocument,
     rawText: string,
-  ) {
-    await this.chunkModel.deleteMany({ documentId: document._id });
-    await this.documentVersionModel.deleteMany({ documentId: document._id });
-
+  ): Promise<RebuildDocumentVersionResult> {
     const normalizedText = this.normalizeText(rawText);
     const contentHash = this.hashContent(
       `${document.title}|${document.authority}|${normalizedText}`,
@@ -688,9 +743,13 @@ export class KnowledgeService {
         this.configService.get<number>('rag.embeddingDimensions') ?? 768,
     });
 
+    const nextVersion = document.currentVersionId
+      ? Math.max(document.currentVersion ?? 0, 0) + 1
+      : 1;
+
     const version = await this.documentVersionModel.create({
       documentId: document._id,
-      version: 1,
+      version: nextVersion,
       extractedText: rawText,
       normalizedText,
       extractionMethod: document.extractionMethod,
@@ -737,9 +796,11 @@ export class KnowledgeService {
       await this.chunkModel.insertMany(chunkDocs);
     }
 
-    document.currentVersion = version.version;
-    document.currentVersionId = version._id;
-    document.contentHash = contentHash;
+    return {
+      versionId: version._id,
+      version: version.version,
+      contentHash,
+    };
   }
 
   private chunkDocument(
@@ -1036,15 +1097,113 @@ export class KnowledgeService {
       return;
     }
 
-    const keys = await this.redisClient
-      .keys('salud-de-una:rag:*')
-      .catch(() => []);
-    if (keys.length > 0) {
-      await this.redisClient.del(keys).catch(() => undefined);
+    const redisKeyPrefix =
+      this.configService.get<string>('redis.keyPrefix') ?? 'salud-de-una';
+    if (typeof this.redisClient.incr === 'function') {
+      await this.redisClient
+        .incr(`${redisKeyPrefix}:rag:corpus:version`)
+        .catch(() => undefined);
+    } else if (
+      typeof this.redisClient.keys === 'function' &&
+      typeof this.redisClient.del === 'function'
+    ) {
+      const keys = await this.redisClient
+        .keys(`${redisKeyPrefix}:rag:*`)
+        .catch(() => []);
+      if (keys.length > 0) {
+        await this.redisClient.del(keys).catch(() => undefined);
+      }
     }
     this.logger.debug(
       `Invalidated RAG cache after document change ${documentId}`,
     );
+  }
+
+  private assertAllowedMimeType(mimeType: string) {
+    const allowedMimeTypes =
+      this.configService.get<string[]>('knowledge.allowedMimeTypes') ?? [];
+    const normalizedMimeType = mimeType.split(';')[0]?.trim().toLowerCase();
+
+    if (
+      normalizedMimeType &&
+      allowedMimeTypes.length > 0 &&
+      !allowedMimeTypes.includes(normalizedMimeType)
+    ) {
+      throw new BadRequestException(
+        `Tipo de contenido no permitido para ingesta: ${normalizedMimeType}`,
+      );
+    }
+  }
+
+  private assertUrlIsAllowed(sourceUrl: string) {
+    let parsed: URL;
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new BadRequestException('sourceUrl invalida');
+    }
+
+    if (!['https:', 'http:'].includes(parsed.protocol)) {
+      throw new BadRequestException('Solo se permiten URLs HTTP/HTTPS');
+    }
+
+    const hostname = parsed.hostname.trim().toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.endsWith('.local')
+    ) {
+      throw new BadRequestException(
+        'No se permiten destinos locales para ingesta por URL',
+      );
+    }
+
+    if (
+      /^(10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[0-1])\.|192\.168\.)/u.test(
+        hostname,
+      )
+    ) {
+      throw new BadRequestException(
+        'No se permiten direcciones privadas para ingesta por URL',
+      );
+    }
+
+    const allowlist =
+      this.configService.get<string[]>('knowledge.urlAllowlist') ?? [];
+    if (
+      allowlist.length > 0 &&
+      !allowlist.some(
+        (entry) => hostname === entry || hostname.endsWith(`.${entry}`),
+      )
+    ) {
+      throw new BadRequestException(
+        'La URL no pertenece a un dominio permitido para ingesta',
+      );
+    }
+  }
+
+  private async fetchKnowledgeUrl(sourceUrl: string): Promise<Response> {
+    const timeoutMs =
+      this.configService.get<number>('knowledge.fetchTimeoutMs') ?? 10_000;
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await fetch(sourceUrl, {
+        signal: controller.signal,
+      });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new BadRequestException(
+          'La descarga de la URL excedio el timeout permitido',
+        );
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
   }
 
   private toDocumentResponse(document: DocumentResponseSource) {

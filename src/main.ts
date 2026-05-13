@@ -1,3 +1,4 @@
+import './observability/telemetry';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -9,8 +10,14 @@ import { RedisIoAdapter } from './chat/redis-io.adapter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { Connection } from 'mongoose';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { StructuredJsonLogger } from './common/logging/structured-json.logger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import {
+  getRuntimeRole,
+  runtimeRoleIncludesApi,
+} from './common/utils/runtime-role.util';
 import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
 export function sanitizeMongoUri(uri?: string): string {
@@ -79,18 +86,22 @@ export async function waitForDatabaseConnection(
 
 export async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(new StructuredJsonLogger());
+  app.enableShutdownHooks();
+  const configService = app.get(ConfigService);
+  const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+  const runtimeRole = getRuntimeRole();
+  const redisUrl = configService.get<string>('redis.url');
   const redisClient = app.get<Redis | null>(REDIS_CLIENT);
   if (redisClient) {
     app.useWebSocketAdapter(new RedisIoAdapter(app, redisClient));
   } else {
     app.useWebSocketAdapter(new IoAdapter(app));
   }
-  const configService = app.get(ConfigService);
   const dbConnection = app.get<Connection>(getConnectionToken());
   const globalPrefix = 'v1';
   const port = Number(process.env.PORT ?? 3000);
-  const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
   const databaseUri = configService.get<string>('database.uri');
 
   dbConnection.on('connected', () => {
@@ -126,6 +137,12 @@ export async function bootstrap() {
     );
   }
 
+  if (nodeEnv === 'production' && !redisUrl) {
+    throw new Error(
+      'REDIS_URL es obligatorio en production para chat, throttling y jobs distribuidos',
+    );
+  }
+
   app.enableCors({
     origin: (
       origin: string | undefined,
@@ -144,6 +161,30 @@ export async function bootstrap() {
     exposedHeaders: ['x-correlation-id'],
   });
 
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        nodeEnv === 'production'
+          ? {
+              directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:'],
+              },
+            }
+          : false,
+      crossOriginResourcePolicy: { policy: 'same-site' },
+      hsts:
+        nodeEnv === 'production'
+          ? {
+              maxAge: 15552000,
+              includeSubDomains: true,
+            }
+          : false,
+    }),
+  );
+
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -161,22 +202,39 @@ export async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  if (nodeEnv !== 'production') {
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('SaludDeUna API')
-      .setDescription('Documentacion OpenAPI de SaludDeUna Backend')
-      .setVersion('1.0')
-      .addBearerAuth(
-        {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-        },
-        'bearer',
-      )
-      .build();
-    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup(`${globalPrefix}/docs`, app, swaggerDocument);
+  // Configure Swagger documentation
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('SaludDeUna API')
+    .setDescription('Documentacion OpenAPI de SaludDeUna Backend')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+      'bearer',
+    )
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup(`${globalPrefix}/docs`, app, swaggerDocument);
+
+  if (nodeEnv === 'production') {
+    logger.log(
+      '✓ Swagger documentation configured (production: requires ADMIN role with JWT token)',
+    );
+  } else {
+    logger.log(
+      '✓ Swagger documentation configured (development: public access)',
+    );
+  }
+
+  if (!runtimeRoleIncludesApi(runtimeRole)) {
+    await app.init();
+    logger.log(`Worker runtime initialized | role=${runtimeRole}`);
+    logger.log(`Environment: ${nodeEnv} | PID: ${process.pid}`);
+    logger.log(`Database URI: ${sanitizeMongoUri(databaseUri)}`);
+    return;
   }
 
   await app.listen(port);
@@ -189,6 +247,7 @@ export async function bootstrap() {
     `Readiness endpoint: http://localhost:${port}/${globalPrefix}/ready`,
   );
   logger.log(`Environment: ${nodeEnv} | PID: ${process.pid}`);
+  logger.log(`Runtime role: ${runtimeRole}`);
   logger.log(`Database URI: ${sanitizeMongoUri(databaseUri)}`);
 }
 if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {

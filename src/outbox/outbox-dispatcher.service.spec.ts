@@ -22,6 +22,7 @@ describe('OutboxDispatcherService', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
+    delete process.env.APP_RUNTIME_ROLE;
     configService = {
       get: jest.fn().mockReturnValue(10),
     };
@@ -69,6 +70,17 @@ describe('OutboxDispatcherService', () => {
   it('should not fail shutdown when interval was never started', () => {
     const service = createService();
     expect(() => service.onApplicationShutdown()).not.toThrow();
+  });
+
+  it('should skip bootstrap when runtime role excludes workers', () => {
+    process.env.APP_RUNTIME_ROLE = 'api';
+    const service = createService();
+    const dispatchSpy = jest.spyOn(service, 'dispatchPendingEvents');
+
+    service.onApplicationBootstrap();
+    jest.advanceTimersByTime(1000);
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
   });
 
   it('should catch and log interval dispatch failures', async () => {

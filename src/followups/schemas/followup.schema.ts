@@ -78,3 +78,4 @@ export class Followup {
 export const FollowupSchema = SchemaFactory.createForClass(Followup);
 
 FollowupSchema.index({ patientId: 1, status: 1, scheduledAt: 1 });
+FollowupSchema.index({ consultationId: 1, scheduledAt: 1 }, { unique: true });

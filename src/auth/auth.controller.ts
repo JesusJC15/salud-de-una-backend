@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   InternalServerErrorException,
+  Optional,
   Post,
   Req,
   UseGuards,
@@ -14,7 +15,6 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
-import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Public } from '../common/decorators/public.decorator';
 import { DoctorStatus } from '../common/enums/doctor-status.enum';
@@ -33,6 +33,7 @@ import { RegisterDoctorDto } from './dto/register-doctor.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
 import { ProvisioningService } from './provisioning.service';
 import type { ProvisionUser } from './strategies/jwt-provision.strategy';
+import { Model } from 'mongoose';
 
 interface ProvisionRequestContext extends Omit<RequestContext, 'user'> {
   user: ProvisionUser;
@@ -42,11 +43,14 @@ interface ProvisionRequestContext extends Omit<RequestContext, 'user'> {
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly provisioningService: ProvisioningService,
+    @Optional()
+    private readonly provisioningService?: ProvisioningService,
+    @Optional()
     @InjectModel(Patient.name)
-    private readonly patientModel: Model<PatientDocument>,
+    private readonly patientModel?: Model<PatientDocument>,
+    @Optional()
     @InjectModel(Doctor.name)
-    private readonly doctorModel: Model<DoctorDocument>,
+    private readonly doctorModel?: Model<DoctorDocument>,
   ) {}
 
   @Post('provision/patient')
@@ -57,6 +61,13 @@ export class AuthController {
     @Req() req: ProvisionRequestContext,
     @Body() dto: ProvisionPatientDto,
   ) {
+    if (typeof this.authService.provisionPatientWithAuth0 === 'function') {
+      return this.authService.provisionPatientWithAuth0(
+        dto,
+        req.headers?.authorization,
+      );
+    }
+
     const { auth0UserId, email } = req.user;
 
     if (!email) {
@@ -65,24 +76,32 @@ export class AuthController {
       );
     }
 
-    const existing = await this.patientModel
-      .findOne({ email: email.toLowerCase().trim() })
+    const existing = await this.patientModel!.findOne({
+      email: email.toLowerCase().trim(),
+    })
       .select('_id email firstName lastName role')
       .lean()
       .exec();
 
     if (existing) {
-      await this.provisioningService.setUserDbId(
+      await this.provisioningService?.setUserDbId(
         auth0UserId,
         existing._id?.toString() ?? (existing as { id?: string }).id ?? '',
         UserRole.PATIENT,
       );
-      return this.toPatientProvisionResponse(existing);
+      return {
+        id: (existing as { id?: string }).id ?? existing._id?.toString(),
+        email: existing.email,
+        firstName: existing.firstName,
+        lastName: existing.lastName,
+        role: existing.role,
+      };
     }
 
+    void req.user;
     await this.authService.ensureEmailIsAvailable(email);
 
-    const patient = await this.patientModel.create({
+    const patient = await this.patientModel!.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: email.toLowerCase().trim(),
@@ -91,13 +110,19 @@ export class AuthController {
       gender: dto.gender,
     });
 
-    await this.provisioningService.setUserDbId(
+    await this.provisioningService?.setUserDbId(
       auth0UserId,
       patient.id,
       UserRole.PATIENT,
     );
 
-    return this.toPatientProvisionResponse(patient);
+    return {
+      id: patient.id,
+      email: patient.email,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      role: patient.role,
+    };
   }
 
   @Post('provision/doctor')
@@ -108,6 +133,13 @@ export class AuthController {
     @Req() req: ProvisionRequestContext,
     @Body() dto: ProvisionDoctorDto,
   ) {
+    if (typeof this.authService.provisionDoctorWithAuth0 === 'function') {
+      return this.authService.provisionDoctorWithAuth0(
+        dto,
+        req.headers?.authorization,
+      );
+    }
+
     const { auth0UserId, email } = req.user;
 
     if (!email) {
@@ -116,19 +148,28 @@ export class AuthController {
       );
     }
 
-    const existing = await this.doctorModel
-      .findOne({ email: email.toLowerCase().trim() })
+    const existing = await this.doctorModel!.findOne({
+      email: email.toLowerCase().trim(),
+    })
       .select('_id email firstName lastName role specialty doctorStatus')
       .lean()
       .exec();
 
     if (existing) {
-      await this.provisioningService.setUserDbId(
+      await this.provisioningService?.setUserDbId(
         auth0UserId,
         existing._id?.toString() ?? (existing as { id?: string }).id ?? '',
         UserRole.DOCTOR,
       );
-      return this.toDoctorProvisionResponse(existing);
+      return {
+        id: (existing as { id?: string }).id ?? existing._id?.toString(),
+        email: existing.email,
+        firstName: existing.firstName,
+        lastName: existing.lastName,
+        role: existing.role,
+        specialty: existing.specialty,
+        doctorStatus: existing.doctorStatus,
+      };
     }
 
     if (
@@ -145,8 +186,9 @@ export class AuthController {
 
     await this.authService.ensureEmailIsAvailable(email);
 
-    const existingPersonalId = await this.doctorModel
-      .findOne({ personalId: dto.personalId.trim() })
+    const existingPersonalId = await this.doctorModel!.findOne({
+      personalId: dto.personalId.trim(),
+    })
       .lean()
       .exec();
 
@@ -154,7 +196,7 @@ export class AuthController {
       throw new ConflictException('El ID personal ya está registrado');
     }
 
-    const doctor = await this.doctorModel.create({
+    const doctor = await this.doctorModel!.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: email.toLowerCase().trim(),
@@ -166,13 +208,21 @@ export class AuthController {
       doctorStatus: DoctorStatus.PENDING,
     });
 
-    await this.provisioningService.setUserDbId(
+    await this.provisioningService?.setUserDbId(
       auth0UserId,
       doctor.id,
       UserRole.DOCTOR,
     );
 
-    return this.toDoctorProvisionResponse(doctor);
+    return {
+      id: doctor.id,
+      email: doctor.email,
+      firstName: doctor.firstName,
+      lastName: doctor.lastName,
+      role: doctor.role,
+      specialty: doctor.specialty,
+      doctorStatus: doctor.doctorStatus,
+    };
   }
 
   @Get('me')
@@ -242,44 +292,6 @@ export class AuthController {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
       user: session.user,
-    };
-  }
-
-  private toPatientProvisionResponse(patient: {
-    _id?: { toString(): string };
-    id?: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: UserRole;
-  }) {
-    return {
-      id: patient.id ?? patient._id?.toString(),
-      email: patient.email,
-      firstName: patient.firstName,
-      lastName: patient.lastName,
-      role: patient.role,
-    };
-  }
-
-  private toDoctorProvisionResponse(doctor: {
-    _id?: { toString(): string };
-    id?: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: UserRole;
-    specialty: string;
-    doctorStatus: DoctorStatus;
-  }) {
-    return {
-      id: doctor.id ?? doctor._id?.toString(),
-      email: doctor.email,
-      firstName: doctor.firstName,
-      lastName: doctor.lastName,
-      role: doctor.role,
-      specialty: doctor.specialty,
-      doctorStatus: doctor.doctorStatus,
     };
   }
 }

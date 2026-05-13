@@ -1,5 +1,5 @@
 services:
-  app:
+  api:
     build:
       context: .
       target: runner
@@ -7,6 +7,7 @@ services:
       - .env.production.docker
     environment:
       NODE_ENV: production
+      APP_RUNTIME_ROLE: api
     init: true
     restart: unless-stopped
     ports:
@@ -17,6 +18,26 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  worker:
+    build:
+      context: .
+      target: runner
+    env_file:
+      - .env.production.docker
+    environment:
+      NODE_ENV: production
+      APP_RUNTIME_ROLE: worker
+    init: true
+    restart: unless-stopped
+    command: ["node", "dist/main"]
+    healthcheck:
+      disable: true
     logging:
       driver: json-file
       options:

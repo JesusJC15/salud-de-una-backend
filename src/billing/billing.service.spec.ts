@@ -123,7 +123,7 @@ describe('BillingService', () => {
       expect(billingPriceModel.findOneAndUpdate).toHaveBeenCalledWith(
         { specialty: Specialty.GENERAL_MEDICINE },
         { $set: { amount: 20000, active: true } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     });
   });
@@ -147,7 +147,16 @@ describe('BillingService', () => {
       transactionModel.create.mockResolvedValue([transaction]);
 
       const result = await service.initiateCheckout(CONSULTATION_ID, mockUser);
-      expect(result).toBe(transaction);
+      expect(result).toMatchObject({
+        id: transaction._id.toString(),
+        consultationId: CONSULTATION_ID,
+        patientId: PATIENT_ID,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        status: transaction.status,
+        paymentMode: 'SIMULATED',
+        sandbox: true,
+      });
     });
 
     it('throws NotFoundException when consultation not found', async () => {
@@ -259,7 +268,15 @@ describe('BillingService', () => {
       });
 
       const result = await service.getMyTransactions(mockUser);
-      expect(result).toEqual(transactions);
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: transactions[0]._id.toString(),
+          consultationId: CONSULTATION_ID,
+          patientId: PATIENT_ID,
+          paymentMode: 'SIMULATED',
+          sandbox: true,
+        }),
+      ]);
     });
   });
 

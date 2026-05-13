@@ -19,6 +19,8 @@ export class JwtLegacyStrategy extends PassportStrategy(
   Strategy,
   'jwt-legacy',
 ) {
+  private readonly legacyEnabled: boolean;
+
   constructor(
     configService: ConfigService,
     @InjectModel(Patient.name)
@@ -28,15 +30,29 @@ export class JwtLegacyStrategy extends PassportStrategy(
     @InjectModel(Admin.name)
     private readonly adminModel: Model<AdminDocument>,
   ) {
+    const legacyEnabled =
+      configService.get<boolean>('auth.legacyEnabled') ?? false;
+    const secret = configService.get<string>('auth.jwtSecret');
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        configService.get<string>('auth.jwtSecret') ?? 'legacy-disabled',
+      secretOrKey: secret ?? 'legacy-disabled',
     });
+
+    this.legacyEnabled = legacyEnabled;
+
+    if (legacyEnabled && !secret) {
+      throw new UnauthorizedException(
+        'AUTH_LEGACY_ENABLED requiere JWT_SECRET configurado',
+      );
+    }
   }
 
   async validate(payload: JwtPayload): Promise<RequestUser> {
+    if (!this.legacyEnabled) {
+      throw new UnauthorizedException('Autenticacion JWT legacy deshabilitada');
+    }
+
     if (payload.tokenType !== 'access') {
       throw new UnauthorizedException(
         'Token invalido o tipo de token no permitido',

@@ -4,11 +4,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { UserRole } from '../common/enums/user-role.enum';
 import { buildRequestUser } from '../common/testing/request-test-helpers';
-import { Consultation } from '../consultations/schemas/consultation.schema';
 import { Doctor } from '../doctors/schemas/doctor.schema';
-import { Followup } from '../followups/schemas/followup.schema';
-import { TriageSession } from '../triage/schemas/triage-session.schema';
 import { PatientTimelineService } from './patient-timeline.service';
+import {
+  createSelectLeanQuery,
+  createTimelineModelProviders,
+  EMPTY_TIMELINE_RESULT,
+} from './patients.spec-helpers';
 
 describe('PatientTimelineService', () => {
   let service: PatientTimelineService;
@@ -37,28 +39,16 @@ describe('PatientTimelineService', () => {
       providers: [
         PatientTimelineService,
         { provide: getModelToken(Doctor.name), useValue: doctorModel },
-        {
-          provide: getModelToken(Consultation.name),
-          useValue: consultationModel,
-        },
-        {
-          provide: getModelToken(TriageSession.name),
-          useValue: triageSessionModel,
-        },
-        { provide: getModelToken(Followup.name), useValue: followupModel },
+        ...createTimelineModelProviders({
+          consultationModel,
+          triageSessionModel,
+          followupModel,
+        }),
       ],
     }).compile();
 
     service = module.get<PatientTimelineService>(PatientTimelineService);
   });
-
-  function leanQuery(items: unknown[]) {
-    return {
-      select: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue(items),
-    };
-  }
 
   it('rejects invalid patient ids', async () => {
     await expect(
@@ -132,9 +122,9 @@ describe('PatientTimelineService', () => {
   });
 
   it('allows a patient to read their own timeline and returns no next cursor when under limit', async () => {
-    triageSessionModel.find.mockReturnValue(leanQuery([]));
-    consultationModel.find.mockReturnValue(leanQuery([]));
-    followupModel.find.mockReturnValue(leanQuery([]));
+    triageSessionModel.find.mockReturnValue(createSelectLeanQuery([]));
+    consultationModel.find.mockReturnValue(createSelectLeanQuery([]));
+    followupModel.find.mockReturnValue(createSelectLeanQuery([]));
 
     const result = await service.getTimeline(
       buildRequestUser({
@@ -146,10 +136,7 @@ describe('PatientTimelineService', () => {
       { limit: 5 },
     );
 
-    expect(result).toEqual({
-      items: [],
-      nextCursor: null,
-    });
+    expect(result).toEqual(EMPTY_TIMELINE_RESULT);
   });
 
   it('allows doctors with prior consultations to read the timeline', async () => {
@@ -161,9 +148,9 @@ describe('PatientTimelineService', () => {
     consultationModel.exists.mockReturnValue({
       exec: jest.fn().mockResolvedValue(true),
     });
-    triageSessionModel.find.mockReturnValue(leanQuery([]));
-    consultationModel.find.mockReturnValue(leanQuery([]));
-    followupModel.find.mockReturnValue(leanQuery([]));
+    triageSessionModel.find.mockReturnValue(createSelectLeanQuery([]));
+    consultationModel.find.mockReturnValue(createSelectLeanQuery([]));
+    followupModel.find.mockReturnValue(createSelectLeanQuery([]));
 
     const result = await service.getTimeline(
       buildRequestUser({
@@ -181,7 +168,7 @@ describe('PatientTimelineService', () => {
   it('uses createdAt fallback for triage events without completedAt', async () => {
     const triageId = new Types.ObjectId();
     triageSessionModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: triageId,
           specialty: 'GENERAL_MEDICINE',
@@ -190,8 +177,8 @@ describe('PatientTimelineService', () => {
         },
       ]),
     );
-    consultationModel.find.mockReturnValue(leanQuery([]));
-    followupModel.find.mockReturnValue(leanQuery([]));
+    consultationModel.find.mockReturnValue(createSelectLeanQuery([]));
+    followupModel.find.mockReturnValue(createSelectLeanQuery([]));
 
     const result = await service.getTimeline(
       buildRequestUser({
@@ -213,9 +200,9 @@ describe('PatientTimelineService', () => {
 
   it('adds assignment and closure events for consultations independently', async () => {
     const consultationId = new Types.ObjectId();
-    triageSessionModel.find.mockReturnValue(leanQuery([]));
+    triageSessionModel.find.mockReturnValue(createSelectLeanQuery([]));
     consultationModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: consultationId,
           specialty: 'CARDIOLOGY',
@@ -225,7 +212,7 @@ describe('PatientTimelineService', () => {
         },
       ]),
     );
-    followupModel.find.mockReturnValue(leanQuery([]));
+    followupModel.find.mockReturnValue(createSelectLeanQuery([]));
 
     const result = await service.getTimeline(
       buildRequestUser({
@@ -245,10 +232,10 @@ describe('PatientTimelineService', () => {
 
   it('uses scheduledAt fallback for followup created events and omits escalation when missing consultation id', async () => {
     const followupId = new Types.ObjectId();
-    triageSessionModel.find.mockReturnValue(leanQuery([]));
-    consultationModel.find.mockReturnValue(leanQuery([]));
+    triageSessionModel.find.mockReturnValue(createSelectLeanQuery([]));
+    consultationModel.find.mockReturnValue(createSelectLeanQuery([]));
     followupModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: followupId,
           scheduledAt: new Date('2025-01-04T00:00:00.000Z'),
@@ -282,10 +269,10 @@ describe('PatientTimelineService', () => {
 
   it('adds a followup due event when the followup is reminded but not submitted', async () => {
     const followupId = new Types.ObjectId();
-    triageSessionModel.find.mockReturnValue(leanQuery([]));
-    consultationModel.find.mockReturnValue(leanQuery([]));
+    triageSessionModel.find.mockReturnValue(createSelectLeanQuery([]));
+    consultationModel.find.mockReturnValue(createSelectLeanQuery([]));
     followupModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: followupId,
           scheduledAt: new Date('2025-01-04T00:00:00.000Z'),
@@ -316,10 +303,10 @@ describe('PatientTimelineService', () => {
 
   it('uses updatedAt fallback for escalation events when submittedAt is missing', async () => {
     const followupId = new Types.ObjectId();
-    triageSessionModel.find.mockReturnValue(leanQuery([]));
-    consultationModel.find.mockReturnValue(leanQuery([]));
+    triageSessionModel.find.mockReturnValue(createSelectLeanQuery([]));
+    consultationModel.find.mockReturnValue(createSelectLeanQuery([]));
     followupModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: followupId,
           scheduledAt: new Date('2025-01-04T00:00:00.000Z'),
@@ -355,7 +342,7 @@ describe('PatientTimelineService', () => {
     const followupId = new Types.ObjectId();
 
     triageSessionModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: triageId,
           specialty: 'GENERAL_MEDICINE',
@@ -365,7 +352,7 @@ describe('PatientTimelineService', () => {
       ]),
     );
     consultationModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: consultationId,
           specialty: 'CARDIOLOGY',
@@ -376,7 +363,7 @@ describe('PatientTimelineService', () => {
       ]),
     );
     followupModel.find.mockReturnValue(
-      leanQuery([
+      createSelectLeanQuery([
         {
           _id: followupId,
           scheduledAt: new Date('2025-01-05T00:00:00.000Z'),

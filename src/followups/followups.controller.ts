@@ -1,4 +1,11 @@
 import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
@@ -6,6 +13,8 @@ import { SubmitFollowupDto } from './dto/submit-followup.dto';
 import { FollowupStatus } from './schemas/followup.schema';
 import { FollowupsService } from './followups.service';
 
+@ApiTags('followups')
+@ApiBearerAuth()
 @Controller('followups')
 export class FollowupsController {
   constructor(private readonly followupsService: FollowupsService) {}
@@ -28,6 +37,15 @@ export class FollowupsController {
 
   @Post()
   @Roles(UserRole.PATIENT)
+  @ApiOperation({
+    summary:
+      'Submit a followup response and idempotently escalate if symptoms worsen',
+  })
+  @ApiOkResponse({ description: 'Followup submitted' })
+  @ApiConflictResponse({
+    description:
+      'An escalation race was detected and no existing consultation could be recovered',
+  })
   submit(@Req() req: RequestContext, @Body() dto: SubmitFollowupDto) {
     return this.followupsService.submit(req.user!, dto);
   }

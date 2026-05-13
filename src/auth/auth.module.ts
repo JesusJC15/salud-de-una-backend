@@ -23,8 +23,7 @@ import { ProvisioningService } from './provisioning.service';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('auth.jwtSecret') ?? 'legacy-disabled',
+        secret: configService.getOrThrow<string>('auth.jwtSecret'),
       }),
     }),
     MongooseModule.forFeature([
@@ -42,6 +41,6 @@ import { ProvisioningService } from './provisioning.service';
     JwtProvisionStrategy,
     ProvisioningService,
   ],
-  exports: [AuthService, ProvisioningService],
+  exports: [AuthService, ProvisioningService, JwtModule],
 })
 export class AuthModule {}

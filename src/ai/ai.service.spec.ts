@@ -72,6 +72,7 @@ describe('AiService', () => {
           'ai.provider': 'gemini',
           'ai.geminiApiKey': 'gemini-key',
           'ai.model': 'gemini-2.5-flash',
+          'ai.requestTimeoutMs': 20_000,
         };
         return values[key];
       }),
@@ -230,6 +231,72 @@ describe('AiService', () => {
 
     expect(result.text).toBe('ok');
     expect(aiProvider.generateText.mock.calls).toHaveLength(1);
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptKey: 'key',
+        promptVersion: 1,
+        status: 'success',
+        sanitizedInputSummary: 'hello',
+        sanitizedOutputSummary: 'ok',
+      }),
+    );
+  });
+
+  it('generateText should audit and rethrow provider errors', async () => {
+    aiProvider.generateText.mockRejectedValue(new Error('provider down'));
+    const service = createService();
+
+    await expect(
+      service.generateText({
+        promptKey: 'key',
+        promptVersion: 1,
+        model: 'gemini-2.5-flash',
+        inputText: 'hello',
+        systemInstruction: 'be brief',
+      }),
+    ).rejects.toThrow('provider down');
+
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptKey: 'key',
+        status: 'error',
+        errorCode: 'Error',
+        sanitizedOutputSummary: 'provider down',
+      }),
+    );
+  });
+
+  it('generateText should timeout with a controlled service error', async () => {
+    configService.get.mockImplementation((key: string) => {
+      const values: Record<string, unknown> = {
+        'ai.enabled': true,
+        'ai.provider': 'gemini',
+        'ai.geminiApiKey': 'gemini-key',
+        'ai.model': 'gemini-2.5-flash',
+        'ai.requestTimeoutMs': 1,
+      };
+      return values[key];
+    });
+    aiProvider.generateText.mockReturnValue(new Promise(() => undefined));
+    const service = createService();
+
+    await expect(
+      service.generateText({
+        promptKey: 'slow',
+        promptVersion: 1,
+        model: 'gemini-2.5-flash',
+        inputText: 'hello',
+        systemInstruction: 'be brief',
+      }),
+    ).rejects.toThrow(ServiceUnavailableException);
+
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptKey: 'slow',
+        status: 'error',
+        errorCode: 'ServiceUnavailableException',
+      }),
+    );
   });
 
   it('embedTexts should delegate to provider when enabled', async () => {
@@ -252,6 +319,12 @@ describe('AiService', () => {
       model: 'gemini-embedding-001',
       contents: ['dolor toracico'],
     });
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptKey: 'EMBEDDINGS',
+        status: 'success',
+      }),
+    );
   });
 
   it('embedTexts should throw when provider is disabled', async () => {

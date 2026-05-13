@@ -311,6 +311,12 @@ export class AuthService {
         throw new UnauthorizedException('Token invalido o usuario inactivo');
       }
 
+      await this.provisioningService.setUserDbId?.(
+        identity.subject,
+        patient.id,
+        UserRole.PATIENT,
+      );
+
       return {
         id: patient.id,
         firstName: patient.firstName,
@@ -334,6 +340,12 @@ export class AuthService {
       gender: dto.gender,
       termsAcceptedAt: dto.acceptTerms ? new Date() : null,
     });
+
+    await this.provisioningService.setUserDbId?.(
+      identity.subject,
+      patient.id,
+      UserRole.PATIENT,
+    );
 
     return {
       id: patient.id,
@@ -367,6 +379,12 @@ export class AuthService {
         throw new UnauthorizedException('Token invalido o usuario inactivo');
       }
 
+      await this.provisioningService.setUserDbId?.(
+        identity.subject,
+        doctor.id,
+        UserRole.DOCTOR,
+      );
+
       return {
         id: doctor.id,
         firstName: doctor.firstName,
@@ -397,6 +415,12 @@ export class AuthService {
       phoneNumber: dto.phoneNumber,
       professionalLicense: dto.professionalLicense,
     });
+
+    await this.provisioningService.setUserDbId?.(
+      identity.subject,
+      doctor.id,
+      UserRole.DOCTOR,
+    );
 
     return {
       id: doctor.id,

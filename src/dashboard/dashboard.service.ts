@@ -338,11 +338,11 @@ export class DashboardService {
       });
     }
 
-    if (technical.errorRate > 0.02) {
+    if (technical.errorRate > 2) {
       alerts.push({
         key: 'technical-error-rate',
-        level: technical.errorRate > 0.05 ? 'CRITICAL' : 'WARNING',
-        message: `Error rate ${(technical.errorRate * 100).toFixed(2)}%`,
+        level: technical.errorRate > 5 ? 'CRITICAL' : 'WARNING',
+        message: `Error rate ${technical.errorRate.toFixed(2)}%`,
       });
     }
 

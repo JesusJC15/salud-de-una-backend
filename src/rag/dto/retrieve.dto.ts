@@ -1,8 +1,17 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Specialty } from '../../common/enums/specialty.enum';
 
 export class RetrieveDto {
   @IsString()
+  @MaxLength(1000)
   query!: string;
 
   @IsOptional()
@@ -12,10 +21,12 @@ export class RetrieveDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(80)
   useCase?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   audience?: string;
 
   @IsOptional()

@@ -115,12 +115,15 @@ export class KnowledgeChunk {
 export const KnowledgeChunkSchema =
   SchemaFactory.createForClass(KnowledgeChunk);
 
-KnowledgeChunkSchema.index({ documentId: 1, chunkIndex: 1 }, { unique: true });
+KnowledgeChunkSchema.index(
+  { documentVersionId: 1, chunkIndex: 1 },
+  { unique: true },
+);
 KnowledgeChunkSchema.index({
-  status: 1,
   reviewStatus: 1,
   specialty: 1,
   audience: 1,
+  documentVersion: -1,
 });
 KnowledgeChunkSchema.index({
   normalizedText: 'text',

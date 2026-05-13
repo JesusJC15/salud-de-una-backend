@@ -5,12 +5,15 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { AiService } from '../ai/ai.service';
 import { ChatService } from '../chat/chat.service';
 import { DoctorAvailability } from '../common/enums/doctor-availability.enum';
@@ -69,7 +72,12 @@ const CONSULTATION_CLOSED: ConsultationStatus = 'CLOSED';
 
 @Injectable()
 export class ConsultationsService {
+  private readonly logger = new Logger(ConsultationsService.name);
+
   constructor(
+    @Optional()
+    @InjectConnection()
+    private readonly connection: Connection | null,
     @InjectModel(Consultation.name)
     private readonly consultationModel: Model<ConsultationDocument>,
     @InjectModel(Doctor.name)
@@ -85,6 +93,8 @@ export class ConsultationsService {
     private readonly outboxDispatcherService: OutboxDispatcherService,
     private readonly chatService: ChatService,
     private readonly ragService: RagService,
+    @Optional()
+    private readonly configService: ConfigService | null,
   ) {}
 
   async createFromTriage(
@@ -133,29 +143,85 @@ export class ConsultationsService {
     const page = Math.max(options.page ?? 1, 1);
     const skip = (page - 1) * limit;
 
-    const pendingConsultations = (await this.consultationModel
-      .find({ status: 'PENDING' })
-      .select(
-        '_id patientId triageSessionId specialty priority status createdAt',
-      )
-      .lean()
-      .exec()) as QueueRow[];
+    if (typeof this.consultationModel.aggregate !== 'function') {
+      const pendingConsultations = (await this.consultationModel
+        .find({ status: 'PENDING' })
+        .select(
+          '_id patientId triageSessionId specialty priority status createdAt',
+        )
+        .lean()
+        .exec()) as QueueRow[];
 
-    const sortedPendingConsultations = [...pendingConsultations];
-    sortedPendingConsultations.sort((a, b) => {
-      const priorityRankDifference =
-        this.getPriorityRank(a.priority) - this.getPriorityRank(b.priority);
+      const sortedPendingConsultations = [...pendingConsultations];
+      sortedPendingConsultations.sort((a, b) => {
+        const priorityRankDifference =
+          this.getPriorityRank(a.priority) - this.getPriorityRank(b.priority);
 
-      if (priorityRankDifference !== 0) {
-        return priorityRankDifference;
-      }
+        if (priorityRankDifference !== 0) {
+          return priorityRankDifference;
+        }
 
-      const createdAtA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const createdAtB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return createdAtA - createdAtB;
-    });
+        const createdAtA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const createdAtB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return createdAtA - createdAtB;
+      });
 
-    const queueRows = sortedPendingConsultations.slice(skip, skip + limit);
+      const queueRows = sortedPendingConsultations.slice(skip, skip + limit);
+
+      return {
+        items: queueRows.map((row) => ({
+          id: row._id.toString(),
+          patientId: row.patientId.toString(),
+          triageSessionId: row.triageSessionId.toString(),
+          specialty: row.specialty,
+          priority: row.priority,
+          status: row.status,
+          createdAt: row.createdAt,
+        })),
+      };
+    }
+
+    const queueRows = await this.consultationModel
+      .aggregate<QueueRow>([
+        {
+          $match: {
+            status: 'PENDING',
+          },
+        },
+        {
+          $addFields: {
+            priorityRank: {
+              $cond: [
+                { $eq: ['$priority', 'HIGH'] },
+                0,
+                {
+                  $cond: [{ $eq: ['$priority', 'MODERATE'] }, 1, 2],
+                },
+              ],
+            },
+          },
+        },
+        {
+          $sort: {
+            priorityRank: 1,
+            createdAt: 1,
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            patientId: 1,
+            triageSessionId: 1,
+            specialty: 1,
+            priority: 1,
+            status: 1,
+            createdAt: 1,
+          },
+        },
+        { $skip: skip },
+        { $limit: limit },
+      ])
+      .exec();
 
     const items = queueRows.map((row) => ({
       id: row._id.toString(),
@@ -235,6 +301,10 @@ export class ConsultationsService {
       throw new BadRequestException('doctorId invalido');
     }
 
+    if (!Types.ObjectId.isValid(consultationId)) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
     const doctor = await this.doctorModel
       .findById(user.userId)
       .select('doctorStatus availabilityStatus')
@@ -252,22 +322,38 @@ export class ConsultationsService {
     }
 
     const consultation = await this.consultationModel
-      .findById(consultationId)
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(consultationId),
+          status: CONSULTATION_PENDING,
+        },
+        {
+          $set: {
+            status: CONSULTATION_IN_ATTENTION,
+            assignedDoctorId: new Types.ObjectId(user.userId),
+            assignedAt: new Date(),
+          },
+        },
+        {
+          returnDocument: 'after',
+        },
+      )
       .exec();
     if (!consultation) {
-      throw new NotFoundException('Consulta no encontrada');
-    }
+      const existing = await this.consultationModel
+        .findById(consultationId)
+        .select('status')
+        .lean()
+        .exec();
 
-    if (consultation.status !== CONSULTATION_PENDING) {
-      throw new BadRequestException(
-        'Solo se pueden asignar consultas pendientes',
+      if (!existing) {
+        throw new NotFoundException('Consulta no encontrada');
+      }
+
+      throw new ConflictException(
+        'La consulta ya fue asignada o no esta pendiente',
       );
     }
-
-    consultation.status = CONSULTATION_IN_ATTENTION;
-    consultation.assignedDoctorId = new Types.ObjectId(user.userId);
-    consultation.assignedAt = new Date();
-    await consultation.save();
 
     await this.notificationsService.createUserNotification({
       userId: consultation.patientId.toString(),
@@ -281,10 +367,23 @@ export class ConsultationsService {
       },
     });
 
+    this.logger.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        service: 'api',
+        endpoint_or_event: 'consultation.assigned',
+        consultation_id: consultation.id,
+        patient_id: consultation.patientId.toString(),
+        doctor_id: user.userId,
+        status: consultation.status,
+      }),
+    );
+
     return {
       id: consultation.id,
       status: consultation.status,
-      assignedDoctorId: consultation.assignedDoctorId.toString(),
+      assignedDoctorId: consultation.assignedDoctorId?.toString(),
       updatedAt:
         consultation.updatedAt?.toISOString() ?? new Date().toISOString(),
     };
@@ -296,56 +395,131 @@ export class ConsultationsService {
     dto: CloseConsultationDto,
     correlationId?: string,
   ) {
-    const consultation = await this.consultationModel
-      .findById(consultationId)
-      .exec();
-    if (!consultation) {
-      throw new NotFoundException('Consulta no encontrada');
-    }
+    if (!this.connection?.startSession) {
+      const consultation = await this.consultationModel
+        .findById(consultationId)
+        .exec();
+      if (!consultation) {
+        throw new NotFoundException('Consulta no encontrada');
+      }
 
-    this.assertAssignedDoctor(consultation, user);
+      this.assertAssignedDoctor(consultation, user);
 
-    if (consultation.status !== CONSULTATION_IN_ATTENTION) {
-      throw new BadRequestException(
-        'Solo se pueden cerrar consultas en atencion',
+      if (consultation.status !== CONSULTATION_IN_ATTENTION) {
+        throw new BadRequestException(
+          'Solo se pueden cerrar consultas en atencion',
+        );
+      }
+
+      consultation.status = CONSULTATION_CLOSED;
+      consultation.closedAt = new Date();
+      if (dto.baselineSymptomSeverity !== undefined) {
+        consultation.baselineSymptomSeverity = dto.baselineSymptomSeverity;
+      }
+      if (dto.redFlagsConfirmed !== undefined) {
+        consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
+      }
+      await consultation.save();
+
+      await this.notificationsService.createUserNotification({
+        userId: consultation.patientId.toString(),
+        type: 'CONSULTATION_CLOSED',
+        status: consultation.status,
+        message: 'Tu consulta finalizó. Puedes calificar la atención recibida.',
+        resourceId: consultation.id,
+        deepLink: `/consultations/${consultation.id}`,
+        metadata: {
+          consultationId: consultation.id,
+        },
+      });
+
+      await this.outboxService.createConsultationClosedEvent(
+        {
+          consultationId: consultation.id,
+        },
+        correlationId,
       );
+      await this.outboxDispatcherService.dispatchPendingEvents();
+
+      return {
+        id: consultation.id,
+        status: consultation.status,
+        closedAt: consultation.closedAt.toISOString(),
+      };
     }
 
-    consultation.status = CONSULTATION_CLOSED;
-    consultation.closedAt = new Date();
-    if (dto.baselineSymptomSeverity !== undefined) {
-      consultation.baselineSymptomSeverity = dto.baselineSymptomSeverity;
-    }
-    if (dto.redFlagsConfirmed !== undefined) {
-      consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
-    }
-    await consultation.save();
+    const session = await this.connection.startSession();
+    let response:
+      | {
+          id: string;
+          status: ConsultationStatus;
+          closedAt: string;
+        }
+      | undefined;
 
-    await this.notificationsService.createUserNotification({
-      userId: consultation.patientId.toString(),
-      type: 'CONSULTATION_CLOSED',
-      status: consultation.status,
-      message: 'Tu consulta finalizó. Puedes calificar la atención recibida.',
-      resourceId: consultation.id,
-      deepLink: `/consultations/${consultation.id}`,
-      metadata: {
-        consultationId: consultation.id,
-      },
-    });
+    try {
+      await session.withTransaction(async () => {
+        const consultation = await this.consultationModel
+          .findById(consultationId)
+          .session(session)
+          .exec();
+        if (!consultation) {
+          throw new NotFoundException('Consulta no encontrada');
+        }
 
-    await this.outboxService.createConsultationClosedEvent(
-      {
-        consultationId: consultation.id,
-      },
-      correlationId,
-    );
+        this.assertAssignedDoctor(consultation, user);
+
+        if (consultation.status !== CONSULTATION_IN_ATTENTION) {
+          throw new BadRequestException(
+            'Solo se pueden cerrar consultas en atencion',
+          );
+        }
+
+        consultation.status = CONSULTATION_CLOSED;
+        consultation.closedAt = new Date();
+        if (dto.baselineSymptomSeverity !== undefined) {
+          consultation.baselineSymptomSeverity = dto.baselineSymptomSeverity;
+        }
+        if (dto.redFlagsConfirmed !== undefined) {
+          consultation.redFlagsConfirmed = dto.redFlagsConfirmed;
+        }
+        await consultation.save({ session });
+
+        await this.notificationsService.createUserNotification({
+          userId: consultation.patientId.toString(),
+          type: 'CONSULTATION_CLOSED',
+          status: consultation.status,
+          message:
+            'Tu consulta finalizó. Puedes calificar la atención recibida.',
+          resourceId: consultation.id,
+          deepLink: `/consultations/${consultation.id}`,
+          metadata: {
+            consultationId: consultation.id,
+          },
+          session,
+        });
+
+        await this.outboxService.createConsultationClosedEvent(
+          {
+            consultationId: consultation.id,
+          },
+          correlationId,
+          session,
+        );
+
+        response = {
+          id: consultation.id,
+          status: consultation.status,
+          closedAt: consultation.closedAt.toISOString(),
+        };
+      });
+    } finally {
+      await session.endSession();
+    }
+
     await this.outboxDispatcherService.dispatchPendingEvents();
 
-    return {
-      id: consultation.id,
-      status: consultation.status,
-      closedAt: consultation.closedAt.toISOString(),
-    };
+    return response!;
   }
 
   async generateSummary(consultationId: string, user: RequestUser) {
@@ -689,9 +863,6 @@ export class ConsultationsService {
   }
 
   private isRagSummaryEnabled(): boolean {
-    return (
-      process.env.RAG_SUMMARY_ENABLED === 'true' ||
-      process.env.RAG_SUMMARY_ENABLED === '1'
-    );
+    return this.configService?.get<boolean>('rag.summaryEnabled') === true;
   }
 }

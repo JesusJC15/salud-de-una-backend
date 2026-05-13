@@ -4,9 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import {
@@ -40,6 +41,9 @@ export class BillingService {
   private readonly logger = new Logger(BillingService.name);
 
   constructor(
+    @Optional()
+    @InjectConnection()
+    private readonly connection: Connection | null,
     @InjectModel(BillingPrice.name)
     private readonly billingPriceModel: Model<BillingPriceDocument>,
     @InjectModel(Transaction.name)
@@ -57,7 +61,7 @@ export class BillingService {
       .findOneAndUpdate(
         { specialty },
         { $set: { amount, active: true } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       )
       .lean()
       .exec();
@@ -102,62 +106,122 @@ export class BillingService {
       .lean()
       .exec();
 
-    const amount = price?.amount ?? 15000;
+    if (!price) {
+      throw new BadRequestException(
+        'No existe un precio activo configurado para esta especialidad',
+      );
+    }
 
     const [transaction] = await this.transactionModel.create([
       {
         patientId: new Types.ObjectId(user.userId),
         consultationId: new Types.ObjectId(consultationId),
         specialty: consultation.specialty,
-        amount,
-        currency: price?.currency ?? 'COP',
+        amount: price.amount,
+        currency: price.currency ?? 'COP',
         status: 'PENDING',
       },
     ]);
 
-    return transaction;
+    return this.toTransactionResponse(transaction.toObject());
   }
 
   async confirmCheckout(transactionId: string, user: RequestUser) {
-    const transaction = await this.transactionModel
-      .findById(transactionId)
-      .exec();
+    if (!this.connection?.startSession) {
+      const transaction = await this.transactionModel
+        .findById(transactionId)
+        .exec();
 
-    if (!transaction) {
-      throw new NotFoundException('Transacción no encontrada');
-    }
+      if (!transaction) {
+        throw new NotFoundException('Transacción no encontrada');
+      }
 
-    if (transaction.patientId.toString() !== user.userId) {
-      throw new BadRequestException('No tienes acceso a esta transacción');
-    }
+      if (transaction.patientId.toString() !== user.userId) {
+        throw new BadRequestException('No tienes acceso a esta transacción');
+      }
 
-    if (transaction.status !== 'PENDING') {
-      throw new BadRequestException(
-        `No se puede confirmar una transacción con estado ${transaction.status}`,
+      if (transaction.status !== 'PENDING') {
+        throw new BadRequestException(
+          `No se puede confirmar una transacción con estado ${transaction.status}`,
+        );
+      }
+
+      transaction.status = 'COMPLETED';
+      transaction.paidAt = new Date();
+      await transaction.save();
+
+      await this.consultationModel.findByIdAndUpdate(
+        transaction.consultationId,
+        {
+          $set: { transactionId: transaction._id },
+        },
       );
+
+      this.logger.log(
+        `Simulated payment confirmed for transaction ${transactionId}`,
+      );
+
+      return this.toTransactionResponse(transaction.toObject());
     }
 
-    transaction.status = 'COMPLETED';
-    transaction.paidAt = new Date();
-    await transaction.save();
+    const session = await this.connection.startSession();
+    let response: ReturnType<BillingService['toTransactionResponse']> | null =
+      null;
 
-    await this.consultationModel.findByIdAndUpdate(transaction.consultationId, {
-      $set: { transactionId: transaction._id },
-    });
+    try {
+      await session.withTransaction(async () => {
+        const transaction = await this.transactionModel
+          .findById(transactionId)
+          .session(session)
+          .exec();
+
+        if (!transaction) {
+          throw new NotFoundException('Transacción no encontrada');
+        }
+
+        if (transaction.patientId.toString() !== user.userId) {
+          throw new BadRequestException('No tienes acceso a esta transacción');
+        }
+
+        if (transaction.status !== 'PENDING') {
+          throw new BadRequestException(
+            `No se puede confirmar una transacción con estado ${transaction.status}`,
+          );
+        }
+
+        transaction.status = 'COMPLETED';
+        transaction.paidAt = new Date();
+        await transaction.save({ session });
+
+        await this.consultationModel.updateOne(
+          { _id: transaction.consultationId },
+          {
+            $set: { transactionId: transaction._id },
+          },
+          { session },
+        );
+
+        response = this.toTransactionResponse(transaction.toObject());
+      });
+    } finally {
+      await session.endSession();
+    }
 
     this.logger.log(
-      `Payment confirmed for consultation ${transaction.consultationId.toString()} — $${transaction.amount} COP`,
+      `Simulated payment confirmed for transaction ${transactionId}`,
     );
 
-    return transaction.toObject();
+    return response!;
   }
 
   async getMyTransactions(user: RequestUser) {
-    return this.transactionModel
+    const items = await this.transactionModel
       .find({ patientId: new Types.ObjectId(user.userId) })
       .sort({ createdAt: -1 })
       .lean()
       .exec();
+
+    return items.map((item) => this.toTransactionResponse(item));
   }
 
   async getTransactionById(id: string, user: RequestUser) {
@@ -168,7 +232,7 @@ export class BillingService {
     if (transaction.patientId.toString() !== user.userId) {
       throw new BadRequestException('No tienes acceso a esta transacción');
     }
-    return transaction;
+    return this.toTransactionResponse(transaction);
   }
 
   async getAllTransactions(params: {
@@ -204,7 +268,12 @@ export class BillingService {
       this.transactionModel.countDocuments(filter),
     ]);
 
-    return { items, total, page, limit };
+    return {
+      items: items.map((item) => this.toTransactionResponse(item)),
+      total,
+      page,
+      limit,
+    };
   }
 
   async getRevenueMetrics() {
@@ -241,6 +310,8 @@ export class BillingService {
     const currentMonth = monthlyAgg[0];
 
     return {
+      paymentMode: 'SIMULATED',
+      sandbox: true,
       currentMonth: {
         totalRevenue: currentMonth?.totalRevenue ?? 0,
         paidConsultations: currentMonth?.count ?? 0,
@@ -251,6 +322,41 @@ export class BillingService {
         totalRevenue: s.totalRevenue,
         count: s.count,
       })),
+    };
+  }
+
+  private toTransactionResponse(
+    transaction: Pick<
+      Transaction,
+      | 'patientId'
+      | 'consultationId'
+      | 'specialty'
+      | 'amount'
+      | 'currency'
+      | 'status'
+      | 'paidAt'
+      | 'createdAt'
+      | 'updatedAt'
+    > & {
+      _id?: Types.ObjectId;
+      id?: string;
+    },
+  ) {
+    return {
+      id: transaction.id ?? transaction._id?.toString(),
+      patientId: transaction.patientId.toString(),
+      consultationId: transaction.consultationId.toString(),
+      specialty: transaction.specialty,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      status: transaction.status,
+      paidAt: transaction.paidAt ?? null,
+      createdAt: transaction.createdAt ?? null,
+      updatedAt: transaction.updatedAt ?? null,
+      paymentMode: 'SIMULATED' as const,
+      sandbox: true,
+      message:
+        'Cobro simulado: este flujo no representa una transacción financiera real.',
     };
   }
 }

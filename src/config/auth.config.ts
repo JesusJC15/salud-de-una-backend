@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('auth', () => ({
+  legacyEnabled: process.env.AUTH_LEGACY_ENABLED !== 'false',
   auth0Domain: process.env.AUTH0_DOMAIN ?? '',
   auth0Audience: process.env.AUTH0_AUDIENCE ?? '',
   auth0Issuer: process.env.AUTH0_ISSUER ?? '',

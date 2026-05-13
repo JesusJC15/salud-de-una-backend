@@ -60,6 +60,22 @@ describe('RedisTechnicalMetricsStore', () => {
     ).rejects.toThrow('socket closed');
   });
 
+  it('record should normalize ended client failures as unavailable', async () => {
+    redisClient.status = 'end';
+    const exec = jest.fn().mockRejectedValue(new Error('socket closed'));
+    const ltrim = jest.fn().mockReturnValue({ exec });
+    const lpush = jest.fn().mockReturnValue({ ltrim });
+    redisClient.multi.mockReturnValue({ lpush });
+    const store = new RedisTechnicalMetricsStore(redisClient as never);
+
+    await expect(
+      store.record({
+        statusCode: 500,
+        latencyMs: 12,
+      }),
+    ).rejects.toThrow('Redis metrics store unavailable');
+  });
+
   it('getSummary should ignore invalid payloads and build redis snapshot', async () => {
     redisClient.lrange.mockResolvedValue([
       JSON.stringify({
@@ -102,5 +118,12 @@ describe('RedisTechnicalMetricsStore', () => {
     await expect(store.getSummary()).rejects.toThrow(
       'Redis metrics store unavailable',
     );
+  });
+
+  it('getSummary should preserve non-ended redis failure messages', async () => {
+    redisClient.lrange.mockRejectedValue('connection timeout');
+    const store = new RedisTechnicalMetricsStore(redisClient as never);
+
+    await expect(store.getSummary()).rejects.toThrow('connection timeout');
   });
 });

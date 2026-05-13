@@ -3,6 +3,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { AiService } from './ai/ai.service';
 import { describeReadyState } from './common/utils/mongo-ready-state.util';
+import { getRuntimeRole } from './common/utils/runtime-role.util';
 import { RedisHealthService } from './redis/redis-health.service';
 
 type HealthStatus = {
@@ -10,12 +11,14 @@ type HealthStatus = {
   service: string;
   timestamp: string;
   uptimeSeconds: number;
+  runtimeRole: string;
 };
 
 type ReadinessStatus = {
   status: 'ready' | 'not_ready';
   service: string;
   timestamp: string;
+  runtimeRole: string;
   checks: {
     database: {
       status: 'up' | 'down';
@@ -49,6 +52,7 @@ export class AppService {
       service: 'salud-de-una-backend',
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
+      runtimeRole: getRuntimeRole(),
     };
   }
 
@@ -57,11 +61,17 @@ export class AppService {
     const isDatabaseUp = readyState === 1;
     const redisReadiness = await this.redisHealthService.getReadiness();
     const aiReadiness = this.aiService.getReadiness();
+    const isProduction = process.env.NODE_ENV === 'production';
+    const status =
+      isDatabaseUp && (!isProduction || redisReadiness.status === 'up')
+        ? 'ready'
+        : 'not_ready';
 
     return {
-      status: isDatabaseUp ? 'ready' : 'not_ready',
+      status,
       service: 'salud-de-una-backend',
       timestamp: new Date().toISOString(),
+      runtimeRole: getRuntimeRole(),
       checks: {
         database: {
           status: isDatabaseUp ? 'up' : 'down',

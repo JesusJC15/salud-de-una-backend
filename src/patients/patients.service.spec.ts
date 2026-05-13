@@ -3,22 +3,17 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
-import { Consultation } from '../consultations/schemas/consultation.schema';
-import { Followup } from '../followups/schemas/followup.schema';
-import { TriageSession } from '../triage/schemas/triage-session.schema';
 import { Transaction } from '../billing/schemas/transaction.schema';
 import { UserRole } from '../common/enums/user-role.enum';
 import { PatientTimelineService } from './patient-timeline.service';
+import {
+  createResolvedLeanQuery,
+  createSelectLeanQuery,
+  createTimelineModelProviders,
+  EMPTY_TIMELINE_RESULT,
+} from './patients.spec-helpers';
 import { PatientsService } from './patients.service';
 import { Patient } from './schemas/patient.schema';
-
-function createFindChain(result: unknown) {
-  return {
-    select: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(result),
-  };
-}
 
 function createDocumentQuery(result: unknown) {
   return {
@@ -74,32 +69,16 @@ describe('PatientsService', () => {
   beforeEach(async () => {
     patientModel = { findById: jest.fn(), findByIdAndUpdate: jest.fn() };
     consultationModel = {
-      find: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
-      }),
+      find: jest.fn().mockReturnValue(createResolvedLeanQuery([])),
     };
     triageSessionModel = {
-      find: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
-      }),
+      find: jest.fn().mockReturnValue(createResolvedLeanQuery([])),
     };
     followupModel = {
-      find: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
-      }),
+      find: jest.fn().mockReturnValue(createResolvedLeanQuery([])),
     };
     transactionModel = {
-      find: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
-      }),
+      find: jest.fn().mockReturnValue(createResolvedLeanQuery([])),
     };
     connection = { startSession: jest.fn() };
     authService = {
@@ -115,15 +94,11 @@ describe('PatientsService', () => {
         PatientsService,
         { provide: getConnectionToken(), useValue: connection },
         { provide: getModelToken(Patient.name), useValue: patientModel },
-        {
-          provide: getModelToken(Consultation.name),
-          useValue: consultationModel,
-        },
-        {
-          provide: getModelToken(TriageSession.name),
-          useValue: triageSessionModel,
-        },
-        { provide: getModelToken(Followup.name), useValue: followupModel },
+        ...createTimelineModelProviders({
+          consultationModel,
+          triageSessionModel,
+          followupModel,
+        }),
         {
           provide: getModelToken(Transaction.name),
           useValue: transactionModel,
@@ -152,7 +127,7 @@ describe('PatientsService', () => {
 
   it('getMe should return patient profile', async () => {
     patientModel.findById.mockReturnValue(
-      createFindChain({
+      createSelectLeanQuery({
         _id: '507f1f77bcf86cd799439011',
         firstName: 'Ana',
         lastName: 'Lopez',
@@ -181,7 +156,7 @@ describe('PatientsService', () => {
   });
 
   it('getMe should throw when patient not found', async () => {
-    patientModel.findById.mockReturnValue(createFindChain(null));
+    patientModel.findById.mockReturnValue(createSelectLeanQuery(null));
 
     await expect(
       service.getMe({
@@ -219,6 +194,53 @@ describe('PatientsService', () => {
     });
     expect(patient.birthDate).toEqual(new Date('1998-03-10'));
     expect(authService.revokeAllRefreshSessionsForUser).not.toHaveBeenCalled();
+  });
+
+  it('updateMe should reject email changes without currentPassword', async () => {
+    const session = mockSession();
+    const patient = createPatientDocument();
+    patientModel.findById.mockReturnValue(createDocumentQuery(patient));
+
+    await expect(
+      service.updateMe(
+        {
+          userId: patient.id,
+          email: patient.email,
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        {
+          email: 'new@example.com',
+        },
+      ),
+    ).rejects.toThrow('currentPassword es obligatorio para cambios sensibles');
+
+    expect(session.withTransaction).toHaveBeenCalled();
+  });
+
+  it('updateMe should reject when the new password matches the current one', async () => {
+    const session = mockSession();
+    const patient = createPatientDocument({
+      passwordHash: bcrypt.hashSync('StrongP@ss1', 4),
+    });
+    patientModel.findById.mockReturnValue(createDocumentQuery(patient));
+
+    await expect(
+      service.updateMe(
+        {
+          userId: patient.id,
+          email: patient.email,
+          role: UserRole.PATIENT,
+          isActive: true,
+        },
+        {
+          newPassword: 'StrongP@ss1',
+          currentPassword: 'StrongP@ss1',
+        },
+      ),
+    ).rejects.toThrow('La nueva contraseña debe ser diferente a la actual');
+
+    expect(session.withTransaction).toHaveBeenCalled();
   });
 
   it('updateMe should update email when currentPassword is provided', async () => {
@@ -428,8 +450,7 @@ describe('PatientsService', () => {
 
   it('getTimeline should delegate to patient timeline service', async () => {
     patientTimelineService.getTimeline.mockResolvedValue({
-      items: [],
-      nextCursor: null,
+      ...EMPTY_TIMELINE_RESULT,
     });
     const user = {
       userId: '507f1f77bcf86cd799439011',
@@ -445,10 +466,7 @@ describe('PatientsService', () => {
       user.userId,
       { limit: 10 },
     );
-    expect(result).toEqual({
-      items: [],
-      nextCursor: null,
-    });
+    expect(result).toEqual(EMPTY_TIMELINE_RESULT);
   });
 
   describe('exportPatientData', () => {
@@ -519,6 +537,49 @@ describe('PatientsService', () => {
       expect(patient.isActive).toBe(false);
       expect(patient.isAnonymized).toBe(true);
       expect(patient.save).toHaveBeenCalled();
+      expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+    });
+
+    it('should anonymize without a database session manager', async () => {
+      const localService = new PatientsService(
+        null,
+        patientModel as never,
+        consultationModel as never,
+        triageSessionModel as never,
+        followupModel as never,
+        transactionModel as never,
+        authService as never,
+        patientTimelineService as never,
+      );
+      const patient = createPatientDocument();
+      patientModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(patient),
+      });
+
+      await localService.anonymizeAccount(user);
+
+      expect(patient.isAnonymized).toBe(true);
+      expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
+        user.userId,
+        UserRole.PATIENT,
+        'account_deleted',
+      );
+    });
+
+    it('should fall back when the session object lacks transaction helpers', async () => {
+      const patient = createPatientDocument();
+      patientModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(patient),
+      });
+      connection.startSession.mockResolvedValue({});
+
+      await service.anonymizeAccount(user);
+
+      expect(patient.isAnonymized).toBe(true);
       expect(authService.revokeAllRefreshSessionsForUser).toHaveBeenCalledWith(
         user.userId,
         UserRole.PATIENT,

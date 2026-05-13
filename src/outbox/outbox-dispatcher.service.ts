@@ -8,6 +8,7 @@ import {
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { DOMAIN_EVENTS_QUEUE } from './outbox.constants';
+import { runtimeRoleIncludesWorker } from '../common/utils/runtime-role.util';
 import { DomainEventsHandlerService } from './domain-events-handler.service';
 import { OutboxService } from './outbox.service';
 
@@ -28,6 +29,13 @@ export class OutboxDispatcherService
   ) {}
 
   onApplicationBootstrap(): void {
+    if (!runtimeRoleIncludesWorker()) {
+      this.logger.log(
+        'OutboxDispatcher skipped because APP_RUNTIME_ROLE excludes background workers',
+      );
+      return;
+    }
+
     const intervalMs =
       this.configService.get<number>('redis.outboxDispatchIntervalMs') ?? 1_000;
 

@@ -179,4 +179,20 @@ describe('JwtStrategy (Auth0)', () => {
       strategy.validate(buildPayload(id, UserRole.ADMIN)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it('should reject token with invalid role value', async () => {
+    const id = new Types.ObjectId().toString();
+    const payload = {
+      sub: 'auth0|xxx',
+      iss: 'https://test.auth0.com/',
+      aud: 'https://api.salud-de-una.com',
+      exp: 9999999999,
+      iat: 0,
+      [`${AUTH0_CLAIM_NS}db_id`]: id,
+      [`${AUTH0_CLAIM_NS}role`]: 'INVALID_ROLE_XYZ',
+    };
+    await expect(strategy.validate(payload)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
 });

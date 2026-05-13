@@ -17,6 +17,7 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV APP_RUNTIME_ROLE=api
 
 # Copy runtime artifacts
 COPY --from=builder --chown=node:node /app/package*.json ./
@@ -27,5 +28,6 @@ COPY --from=builder --chown=node:node /app/docker ./docker
 USER node
 
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=5 CMD ["node", "docker/healthcheck.js"]
 
 CMD ["node", "dist/main"]

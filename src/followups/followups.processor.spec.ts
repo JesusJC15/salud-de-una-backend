@@ -27,6 +27,7 @@ describe('FollowupsProcessor', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    delete process.env.APP_RUNTIME_ROLE;
 
     configService = new ConfigService();
     getConfigSpy = jest.spyOn(configService, 'get');
@@ -99,6 +100,16 @@ describe('FollowupsProcessor', () => {
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
     expect(followupsService.processDueFollowups).toHaveBeenCalled();
     expect(followupsService.processMissedFollowups).toHaveBeenCalled();
+  });
+
+  it('skips bootstrap when runtime role excludes workers', () => {
+    process.env.APP_RUNTIME_ROLE = 'api';
+    const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+    processor.onApplicationBootstrap();
+
+    expect(Worker).not.toHaveBeenCalled();
+    expect(setIntervalSpy).not.toHaveBeenCalled();
   });
 
   it('clears fallback polling on shutdown', async () => {

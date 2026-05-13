@@ -13,6 +13,7 @@ describe('AdminController', () => {
   let controller: AdminController;
   let service: {
     listDoctorsForReview: jest.Mock;
+    getDoctorForReview: jest.Mock;
     verifyDoctor: jest.Mock;
     listUsers: jest.Mock;
     getUserByRole: jest.Mock;
@@ -22,6 +23,7 @@ describe('AdminController', () => {
   beforeEach(async () => {
     service = {
       listDoctorsForReview: jest.fn(),
+      getDoctorForReview: jest.fn(),
       verifyDoctor: jest.fn(),
       listUsers: jest.fn(),
       getUserByRole: jest.fn(),
@@ -56,6 +58,15 @@ describe('AdminController', () => {
       search: 'ana',
     });
     expect(result).toEqual({ items: [] });
+  });
+
+  it('getDoctor should call service', async () => {
+    service.getDoctorForReview.mockResolvedValue({ id: 'd1' });
+
+    const result = await controller.getDoctor('d1');
+
+    expect(service.getDoctorForReview).toHaveBeenCalledWith('d1');
+    expect(result).toEqual({ id: 'd1' });
   });
 
   it('verifyDoctorLegacy should call service', async () => {

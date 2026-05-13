@@ -132,7 +132,7 @@ describe('DashboardService', () => {
     technicalMetricsService.getSummary.mockResolvedValue({
       sampleSize: 6,
       p95LatencyMs: 500,
-      errorRate: 16.67,
+      errorRate: 0.1667,
       timestamp: '2026-03-14T12:00:00.000Z',
       source: 'memory',
       degraded: false,
@@ -361,7 +361,7 @@ describe('DashboardService', () => {
     jest.spyOn(service, 'getTechnicalMetrics').mockResolvedValue({
       sampleSize: 10,
       p95LatencyMs: 2100,
-      errorRate: 0.08,
+      errorRate: 8,
       timestamp: '2025-01-01T00:00:00.000Z',
       source: 'memory',
       degraded: false,
