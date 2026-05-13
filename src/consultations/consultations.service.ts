@@ -188,13 +188,13 @@ export class ConsultationsService {
         {
           $addFields: {
             priorityRank: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ['$priority', 'HIGH'] }, then: 0 },
-                  { case: { $eq: ['$priority', 'MODERATE'] }, then: 1 },
-                ],
-                default: 2,
-              },
+              $cond: [
+                { $eq: ['$priority', 'HIGH'] },
+                0,
+                {
+                  $cond: [{ $eq: ['$priority', 'MODERATE'] }, 1, 2],
+                },
+              ],
             },
           },
         },

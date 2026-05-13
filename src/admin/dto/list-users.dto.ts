@@ -1,35 +1,9 @@
-import { Type } from 'class-transformer';
-import {
-  IsEnum,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { PaginationSearchDto } from './pagination-search.dto';
 
-export class ListUsersDto {
+export class ListUsersDto extends PaginationSearchDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  search?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
 }

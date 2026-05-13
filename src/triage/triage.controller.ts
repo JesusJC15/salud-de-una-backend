@@ -26,12 +26,19 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import type { RequestContext } from '../common/interfaces/request-context.interface';
 import { CreateTriageSessionDto } from './dto/create-triage-session.dto';
 import { GetActiveTriageSessionsDto } from './dto/get-active-triage-sessions.dto';
 import { SaveTriageAnswersDto } from './dto/save-triage-answers.dto';
+import { TRIAGE_QUESTION_CATALOG } from './questions/triage-question-catalog.const';
 import { TriageService } from './triage.service';
+
+const GENERAL_MEDICINE_QUESTIONS =
+  TRIAGE_QUESTION_CATALOG[Specialty.GENERAL_MEDICINE];
+const GENERAL_MEDICINE_PRIMARY_QUESTION = GENERAL_MEDICINE_QUESTIONS[0];
+const GENERAL_MEDICINE_INTENSITY_QUESTION = GENERAL_MEDICINE_QUESTIONS[2];
 
 @ApiTags('Triage')
 @ApiBearerAuth()
@@ -191,31 +198,8 @@ export class TriageController {
         totalQuestions: 5,
         nextQuestionId: 'MG-Q2',
         questions: [
-          {
-            id: 'MG-Q1',
-            questionId: 'MG-Q1',
-            title: 'Sintoma principal',
-            questionText: 'Que sintoma principal presentas hoy?',
-            description:
-              'Selecciona el sintoma que describe mejor tu situacion.',
-            type: 'SINGLE_CHOICE',
-            options: [
-              {
-                id: 'MG-Q1-HEADACHE',
-                label: 'Dolor de cabeza',
-              },
-            ],
-          },
-          {
-            id: 'MG-Q3',
-            questionId: 'MG-Q3',
-            title: 'Intensidad de sintomas',
-            questionText: 'En una escala de 0 a 10, cual es la intensidad?',
-            type: 'NUMERIC_SCALE',
-            minValue: 0,
-            maxValue: 10,
-            step: 1,
-          },
+          GENERAL_MEDICINE_PRIMARY_QUESTION,
+          GENERAL_MEDICINE_INTENSITY_QUESTION,
         ],
         createdAt: '2026-04-07T18:18:00.000Z',
         updatedAt: '2026-04-07T18:19:10.000Z',

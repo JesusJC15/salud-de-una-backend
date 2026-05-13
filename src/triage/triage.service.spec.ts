@@ -13,6 +13,7 @@ import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { RagService } from '../rag/rag.service';
 import { RedFlagsEngine } from './engines/red-flags.engine';
+import { TRIAGE_QUESTION_CATALOG } from './questions/triage-question-catalog.const';
 import { TriageQuestionsRepository } from './questions/triage-questions.repository';
 import { GeminiTriageService } from './services/gemini-triage.service';
 import { GuardrailService } from './services/guardrail.service';
@@ -26,6 +27,17 @@ function createFindOneChain(result: unknown) {
     exec: jest.fn().mockResolvedValue(result),
   };
 }
+
+const GENERAL_MEDICINE_QUESTIONS =
+  TRIAGE_QUESTION_CATALOG[Specialty.GENERAL_MEDICINE];
+const GENERAL_MEDICINE_DETAIL_QUESTIONS = [
+  GENERAL_MEDICINE_QUESTIONS[0],
+  GENERAL_MEDICINE_QUESTIONS[2],
+];
+const GENERAL_MEDICINE_REQUIRED_QUESTION_IDS = GENERAL_MEDICINE_QUESTIONS.slice(
+  0,
+  3,
+).map((question) => question.questionId);
 
 describe('TriageService', () => {
   let service: TriageService;
@@ -202,18 +214,18 @@ describe('TriageService', () => {
       'corr-1',
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       sessionId: sessionId.toString(),
       specialty: Specialty.GENERAL_MEDICINE,
       status: 'IN_PROGRESS',
       questions: [{ questionId: 'MG-Q1', questionText: 'Q1' }],
-      totalQuestions: 2,
-      answeredCount: 0,
-      remainingQuestions: 2,
-      progressPercent: 0,
       nextQuestionId: 'MG-Q1',
-      isComplete: false,
     });
+    expect(result.totalQuestions).toBe(2);
+    expect(result.answeredCount).toBe(0);
+    expect(result.remainingQuestions).toBe(2);
+    expect(result.progressPercent).toBe(0);
+    expect(result.isComplete).toBe(false);
     expect(
       triageQuestionsRepository.getQuestionsBySpecialty,
     ).toHaveBeenCalledWith(Specialty.GENERAL_MEDICINE);
@@ -323,16 +335,16 @@ describe('TriageService', () => {
     );
 
     expect(saveMock).toHaveBeenCalled();
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       sessionId: sessionId.toString(),
       answersCount: 1,
-      isComplete: false,
-      totalQuestions: 2,
-      answeredCount: 1,
-      remainingQuestions: 1,
-      progressPercent: 50,
       nextQuestionId: 'MG-Q2',
     });
+    expect(result.isComplete).toBe(false);
+    expect(result.totalQuestions).toBe(2);
+    expect(result.answeredCount).toBe(1);
+    expect(result.remainingQuestions).toBe(1);
+    expect(result.progressPercent).toBe(50);
   });
 
   it('should save answers and return isComplete true when all required questions are answered', async () => {
@@ -376,16 +388,16 @@ describe('TriageService', () => {
     );
 
     expect(saveMock).toHaveBeenCalled();
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       sessionId: sessionId.toString(),
       answersCount: 2,
-      isComplete: true,
-      totalQuestions: 2,
-      answeredCount: 2,
-      remainingQuestions: 0,
-      progressPercent: 100,
       nextQuestionId: null,
     });
+    expect(result.isComplete).toBe(true);
+    expect(result.totalQuestions).toBe(2);
+    expect(result.answeredCount).toBe(2);
+    expect(result.remainingQuestions).toBe(0);
+    expect(result.progressPercent).toBe(100);
   });
 
   it('should list active sessions with progress data', async () => {
@@ -419,22 +431,19 @@ describe('TriageService', () => {
       Specialty.GENERAL_MEDICINE,
     );
 
-    expect(result).toEqual({
-      items: [
-        {
-          id: sessionId.toString(),
-          specialty: Specialty.GENERAL_MEDICINE,
-          status: 'IN_PROGRESS',
-          currentStep: 2,
-          totalSteps: 2,
-          currentQuestionId: 'MG-Q2',
-          isComplete: false,
-          createdAt: '2026-04-07T18:00:00.000Z',
-          updatedAt: '2026-04-07T18:01:00.000Z',
-        },
-      ],
-      total: 1,
+    expect(result.total).toBe(1);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: sessionId.toString(),
+      specialty: Specialty.GENERAL_MEDICINE,
+      status: 'IN_PROGRESS',
+      currentQuestionId: 'MG-Q2',
+      createdAt: '2026-04-07T18:00:00.000Z',
+      updatedAt: '2026-04-07T18:01:00.000Z',
     });
+    expect(result.items[0]?.currentStep).toBe(2);
+    expect(result.items[0]?.totalSteps).toBe(2);
+    expect(result.items[0]?.isComplete).toBe(false);
   });
 
   it('should return session detail with full question metadata for owner', async () => {
@@ -451,31 +460,12 @@ describe('TriageService', () => {
         updatedAt: new Date('2026-04-07T18:01:00.000Z'),
       }),
     });
-    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue([
-      'MG-Q1',
-      'MG-Q2',
-      'MG-Q3',
-    ]);
-    triageQuestionsRepository.getQuestionsBySpecialty.mockReturnValue([
-      {
-        id: 'MG-Q1',
-        questionId: 'MG-Q1',
-        title: 'Sintoma principal',
-        questionText: 'Que sintoma principal presentas hoy?',
-        type: 'SINGLE_CHOICE',
-        options: [{ id: 'MG-Q1-HEADACHE', label: 'Dolor de cabeza' }],
-      },
-      {
-        id: 'MG-Q3',
-        questionId: 'MG-Q3',
-        title: 'Intensidad de sintomas',
-        questionText: 'En una escala de 0 a 10, cual es la intensidad?',
-        type: 'NUMERIC_SCALE',
-        minValue: 0,
-        maxValue: 10,
-        step: 1,
-      },
-    ]);
+    triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(
+      GENERAL_MEDICINE_REQUIRED_QUESTION_IDS,
+    );
+    triageQuestionsRepository.getQuestionsBySpecialty.mockReturnValue(
+      GENERAL_MEDICINE_DETAIL_QUESTIONS,
+    );
 
     const result = await service.getSessionDetail(sessionId.toString(), {
       userId: patientId.toString(),
@@ -484,43 +474,24 @@ describe('TriageService', () => {
       isActive: true,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       id: sessionId.toString(),
       sessionId: sessionId.toString(),
       specialty: Specialty.GENERAL_MEDICINE,
       status: 'IN_PROGRESS',
-      isComplete: false,
       currentQuestionId: 'MG-Q2',
-      currentStep: 2,
-      totalSteps: 3,
-      totalQuestions: 3,
       nextQuestionId: 'MG-Q2',
-      answeredCount: 1,
-      remainingQuestions: 2,
-      progressPercent: 33,
-      questions: [
-        {
-          id: 'MG-Q1',
-          questionId: 'MG-Q1',
-          title: 'Sintoma principal',
-          questionText: 'Que sintoma principal presentas hoy?',
-          type: 'SINGLE_CHOICE',
-          options: [{ id: 'MG-Q1-HEADACHE', label: 'Dolor de cabeza' }],
-        },
-        {
-          id: 'MG-Q3',
-          questionId: 'MG-Q3',
-          title: 'Intensidad de sintomas',
-          questionText: 'En una escala de 0 a 10, cual es la intensidad?',
-          type: 'NUMERIC_SCALE',
-          minValue: 0,
-          maxValue: 10,
-          step: 1,
-        },
-      ],
+      questions: GENERAL_MEDICINE_DETAIL_QUESTIONS,
       createdAt: '2026-04-07T18:00:00.000Z',
       updatedAt: '2026-04-07T18:01:00.000Z',
     });
+    expect(result.isComplete).toBe(false);
+    expect(result.currentStep).toBe(2);
+    expect(result.totalSteps).toBe(3);
+    expect(result.totalQuestions).toBe(3);
+    expect(result.answeredCount).toBe(1);
+    expect(result.remainingQuestions).toBe(2);
+    expect(result.progressPercent).toBe(33);
   });
 
   it('should throw 404 when session detail is requested for non-owner or missing session', async () => {
