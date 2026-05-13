@@ -2,6 +2,7 @@ import { ForbiddenException, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
+  Ack,
   MessageBody,
   OnGatewayConnection,
   SubscribeMessage,
@@ -24,6 +25,10 @@ type AuthenticatedSocket = Socket<
   SocketEventsMap,
   { user?: RequestUser; authPromise?: Promise<RequestUser | null> }
 >;
+
+type ChatSendAck =
+  | { ok: true; message: unknown }
+  | { ok: false; code: string; message: string };
 
 @WebSocketGateway({
   namespace: '/chat',
@@ -105,6 +110,7 @@ export class ChatGateway implements OnGatewayConnection {
   async handleSend(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() dto: ChatSendDto,
+    @Ack() ack?: (response: ChatSendAck) => void,
   ) {
     const user = await this.getAuthenticatedUser(client);
     if (!user) {
@@ -117,12 +123,16 @@ export class ChatGateway implements OnGatewayConnection {
         dto.consultationId,
         user,
         dto.content,
+        dto.clientMessageId,
       );
       this.server
         .to(this.toRoom(dto.consultationId))
         .emit('chat:message', message);
+      ack?.({ ok: true, message });
     } catch (error) {
-      client.emit('chat:error', this.toErrorPayload(error));
+      const payload = this.toErrorPayload(error);
+      client.emit('chat:error', payload);
+      ack?.({ ok: false, ...payload });
     }
   }
 

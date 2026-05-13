@@ -1,4 +1,10 @@
-import { IsMongoId, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class ChatSendDto {
   @IsMongoId()
@@ -8,4 +14,9 @@ export class ChatSendDto {
   @MinLength(1)
   @MaxLength(4000)
   content!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  clientMessageId?: string;
 }

@@ -62,6 +62,7 @@ export class ChatService {
     consultationId: string,
     user: RequestUser,
     content: string,
+    clientMessageId?: string,
   ) {
     const consultation = await this.assertCanAccessConsultation(
       consultationId,
@@ -89,7 +90,10 @@ export class ChatService {
 
     await this.notifyMessageRecipient(consultation, user, message);
 
-    return this.toMessageResponse(message);
+    return {
+      ...this.toMessageResponse(message),
+      clientMessageId,
+    };
   }
 
   private async notifyMessageRecipient(
