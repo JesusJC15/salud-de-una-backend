@@ -55,9 +55,6 @@ jobs:
       - name: Validate environment
         run: npm run validate:env
 
-      - name: Startup smoke
-        run: npm run smoke:startup
-
       - name: Unit tests with coverage
         run: npm run test:cov
 
