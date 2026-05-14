@@ -418,7 +418,12 @@ describe('Chat access control (e2e)', () => {
     // Registramos disconnect + chat:error ANTES de cualquier await para no perder eventos.
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error('Timeout: el servidor no desconectó al cliente con token inválido')),
+        () =>
+          reject(
+            new Error(
+              'Timeout: el servidor no desconectó al cliente con token inválido',
+            ),
+          ),
         8_000,
       );
 
