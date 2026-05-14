@@ -35,7 +35,9 @@
     "test:e2e:notifications": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/notifications",
     "test:e2e:dashboard": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/dashboard",
     "test:e2e:clinical-ai": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/clinical-ai",
-    "test:e2e:system": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/system"
+    "test:e2e:system": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/system",
+    "test:e2e:chat": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/chat",
+    "test:e2e:followups": "node scripts/run-jest.js --config ./test/jest-e2e.json --runInBand test/e2e/followups"
   },
   "dependencies": {
     "@google/genai": "^2.2.0",
