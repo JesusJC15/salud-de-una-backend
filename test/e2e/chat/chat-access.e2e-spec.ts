@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { getModelToken } from '@nestjs/mongoose';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { io as ioClient, Socket } from 'socket.io-client';
 import * as bcrypt from 'bcrypt';
-import { Connection, ConnectionStates, Model, Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { HttpExceptionFilter } from '../../../src/common/filters/http-exception.filter';
 import { Admin, AdminDocument } from '../../../src/admins/schemas/admin.schema';
 import {
@@ -22,7 +22,11 @@ jest.setTimeout(120_000);
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function waitForEvent<T>(socket: Socket, event: string, timeoutMs = 5_000): Promise<T> {
+function waitForEvent<T>(
+  socket: Socket,
+  event: string,
+  timeoutMs = 5_000,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`Timeout waiting for "${event}"`)),
@@ -37,24 +41,42 @@ function waitForEvent<T>(socket: Socket, event: string, timeoutMs = 5_000): Prom
 
 function waitForConnect(socket: Socket, timeoutMs = 5_000): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (socket.connected) { resolve(); return; }
+    if (socket.connected) {
+      resolve();
+      return;
+    }
     const timer = setTimeout(
       () => reject(new Error('Socket connection timeout')),
       timeoutMs,
     );
-    socket.once('connect', () => { clearTimeout(timer); resolve(); });
-    socket.once('connect_error', (err: Error) => { clearTimeout(timer); reject(err); });
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    socket.once('connect_error', (err: Error) => {
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 
-function waitForConnectError(socket: Socket, timeoutMs = 5_000): Promise<Error> {
+function waitForConnectError(
+  socket: Socket,
+  timeoutMs = 5_000,
+): Promise<Error> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error('Expected connect_error but got none')),
       timeoutMs,
     );
-    socket.once('connect_error', (err: Error) => { clearTimeout(timer); resolve(err); });
-    socket.once('connect', () => { clearTimeout(timer); reject(new Error('Expected error but connected successfully')); });
+    socket.once('connect_error', (err: Error) => {
+      clearTimeout(timer);
+      resolve(err);
+    });
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      reject(new Error('Expected error but connected successfully'));
+    });
   });
 }
 
@@ -71,9 +93,21 @@ const aiServiceMock = {
     }),
   ),
   healthCheck: jest.fn(() =>
-    Promise.resolve({ provider: 'mock', model: 'mock', status: 'up' as const, latencyMs: 1, checkedAt: new Date().toISOString(), degraded: false, requestId: 'mock' }),
+    Promise.resolve({
+      provider: 'mock',
+      model: 'mock',
+      status: 'up' as const,
+      latencyMs: 1,
+      checkedAt: new Date().toISOString(),
+      degraded: false,
+      requestId: 'mock',
+    }),
   ),
-  getReadiness: jest.fn(() => ({ status: 'up' as const, detail: 'mock', degraded: false })),
+  getReadiness: jest.fn(() => ({
+    status: 'up' as const,
+    detail: 'mock',
+    degraded: false,
+  })),
 };
 
 // ─── suite ───────────────────────────────────────────────────────────────────
@@ -139,14 +173,20 @@ describe('Chat access control (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('v1');
-    app.useGlobalPipes(new ValidationPipe({
-      whitelist: true, forbidNonWhitelisted: true, transform: true,
-      transformOptions: { enableImplicitConversion: true },
-    }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
     app.useGlobalFilters(new HttpExceptionFilter());
 
     await app.listen(0);
-    const httpServer = app.getHttpServer() as { address: () => { port: number } | null };
+    const httpServer = app.getHttpServer() as {
+      address: () => { port: number } | null;
+    };
     serverPort = httpServer.address()?.port ?? 0;
 
     consultationModel = app.get<Model<ConsultationDocument>>(
@@ -156,7 +196,8 @@ describe('Chat access control (e2e)', () => {
     // Seed admin
     const adminModel = app.get<Model<AdminDocument>>(getModelToken(Admin.name));
     await adminModel.create({
-      firstName: 'Admin', lastName: 'Chat',
+      firstName: 'Admin',
+      lastName: 'Chat',
       email: adminEmail,
       passwordHash: await bcrypt.hash(adminPassword, 12),
     });
@@ -164,7 +205,12 @@ describe('Chat access control (e2e)', () => {
     // Register + login patient A
     const regA = await request(app.getHttpServer())
       .post('/v1/auth/patient/register')
-      .send({ firstName: 'Ana', lastName: 'Gomez', email: patientAEmail, password: patientAPassword })
+      .send({
+        firstName: 'Ana',
+        lastName: 'Gomez',
+        email: patientAEmail,
+        password: patientAPassword,
+      })
       .expect(201);
     patientAId = (regA.body as { id: string }).id;
 
@@ -177,7 +223,12 @@ describe('Chat access control (e2e)', () => {
     // Register + login patient B (intruder)
     await request(app.getHttpServer())
       .post('/v1/auth/patient/register')
-      .send({ firstName: 'Bob', lastName: 'Intruder', email: patientBEmail, password: patientBPassword })
+      .send({
+        firstName: 'Bob',
+        lastName: 'Intruder',
+        email: patientBEmail,
+        password: patientBPassword,
+      })
       .expect(201);
 
     const loginB = await request(app.getHttpServer())
@@ -190,8 +241,10 @@ describe('Chat access control (e2e)', () => {
     const regDoc = await request(app.getHttpServer())
       .post('/v1/auth/doctor/register')
       .send({
-        firstName: 'Laura', lastName: 'Medina',
-        email: doctorEmail, password: doctorPassword,
+        firstName: 'Laura',
+        lastName: 'Medina',
+        email: doctorEmail,
+        password: doctorPassword,
         specialty: 'GENERAL_MEDICINE',
         personalId: `CC-CHAT-${Date.now()}`,
         phoneNumber: '3001234567',
@@ -210,10 +263,14 @@ describe('Chat access control (e2e)', () => {
       .post(`/v1/admin/doctors/${doctorId}/doctor-verify`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        programType: 'UNIVERSITY', titleObtainingOrigin: 'LOCAL',
-        professionOccupation: 'MEDICO GENERAL', startDate: '2024-01-15',
-        rethusState: RethusState.VALID, administrativeAct: 'ACT-CHAT-001',
-        reportingEntity: 'MINISTERIO DE SALUD', notes: 'Verificado para chat e2e',
+        programType: 'UNIVERSITY',
+        titleObtainingOrigin: 'LOCAL',
+        professionOccupation: 'MEDICO GENERAL',
+        startDate: '2024-01-15',
+        rethusState: RethusState.VALID,
+        administrativeAct: 'ACT-CHAT-001',
+        reportingEntity: 'MINISTERIO DE SALUD',
+        notes: 'Verificado para chat e2e',
       })
       .expect(201);
 
@@ -235,13 +292,15 @@ describe('Chat access control (e2e)', () => {
     await request(app.getHttpServer())
       .post(`/v1/triage/sessions/${sessionId}/answers`)
       .set('Authorization', `Bearer ${patientAToken}`)
-      .send({ answers: [
-        { questionId: 'MG-Q1', answerValue: 'cefalea' },
-        { questionId: 'MG-Q2', answerValue: '2 dias' },
-        { questionId: 'MG-Q3', answerValue: 4 },
-        { questionId: 'MG-Q4', answerValue: 'no' },
-        { questionId: 'MG-Q5', answerValue: 'no' },
-      ]})
+      .send({
+        answers: [
+          { questionId: 'MG-Q1', answerValue: 'cefalea' },
+          { questionId: 'MG-Q2', answerValue: '2 dias' },
+          { questionId: 'MG-Q3', answerValue: 4 },
+          { questionId: 'MG-Q4', answerValue: 'no' },
+          { questionId: 'MG-Q5', answerValue: 'no' },
+        ],
+      })
       .expect(200);
 
     await request(app.getHttpServer())
@@ -251,7 +310,8 @@ describe('Chat access control (e2e)', () => {
 
     const consultation = await consultationModel
       .findOne({ patientId: new Types.ObjectId(patientAId) })
-      .lean().exec();
+      .lean()
+      .exec();
     consultationId = consultation!._id.toString();
 
     // Doctor assigns consultation
@@ -277,7 +337,10 @@ describe('Chat access control (e2e)', () => {
     try {
       await waitForConnect(socket);
       socket.emit('chat:join', { consultationId });
-      const history = await waitForEvent<{ messages: unknown[] }>(socket, 'chat:history');
+      const history = await waitForEvent<{ messages: unknown[] }>(
+        socket,
+        'chat:history',
+      );
       expect(Array.isArray(history.messages)).toBe(true);
     } finally {
       socket.disconnect();
@@ -294,8 +357,14 @@ describe('Chat access control (e2e)', () => {
       socket.emit('chat:join', { consultationId });
       await waitForEvent(socket, 'chat:history');
 
-      socket.emit('chat:send', { consultationId, content: 'Hola paciente, ¿cómo se siente?' });
-      const msg = await waitForEvent<{ content: string; senderRole: string }>(socket, 'chat:message');
+      socket.emit('chat:send', {
+        consultationId,
+        content: 'Hola paciente, ¿cómo se siente?',
+      });
+      const msg = await waitForEvent<{ content: string; senderRole: string }>(
+        socket,
+        'chat:message',
+      );
       expect(msg.content).toBe('Hola paciente, ¿cómo se siente?');
       expect(msg.senderRole).toBe('DOCTOR');
     } finally {
@@ -311,7 +380,10 @@ describe('Chat access control (e2e)', () => {
     try {
       await waitForConnect(socket);
       socket.emit('chat:join', { consultationId });
-      const err = await waitForEvent<{ code: string; message: string }>(socket, 'chat:error');
+      const err = await waitForEvent<{ code: string; message: string }>(
+        socket,
+        'chat:error',
+      );
       expect(err.code).toBe('FORBIDDEN');
     } finally {
       socket.disconnect();
@@ -350,7 +422,10 @@ describe('Chat access control (e2e)', () => {
     try {
       await waitForConnect(socket);
       socket.emit('chat:join', { consultationId });
-      const history = await waitForEvent<{ messages: unknown[] }>(socket, 'chat:history');
+      const history = await waitForEvent<{ messages: unknown[] }>(
+        socket,
+        'chat:history',
+      );
       expect(Array.isArray(history.messages)).toBe(true);
     } finally {
       socket.disconnect();
