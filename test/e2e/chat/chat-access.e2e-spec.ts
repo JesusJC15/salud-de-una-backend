@@ -60,26 +60,6 @@ function waitForConnect(socket: Socket, timeoutMs = 5_000): Promise<void> {
   });
 }
 
-function waitForConnectError(
-  socket: Socket,
-  timeoutMs = 5_000,
-): Promise<Error> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error('Expected connect_error but got none')),
-      timeoutMs,
-    );
-    socket.once('connect_error', (err: Error) => {
-      clearTimeout(timer);
-      resolve(err);
-    });
-    socket.once('connect', () => {
-      clearTimeout(timer);
-      reject(new Error('Expected error but connected successfully'));
-    });
-  });
-}
-
 // ─── AI mock ─────────────────────────────────────────────────────────────────
 
 const aiServiceMock = {
@@ -390,14 +370,14 @@ describe('Chat access control (e2e)', () => {
     }
   });
 
-  it('GET /consultations/:id/messages — participante recibe 200', async () => {
-    await request(app.getHttpServer())
+  it('GET /consultations/:id/messages — participante recibe 200 con items', async () => {
+    const res = await request(app.getHttpServer())
       .get(`/v1/consultations/${consultationId}/messages`)
       .set('Authorization', `Bearer ${patientAToken}`)
-      .expect(200)
-      .expect((res) => {
-        expect(Array.isArray(res.body)).toBe(true);
-      });
+      .expect(200);
+
+    const body = res.body as { items: unknown[]; total: number };
+    expect(Array.isArray(body.items)).toBe(true);
   });
 
   it('GET /consultations/:id/messages — no participante recibe 403', async () => {
@@ -408,11 +388,11 @@ describe('Chat access control (e2e)', () => {
   });
 
   it('consulta cerrada: paciente puede unirse en modo lectura y recibir historial', async () => {
-    // Doctor closes the consultation
+    // Doctor closes the consultation (CloseConsultationDto solo acepta baselineSymptomSeverity y redFlagsConfirmed)
     await request(app.getHttpServer())
       .patch(`/v1/consultations/${consultationId}/close`)
       .set('Authorization', `Bearer ${doctorToken}`)
-      .send({ summary: 'Caso leve resuelto.' })
+      .send({ baselineSymptomSeverity: 3 })
       .expect(200);
 
     const socket = ioClient(`http://localhost:${serverPort}/chat`, {
@@ -432,17 +412,30 @@ describe('Chat access control (e2e)', () => {
     }
   });
 
-  it('token inválido en handshake → connect_error', async () => {
-    const socket = ioClient(`http://localhost:${serverPort}/chat`, {
-      auth: { token: 'not-a-valid-jwt-token' },
-      transports: ['websocket'],
-      reconnection: false,
+  it('token inválido: gateway desconecta al cliente', async () => {
+    // NestJS no espera handleConnection antes de enviar el connect packet,
+    // así que el cliente se conecta y luego es desconectado por el servidor.
+    // Registramos disconnect + chat:error ANTES de cualquier await para no perder eventos.
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('Timeout: el servidor no desconectó al cliente con token inválido')),
+        8_000,
+      );
+
+      const socket = ioClient(`http://localhost:${serverPort}/chat`, {
+        auth: { token: 'not-a-valid-jwt-token' },
+        transports: ['websocket'],
+        reconnection: false,
+      });
+
+      socket.on('chat:error', (err: { code: string }) => {
+        expect(err.code).toBe('UNAUTHORIZED');
+      });
+
+      socket.on('disconnect', () => {
+        clearTimeout(timer);
+        resolve();
+      });
     });
-    try {
-      const err = await waitForConnectError(socket);
-      expect(err).toBeInstanceOf(Error);
-    } finally {
-      socket.disconnect();
-    }
   });
 });

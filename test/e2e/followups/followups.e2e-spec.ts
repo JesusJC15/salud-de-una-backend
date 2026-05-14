@@ -184,12 +184,12 @@ describe('Followups lifecycle (e2e)', () => {
     expect(body.consultationId).toBe(consultationId);
   });
 
-  it('GET /followups/:id — otro paciente recibe 403', async () => {
+  it('GET /followups/:id — otro paciente recibe 404 (información no revelada)', async () => {
     await context
       .request()
       .get(`/v1/followups/${followupId72h}`)
       .set('Authorization', `Bearer ${patientBToken}`)
-      .expect(403);
+      .expect(404);
   });
 
   // ── submit: BETTER ─────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ describe('Followups lifecycle (e2e)', () => {
         medicationTaken: true,
         medicationNotes: 'Tomé ibuprofeno',
       })
-      .expect(200);
+      .expect(201);
 
     const body = res.body as {
       followup: { status: string };
@@ -266,7 +266,7 @@ describe('Followups lifecycle (e2e)', () => {
         medicationTaken: false,
         newSymptoms: 'Fiebre alta y dificultad respiratoria',
       })
-      .expect(200);
+      .expect(201);
 
     const body = res.body as {
       followup: { status: string };
