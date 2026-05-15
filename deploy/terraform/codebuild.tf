@@ -68,11 +68,12 @@ resource "aws_codebuild_project" "backend" {
   name          = "${local.prefix}-build-backend"
   description   = "Build imagen Docker del backend NestJS → ECR"
   build_timeout = 20
-  service_role  = aws_iam_role.codebuild.arn
+  service_role  = data.aws_iam_role.lab_role.arn
 
   source {
     type            = "GITHUB"
-    location        = var.github_repo_backend  # repo separado del backend
+    location        = var.github_repo_backend
+    # Repo debe ser PÚBLICO — Academy no permite registrar credenciales GitHub via API
     git_clone_depth = 1
     buildspec       = local.buildspec_backend
   }
@@ -116,11 +117,12 @@ resource "aws_codebuild_project" "web" {
   name          = "${local.prefix}-build-web"
   description   = "Build imagen Docker del web Next.js → ECR"
   build_timeout = 25
-  service_role  = aws_iam_role.codebuild.arn
+  service_role  = data.aws_iam_role.lab_role.arn
 
   source {
     type            = "GITHUB"
-    location        = var.github_repo_web  # repo separado del web
+    location        = var.github_repo_web
+    # Repo debe ser PÚBLICO — Academy no permite registrar credenciales GitHub via API
     git_clone_depth = 1
     buildspec       = local.buildspec_web
   }
@@ -180,14 +182,7 @@ resource "aws_codebuild_project" "web" {
   }
 }
 
-# ── Credencial GitHub para CodeBuild ─────────────────────────────────────────
-# Un único token con acceso a ambos repos (salud-de-una-backend y salud-de-una-web)
-resource "aws_codebuild_source_credential" "github" {
-  auth_type   = "PERSONAL_ACCESS_TOKEN"
-  server_type = "GITHUB"
-  token       = aws_ssm_parameter.secrets["GITHUB_TOKEN"].value
-
-  lifecycle {
-    ignore_changes = [token]
-  }
-}
+# aws_codebuild_source_credential eliminado:
+# Academy no permite codebuild:ImportSourceCredentials.
+# Solución: ambos repos deben ser PÚBLICOS en GitHub.
+# CodeBuild puede clonar repos públicos sin credenciales.

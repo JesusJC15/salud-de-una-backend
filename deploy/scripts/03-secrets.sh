@@ -69,9 +69,6 @@ put_secret "GEMINI_API_KEY" \
 echo ""
 put_secret "AUTH0_M2M_CLIENT_SECRET" \
   "Auth0 Dashboard → Applications → M2M App → Settings → Client Secret"
-echo ""
-put_secret "GITHUB_TOKEN" \
-  "GitHub PAT (repo scope) para que CodeBuild clone el repo"
 
 echo ""
 echo "======================================================"

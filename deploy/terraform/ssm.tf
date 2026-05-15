@@ -11,7 +11,8 @@ locals {
     "REDIS_URL"               = "Redis Cloud connection URL"
     "GEMINI_API_KEY"          = "Google Gemini API key"
     "AUTH0_M2M_CLIENT_SECRET" = "Auth0 M2M application client secret"
-    "GITHUB_TOKEN"            = "GitHub PAT para CodeBuild"
+    # GITHUB_TOKEN eliminado: Academy no permite ImportSourceCredentials.
+    # Los repos deben ser públicos para que CodeBuild los clone sin auth.
   }
 }
 

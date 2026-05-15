@@ -44,12 +44,6 @@ GITHUB_REPO_WEB=$(ask "GITHUB_REPO_WEB" "URL repo WEB" "https://github.com/Jesus
 GITHUB_BRANCH=$(ask "GITHUB_BRANCH" "Rama (misma en ambos repos)" "main")
 echo ""
 
-echo "--- GitHub Personal Access Token ---"
-echo "  Necesitas un PAT con permisos 'repo' para que CodeBuild pueda clonar."
-echo "  Crea uno en: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)"
-GITHUB_TOKEN=$(ask "GITHUB_TOKEN" "Token (entrada oculta)" "" "true")
-echo ""
-
 # ── Auth0 ─────────────────────────────────────────────────
 echo "--- Auth0 (los valores de tu tenant actual) ---"
 AUTH0_DOMAIN=$(ask "AUTH0_DOMAIN" "Auth0 Domain" "salud-de-una.us.auth0.com")
@@ -91,10 +85,6 @@ web_auth0_client_id   = "$WEB_AUTH0_CLIENT_ID"
 ai_enabled   = $AI_ENABLED
 gemini_model = "$GEMINI_MODEL"
 EOF
-
-# Guardar GitHub token en archivo separado (más seguro)
-echo "$GITHUB_TOKEN" > "$HOME/.salud-de-una-github-token"
-chmod 600 "$HOME/.salud-de-una-github-token"
 
 echo ""
 echo "======================================================"
