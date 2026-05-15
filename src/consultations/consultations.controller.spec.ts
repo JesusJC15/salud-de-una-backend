@@ -42,10 +42,11 @@ describe('ConsultationsController', () => {
   });
 
   it('getQueue delegates to service', () => {
+    const req = makeReq('d1', UserRole.DOCTOR);
     mockService.getQueue.mockReturnValue({ items: [] });
 
-    expect(controller.getQueue()).toEqual({ items: [] });
-    expect(mockService.getQueue).toHaveBeenCalled();
+    expect(controller.getQueue(req)).toEqual({ items: [] });
+    expect(mockService.getQueue).toHaveBeenCalledWith(req.user);
   });
 
   describe('getPatientHistory', () => {

@@ -59,6 +59,8 @@ type QueueRow = {
   createdAt: Date | null;
 };
 
+type QueueOptions = { limit?: number; page?: number };
+
 const CLINICAL_SUMMARY_SYSTEM_INSTRUCTION =
   'Eres un asistente médico clínico. Dado el resultado de un triage, genera un resumen ' +
   'clínico conciso (máximo 200 palabras) para el médico que va a atender al paciente. ' +
@@ -138,14 +140,32 @@ export class ConsultationsService {
     return consultation;
   }
 
-  async getQueue(options: { limit?: number; page?: number } = {}) {
+  async getQueue(
+    userOrOptions: RequestUser | QueueOptions = {},
+    maybeOptions: QueueOptions = {},
+  ) {
+    const user =
+      'userId' in userOrOptions ? (userOrOptions as RequestUser) : undefined;
+    const options = user ? maybeOptions : (userOrOptions as QueueOptions);
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 100);
     const page = Math.max(options.page ?? 1, 1);
     const skip = (page - 1) * limit;
+    const allowedSpecialties = user
+      ? await this.getDoctorQueueSpecialties(user.userId)
+      : undefined;
+    const queueFilter: {
+      status: ConsultationStatus;
+      specialty?: { $in: Specialty[] };
+    } = {
+      status: CONSULTATION_PENDING,
+      ...(allowedSpecialties
+        ? { specialty: { $in: allowedSpecialties } }
+        : {}),
+    };
 
     if (typeof this.consultationModel.aggregate !== 'function') {
       const pendingConsultations = (await this.consultationModel
-        .find({ status: 'PENDING' })
+        .find(queueFilter)
         .select(
           '_id patientId triageSessionId specialty priority status createdAt',
         )
@@ -184,9 +204,7 @@ export class ConsultationsService {
     const queueRows = await this.consultationModel
       .aggregate<QueueRow>([
         {
-          $match: {
-            status: 'PENDING',
-          },
+          $match: queueFilter,
         },
         {
           $addFields: {
@@ -307,7 +325,7 @@ export class ConsultationsService {
 
     const doctor = await this.doctorModel
       .findById(user.userId)
-      .select('doctorStatus availabilityStatus')
+      .select('doctorStatus availabilityStatus specialty')
       .lean()
       .exec();
 
@@ -321,11 +339,16 @@ export class ConsultationsService {
       throw new ForbiddenException('Debes reanudar tu disponibilidad');
     }
 
+    const allowedSpecialties = this.buildAllowedQueueSpecialties(
+      doctor.specialty,
+    );
+
     const consultation = await this.consultationModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(consultationId),
           status: CONSULTATION_PENDING,
+          specialty: { $in: allowedSpecialties },
         },
         {
           $set: {
@@ -342,12 +365,21 @@ export class ConsultationsService {
     if (!consultation) {
       const existing = await this.consultationModel
         .findById(consultationId)
-        .select('status')
+        .select('status specialty')
         .lean()
         .exec();
 
       if (!existing) {
         throw new NotFoundException('Consulta no encontrada');
+      }
+
+      if (
+        existing.status === CONSULTATION_PENDING &&
+        !allowedSpecialties.includes(existing.specialty)
+      ) {
+        throw new ForbiddenException(
+          'La consulta no corresponde a tu especialidad',
+        );
       }
 
       throw new ConflictException(
@@ -747,6 +779,28 @@ export class ConsultationsService {
       default:
         return 99;
     }
+  }
+
+  private async getDoctorQueueSpecialties(doctorId: string) {
+    if (!Types.ObjectId.isValid(doctorId)) {
+      throw new BadRequestException('doctorId invalido');
+    }
+
+    const doctor = await this.doctorModel
+      .findById(doctorId)
+      .select('specialty')
+      .lean<{ specialty?: Specialty }>()
+      .exec();
+
+    if (!doctor?.specialty) {
+      throw new ForbiddenException('Especialidad medica no configurada');
+    }
+
+    return this.buildAllowedQueueSpecialties(doctor.specialty);
+  }
+
+  private buildAllowedQueueSpecialties(specialty: Specialty) {
+    return Array.from(new Set([specialty, Specialty.URGENT_CARE]));
   }
 
   private async getHistory(

@@ -210,6 +210,31 @@ describe('ConsultationsService', () => {
     );
   });
 
+  it('filters doctor queue by doctor specialty plus urgent care', async () => {
+    const doctorId = new Types.ObjectId();
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        specialty: Specialty.ODONTOLOGY,
+      }),
+    });
+    findExecMock.mockResolvedValue([]);
+
+    await service.getQueue(
+      buildRequestUser({
+        userId: doctorId.toString(),
+        role: UserRole.DOCTOR,
+        email: 'doctor@test.com',
+      }),
+    );
+
+    expect(consultationModel.find).toHaveBeenCalledWith({
+      status: 'PENDING',
+      specialty: { $in: [Specialty.ODONTOLOGY, Specialty.URGENT_CARE] },
+    });
+  });
+
   it('calculates skip using provided page and limit', async () => {
     const baseDate = new Date('2026-04-07T00:00:00.000Z');
     findExecMock.mockResolvedValue([
@@ -411,6 +436,7 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue({
         doctorStatus: 'VERIFIED',
         availabilityStatus: 'AVAILABLE',
+        specialty: Specialty.GENERAL_MEDICINE,
       }),
     });
     const consultation = {
@@ -437,6 +463,9 @@ describe('ConsultationsService', () => {
       {
         _id: consultationId,
         status: 'PENDING',
+        specialty: {
+          $in: [Specialty.GENERAL_MEDICINE, Specialty.URGENT_CARE],
+        },
       },
       expect.any(Object),
       { returnDocument: 'after' },
@@ -474,6 +503,7 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue({
         doctorStatus: 'VERIFIED',
         availabilityStatus: 'AVAILABLE',
+        specialty: Specialty.GENERAL_MEDICINE,
       }),
     });
     consultationModel.findOneAndUpdate.mockReturnValue({
@@ -773,6 +803,7 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue({
         doctorStatus: 'VERIFIED',
         availabilityStatus: 'PAUSED',
+        specialty: Specialty.GENERAL_MEDICINE,
       }),
     });
 
@@ -795,6 +826,7 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue({
         doctorStatus: 'VERIFIED',
         availabilityStatus: 'AVAILABLE',
+        specialty: Specialty.GENERAL_MEDICINE,
       }),
     });
     consultationModel.findOneAndUpdate.mockReturnValue({
@@ -825,6 +857,7 @@ describe('ConsultationsService', () => {
       exec: jest.fn().mockResolvedValue({
         doctorStatus: 'VERIFIED',
         availabilityStatus: 'AVAILABLE',
+        specialty: Specialty.GENERAL_MEDICINE,
       }),
     });
     consultationModel.findOneAndUpdate.mockReturnValue({
@@ -848,6 +881,40 @@ describe('ConsultationsService', () => {
         }),
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('assign rejects pending consultations outside doctor specialty', async () => {
+    doctorModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        doctorStatus: 'VERIFIED',
+        availabilityStatus: 'AVAILABLE',
+        specialty: Specialty.GENERAL_MEDICINE,
+      }),
+    });
+    consultationModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    consultationModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        status: 'PENDING',
+        specialty: Specialty.ODONTOLOGY,
+      }),
+    });
+
+    await expect(
+      service.assign(
+        new Types.ObjectId().toString(),
+        buildRequestUser({
+          userId: new Types.ObjectId().toString(),
+          role: UserRole.DOCTOR,
+          email: 'doctor@test.com',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('close rejects consultations that are not in attention', async () => {

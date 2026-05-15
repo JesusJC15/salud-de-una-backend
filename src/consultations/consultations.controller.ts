@@ -35,8 +35,8 @@ export class ConsultationsController {
   @Get('queue')
   @Roles(UserRole.DOCTOR)
   @UseGuards(DoctorVerifiedGuard)
-  getQueue() {
-    return this.consultationsService.getQueue();
+  getQueue(@Req() req: RequestContext) {
+    return this.consultationsService.getQueue(req.user!);
   }
 
   @Get('doctor/my-history')
