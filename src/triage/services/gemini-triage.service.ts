@@ -19,8 +19,15 @@ type TriageAnswerInput = Pick<
   'questionId' | 'questionText' | 'answerValue'
 >;
 
+type PatientClinicalContext = {
+  age?: number;
+  gender?: string;
+  heightCm?: number;
+  weightKg?: number;
+};
+
 const FALLBACK_SYSTEM_INSTRUCTION =
-  'Eres un asistente de triage clinico. Responde solo JSON valido con las llaves priority y summary. priority debe ser LOW, MODERATE o HIGH. summary debe ser neutral, sin diagnostico, sin prescripcion y sin medicacion.';
+  'Eres un asistente de triage clinico. Responde solo JSON valido con las llaves priority y summary. priority debe ser LOW, MODERATE o HIGH. summary debe ser neutral, sin diagnostico, sin prescripcion, sin medicacion, sin Markdown y sin encabezados.';
 
 @Injectable()
 export class GeminiTriageService {
@@ -37,6 +44,7 @@ export class GeminiTriageService {
     user: RequestUser,
     correlationId?: string,
     specialty: Specialty = Specialty.GENERAL_MEDICINE,
+    patientContext?: PatientClinicalContext,
   ): Promise<GeminiTriageResult> {
     const promptKey = `triage.${specialty.toLowerCase()}.analyze`;
     const systemInstruction =
@@ -54,7 +62,11 @@ export class GeminiTriageService {
       promptVersion: 1,
       model: this.configService.get<string>('ai.model') ?? 'gemini-2.5-flash',
       systemInstruction,
-      inputText: JSON.stringify({ answers, redFlags }),
+      inputText: JSON.stringify({
+        patientContext: patientContext ?? {},
+        answers,
+        redFlags,
+      }),
       correlationId,
       actor: {
         actorId: user.userId,
@@ -78,7 +90,8 @@ export class GeminiTriageService {
 
     return {
       basePriority: priority,
-      aiSummary: typeof summary === 'string' ? summary : undefined,
+      aiSummary:
+        typeof summary === 'string' ? this.sanitizeSummary(summary) : undefined,
     };
   }
 
@@ -122,5 +135,9 @@ export class GeminiTriageService {
         return null;
       }
     }
+  }
+
+  private sanitizeSummary(value: string): string {
+    return value.replace(/\*\*/g, '').trim();
   }
 }

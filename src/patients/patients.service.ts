@@ -59,7 +59,7 @@ export class PatientsService {
     const patient = await this.patientModel
       .findById(user.userId)
       .select(
-        'firstName lastName email role birthDate gender createdAt updatedAt',
+        'firstName lastName email role birthDate gender heightCm weightKg createdAt updatedAt',
       )
       .lean()
       .exec();
@@ -157,6 +157,8 @@ export class PatientsService {
             patient.birthDate = new Date(dto.birthDate);
           }
           if (dto.gender !== undefined) patient.gender = dto.gender;
+          if (dto.heightCm !== undefined) patient.heightCm = dto.heightCm;
+          if (dto.weightKg !== undefined) patient.weightKg = dto.weightKg;
 
           await patient.save({ session });
           response = this.toProfileResponse(patient);
@@ -261,6 +263,8 @@ export class PatientsService {
       patient.auth0Subject = undefined;
       patient.birthDate = null;
       patient.gender = undefined;
+      patient.heightCm = undefined;
+      patient.weightKg = undefined;
       patient.termsAcceptedAt = null;
       patient.isActive = false;
       patient.isAnonymized = true;
@@ -300,6 +304,8 @@ export class PatientsService {
       patient.auth0Subject = undefined;
       patient.birthDate = null;
       patient.gender = undefined;
+      patient.heightCm = undefined;
+      patient.weightKg = undefined;
       patient.termsAcceptedAt = null;
       patient.isActive = false;
       patient.isAnonymized = true;
@@ -341,6 +347,8 @@ export class PatientsService {
         patient.auth0Subject = undefined;
         patient.birthDate = null;
         patient.gender = undefined;
+        patient.heightCm = undefined;
+        patient.weightKg = undefined;
         patient.termsAcceptedAt = null;
         patient.isActive = false;
         patient.isAnonymized = true;
@@ -372,6 +380,8 @@ export class PatientsService {
     role: UserRole;
     birthDate?: Date | null;
     gender?: string;
+    heightCm?: number;
+    weightKg?: number;
     createdAt?: Date;
     updatedAt?: Date;
   }) {
@@ -391,6 +401,8 @@ export class PatientsService {
       role: patient.role,
       birthDate: patient.birthDate,
       gender: patient.gender,
+      heightCm: patient.heightCm,
+      weightKg: patient.weightKg,
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
     };

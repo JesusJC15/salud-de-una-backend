@@ -13,6 +13,7 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { normalizeError } from '../common/utils/errors.util';
 import { ConsultationsService } from '../consultations/consultations.service';
+import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { Specialty } from '../common/enums/specialty.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { RagService } from '../rag/rag.service';
@@ -144,6 +145,8 @@ export class TriageService {
     @Optional()
     @InjectConnection()
     private readonly connection: Connection | null,
+    @InjectModel(Patient.name)
+    private readonly patientModel: Model<PatientDocument>,
     @InjectModel(TriageSession.name)
     private readonly triageSessionModel: Model<TriageSessionDocument>,
     private readonly triageQuestionsRepository: TriageQuestionsRepository,
@@ -489,6 +492,9 @@ export class TriageService {
       triageSession.answers,
       triageSession.specialty,
     );
+    const patientContext = await this.getPatientClinicalContext(
+      triageSession.patientId,
+    );
 
     let basePriority = this.getRuleBasedBasePriority(redFlags);
     let aiSummary: string | undefined;
@@ -507,6 +513,7 @@ export class TriageService {
           user,
           correlationId,
           triageSession._id.toString(),
+          patientContext,
         );
 
         basePriority = aiResult.basePriority;
@@ -719,6 +726,12 @@ export class TriageService {
     user: RequestUser,
     correlationId: string | undefined,
     sessionId: string,
+    patientContext: {
+      age?: number;
+      gender?: string;
+      heightCm?: number;
+      weightKg?: number;
+    },
   ): Promise<{
     basePriority: TriagePriority;
     aiSummary?: string;
@@ -738,6 +751,8 @@ export class TriageService {
           redFlags,
           user,
           correlationId,
+          Specialty.GENERAL_MEDICINE,
+          patientContext,
         );
 
         return {
@@ -878,6 +893,58 @@ export class TriageService {
     }
 
     return triageSession;
+  }
+
+  private async getPatientClinicalContext(patientId: Types.ObjectId): Promise<{
+    age?: number;
+    gender?: string;
+    heightCm?: number;
+    weightKg?: number;
+  }> {
+    const patient = await this.patientModel
+      .findById(patientId)
+      .select('birthDate gender heightCm weightKg')
+      .lean<{
+        birthDate?: Date | string | null;
+        gender?: string;
+        heightCm?: number;
+        weightKg?: number;
+      }>()
+      .exec();
+
+    if (!patient) {
+      return {};
+    }
+
+    return {
+      age: this.calculateAge(patient.birthDate),
+      gender: patient.gender,
+      heightCm: patient.heightCm,
+      weightKg: patient.weightKg,
+    };
+  }
+
+  private calculateAge(birthDate?: Date | string | null): number | undefined {
+    if (!birthDate) {
+      return undefined;
+    }
+
+    const parsedBirthDate = new Date(birthDate);
+    if (Number.isNaN(parsedBirthDate.getTime())) {
+      return undefined;
+    }
+
+    const today = new Date();
+    let age = today.getFullYear() - parsedBirthDate.getFullYear();
+    const monthDelta = today.getMonth() - parsedBirthDate.getMonth();
+    if (
+      monthDelta < 0 ||
+      (monthDelta === 0 && today.getDate() < parsedBirthDate.getDate())
+    ) {
+      age -= 1;
+    }
+
+    return age >= 0 ? age : undefined;
   }
 
   private async getOwnedSession(

@@ -43,7 +43,9 @@ describe('ConsultationsService', () => {
     findById: jest.fn(),
     find: jest.fn(),
   };
-  const patientModel = {};
+  const patientModel = {
+    findById: jest.fn(),
+  };
   const triageSessionModel = {
     findById: jest.fn(),
   };
@@ -69,6 +71,11 @@ describe('ConsultationsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     findExecMock.mockResolvedValue([]);
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -571,10 +578,12 @@ describe('ConsultationsService', () => {
   it('generates a clinical summary from AI response', async () => {
     const consultationId = new Types.ObjectId();
     const doctorId = new Types.ObjectId();
+    const patientId = new Types.ObjectId();
     const triageSessionId = new Types.ObjectId();
     const consultation = {
       id: consultationId.toString(),
       assignedDoctorId: doctorId,
+      patientId,
       triageSessionId,
       priority: 'MODERATE',
       save: jest.fn(),
@@ -602,8 +611,18 @@ describe('ConsultationsService', () => {
         },
       }),
     });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        birthDate: new Date('1990-01-01T00:00:00.000Z'),
+        gender: 'FEMALE',
+        heightCm: 165,
+        weightKg: 62,
+      }),
+    });
     aiService.generateText.mockResolvedValue({
-      text: 'Resumen clínico final',
+      text: '**Resumen Clínico para Médico Evaluador:** Resumen clínico final',
     });
 
     const result = await service.generateSummary(
@@ -616,6 +635,12 @@ describe('ConsultationsService', () => {
     );
 
     expect(aiService.generateText).toHaveBeenCalled();
+    const [generateTextRequest] = aiService.generateText.mock.calls[0] as [
+      { inputText: string },
+    ];
+    expect(generateTextRequest.inputText).toContain('Género: FEMALE');
+    expect(generateTextRequest.inputText).toContain('Altura: 165 cm');
+    expect(generateTextRequest.inputText).toContain('Peso: 62 kg');
     expect(result.summary).toBe('Resumen clínico final');
   });
 

@@ -11,6 +11,7 @@ import { Types } from 'mongoose';
 import { ConsultationsService } from '../consultations/consultations.service';
 import { Specialty } from '../common/enums/specialty.enum';
 import { UserRole } from '../common/enums/user-role.enum';
+import { Patient } from '../patients/schemas/patient.schema';
 import { RagService } from '../rag/rag.service';
 import { RedFlagsEngine } from './engines/red-flags.engine';
 import { TRIAGE_QUESTION_CATALOG } from './questions/triage-question-catalog.const';
@@ -47,6 +48,9 @@ describe('TriageService', () => {
     find: jest.fn(),
     create: jest.fn(),
   };
+  const patientModel = {
+    findById: jest.fn(),
+  };
 
   const triageQuestionsRepository = {
     getQuestionsBySpecialty: jest.fn(),
@@ -75,6 +79,11 @@ describe('TriageService', () => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
     guardrailService.check.mockReturnValue({ safe: true, violations: [] });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
     triageQuestionsRepository.getRequiredQuestionIdsSync.mockImplementation(
       (specialty: Specialty) =>
@@ -85,6 +94,10 @@ describe('TriageService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TriageService,
+        {
+          provide: getModelToken(Patient.name),
+          useValue: patientModel,
+        },
         {
           provide: getModelToken(TriageSession.name),
           useValue: triageSessionModel,
@@ -758,6 +771,16 @@ describe('TriageService', () => {
     triageSessionModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(triageSession),
     });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        birthDate: new Date('1990-01-01T00:00:00.000Z'),
+        gender: 'OTHER',
+        heightCm: 170,
+        weightKg: 70,
+      }),
+    });
     triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([
       {
@@ -783,6 +806,18 @@ describe('TriageService', () => {
 
     expect(result.priority).toBe('MODERATE');
     expect(result.highPriorityAlert).toBe(false);
+    expect(geminiTriageService.analyzeTriage).toHaveBeenCalledWith(
+      triageSession.answers,
+      expect.any(Array),
+      expect.objectContaining({ userId: patientId.toString() }),
+      undefined,
+      Specialty.GENERAL_MEDICINE,
+      expect.objectContaining({
+        gender: 'OTHER',
+        heightCm: 170,
+        weightKg: 70,
+      }),
+    );
   });
 
   it('should mark session FAILED and return 503 when Gemini analysis fails', async () => {

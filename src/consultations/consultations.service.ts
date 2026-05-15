@@ -66,7 +66,8 @@ const CLINICAL_SUMMARY_SYSTEM_INSTRUCTION =
   'clínico conciso (máximo 200 palabras) para el médico que va a atender al paciente. ' +
   'Incluye: síntoma principal, duración, intensidad, signos de alarma detectados y ' +
   'prioridad asignada. Usa lenguaje médico profesional en español. No hagas diagnósticos ' +
-  'ni recomendaciones de tratamiento.';
+  'ni recomendaciones de tratamiento. Devuelve solo el cuerpo del resumen, sin títulos, ' +
+  'sin encabezados, sin Markdown, sin negrillas y sin viñetas.';
 
 const CONSULTATION_PENDING: ConsultationStatus = 'PENDING';
 const CONSULTATION_IN_ATTENTION: ConsultationStatus = 'IN_ATTENTION';
@@ -572,6 +573,10 @@ export class ConsultationsService {
       throw new NotFoundException('Triage asociado no encontrado');
     }
 
+    const patientContext = await this.getPatientClinicalContext(
+      consultation.patientId,
+    );
+
     const answersText = triageSession.answers
       .map(
         (answer) =>
@@ -586,6 +591,7 @@ export class ConsultationsService {
       : '\nNo se detectaron signos de alarma.';
 
     const inputText =
+      `Datos del paciente:\n${patientContext}\n\n` +
       `Especialidad: ${triageSession.specialty}\n` +
       `Prioridad asignada: ${triageSession.analysis?.priority ?? consultation.priority}\n\n` +
       `Respuestas del triage:\n${answersText}` +
@@ -599,7 +605,9 @@ export class ConsultationsService {
           audience: 'STAFF',
         });
 
-        consultation.clinicalSummary = ragResult.answer?.trim() ?? '';
+        consultation.clinicalSummary = this.sanitizeClinicalSummary(
+          ragResult.answer,
+        );
         consultation.clinicalSummaryTraceId = ragResult.traceId;
         consultation.clinicalSummaryCitations = ragResult.citations.map(
           (citation) => ({
@@ -623,12 +631,15 @@ export class ConsultationsService {
           correlationId: randomUUID(),
         });
 
-        consultation.clinicalSummary = result.text?.trim() ?? '';
+        consultation.clinicalSummary = this.sanitizeClinicalSummary(
+          result.text,
+        );
         consultation.clinicalSummaryTraceId = undefined;
         consultation.clinicalSummaryCitations = [];
       }
     } catch {
       const summaryLines = [
+        patientContext,
         `Especialidad: ${triageSession.specialty}`,
         `Prioridad: ${triageSession.analysis?.priority ?? consultation.priority}`,
         triageSession.analysis?.aiSummary
@@ -917,5 +928,74 @@ export class ConsultationsService {
 
   private isRagSummaryEnabled(): boolean {
     return this.configService?.get<boolean>('rag.summaryEnabled') === true;
+  }
+
+  private async getPatientClinicalContext(
+    patientId: Types.ObjectId,
+  ): Promise<string> {
+    const patient = await this.patientModel
+      .findById(patientId)
+      .select('birthDate gender heightCm weightKg')
+      .lean<{
+        birthDate?: Date | string | null;
+        gender?: string;
+        heightCm?: number;
+        weightKg?: number;
+      }>()
+      .exec();
+
+    if (!patient) {
+      return 'Datos demográficos no disponibles.';
+    }
+
+    const lines = [
+      this.formatAge(patient.birthDate),
+      patient.gender ? `Género: ${patient.gender}` : null,
+      typeof patient.heightCm === 'number'
+        ? `Altura: ${patient.heightCm} cm`
+        : null,
+      typeof patient.weightKg === 'number'
+        ? `Peso: ${patient.weightKg} kg`
+        : null,
+    ].filter(Boolean);
+
+    return lines.length > 0
+      ? lines.join('\n')
+      : 'Datos demográficos no disponibles.';
+  }
+
+  private formatAge(birthDate?: Date | string | null): string | null {
+    if (!birthDate) {
+      return null;
+    }
+
+    const parsedBirthDate = new Date(birthDate);
+    if (Number.isNaN(parsedBirthDate.getTime())) {
+      return null;
+    }
+
+    const today = new Date();
+    let age = today.getFullYear() - parsedBirthDate.getFullYear();
+    const monthDelta = today.getMonth() - parsedBirthDate.getMonth();
+    if (
+      monthDelta < 0 ||
+      (monthDelta === 0 && today.getDate() < parsedBirthDate.getDate())
+    ) {
+      age -= 1;
+    }
+
+    return age >= 0 ? `Edad: ${age} años` : null;
+  }
+
+  private sanitizeClinicalSummary(value?: string): string {
+    const normalized = value?.trim() ?? '';
+
+    return normalized
+      .replace(
+        /^\s*(?:#{1,6}\s*)?(?:\*\*)?\s*resumen\s+cl[ií]nico(?:\s+para\s+m[eé]dico\s+evaluador)?\s*:?\s*(?:\*\*)?\s*/iu,
+        '',
+      )
+      .replace(/\*\*/g, '')
+      .trim();
   }
 }

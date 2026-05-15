@@ -3,8 +3,11 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -28,6 +31,18 @@ export class UpdatePatientProfileDto {
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsEnum(UserGender)
   gender?: UserGender;
+
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsNumber()
+  @Min(30)
+  @Max(260)
+  heightCm?: number;
+
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsNumber()
+  @Min(1)
+  @Max(400)
+  weightKg?: number;
 
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsEmail()

@@ -31,6 +31,12 @@ export class Patient {
   @Prop({ type: String, enum: UserGender })
   gender?: UserGender;
 
+  @Prop({ type: Number, min: 30, max: 260 })
+  heightCm?: number;
+
+  @Prop({ type: Number, min: 1, max: 400 })
+  weightKg?: number;
+
   @Prop({ default: true })
   isActive!: boolean;
 
