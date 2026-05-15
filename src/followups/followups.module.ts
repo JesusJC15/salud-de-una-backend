@@ -10,6 +10,7 @@ import { Doctor, DoctorSchema } from '../doctors/schemas/doctor.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Patient, PatientSchema } from '../patients/schemas/patient.schema';
 import { REDIS_CONNECTION_OPTIONS } from '../redis/redis.constants';
+import { runtimeRoleIncludesWorker } from '../common/utils/runtime-role.util';
 import {
   TriageSession,
   TriageSessionSchema,
@@ -43,6 +44,10 @@ import { Followup, FollowupSchema } from './schemas/followup.schema';
         const isProduction =
           (configService.get<string>('NODE_ENV') ?? 'development') ===
           'production';
+        if (!runtimeRoleIncludesWorker()) {
+          return null;
+        }
+
         if (!redisUrl || !connectionOptions) {
           if (isProduction) {
             throw new Error(

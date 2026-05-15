@@ -5,6 +5,7 @@ import { ConnectionOptions, Queue } from 'bullmq';
 import { FollowupsModule } from '../followups/followups.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { REDIS_CONNECTION_OPTIONS } from '../redis/redis.constants';
+import { runtimeRoleIncludesWorker } from '../common/utils/runtime-role.util';
 import {
   DOMAIN_EVENTS_QUEUE,
   DOMAIN_EVENTS_QUEUE_NAME,
@@ -31,7 +32,7 @@ import { OutboxEvent, OutboxEventSchema } from './schemas/outbox-event.schema';
         connectionOptions: ConnectionOptions | null,
       ): Queue | null => {
         const redisUrl = configService.get<string>('redis.url');
-        if (!redisUrl || !connectionOptions) {
+        if (!runtimeRoleIncludesWorker() || !redisUrl || !connectionOptions) {
           return null;
         }
 

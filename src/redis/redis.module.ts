@@ -1,10 +1,12 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { REDIS_CLIENT, REDIS_CONNECTION_OPTIONS } from './redis.constants';
 import { RedisClientLifecycleService } from './redis-client-lifecycle.service';
 import { RedisHealthService } from './redis-health.service';
 import { parseRedisUrl } from './redis-url.util';
+
+const redisLogger = new Logger('RedisModule');
 
 @Global()
 @Module({
@@ -37,7 +39,11 @@ import { parseRedisUrl } from './redis-url.util';
         }
 
         const { clientOptions } = parseRedisUrl(redisUrl, keyPrefix);
-        return new Redis(redisUrl, clientOptions);
+        const client = new Redis(redisUrl, clientOptions);
+        client.on('error', (error: Error) => {
+          redisLogger.warn(`Redis client error: ${error.message}`);
+        });
+        return client;
       },
     },
     RedisClientLifecycleService,

@@ -25,7 +25,10 @@ describe('parseRedisUrl', () => {
       lazyConnect: true,
       enableReadyCheck: true,
       maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
     });
+    expect(result.connectionOptions.maxRetriesPerRequest).toBeNull();
+    expect(result.connectionOptions.enableOfflineQueue).toBe(false);
   });
 
   it('should fallback defaults for non-tls redis url', () => {
