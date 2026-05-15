@@ -15,7 +15,14 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   createIOServer(port: number, options?: ServerOptions): unknown {
-    const server = super.createIOServer(port, options) as {
+    // pingInterval 10 s + pingTimeout 5 s = 15 s total — well within
+    // Railway's 30 s idle-connection timeout. Defaults (25 s + 20 s = 45 s)
+    // exceed it, causing Railway to kill the socket before the ping round-trip.
+    const server = super.createIOServer(port, {
+      ...options,
+      pingInterval: 10_000,
+      pingTimeout: 5_000,
+    }) as {
       adapter: (v: ReturnType<typeof createAdapter>) => void;
     };
     server.adapter(this.adapterConstructor);
