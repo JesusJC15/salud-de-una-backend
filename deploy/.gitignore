@@ -1,0 +1,12 @@
+# Estado de Terraform — NUNCA subir a Git (contiene IPs, ARNs, info sensible)
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/tfplan
+
+# Variables de entorno reales — NUNCA subir
+terraform/terraform.tfvars
+
+# Archivos temporales
+*.tmp
