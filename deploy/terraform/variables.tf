@@ -13,19 +13,6 @@ variable "env" {
   default = "dev"
 }
 
-# Repos separados — cada uno tiene su propio Dockerfile en la raíz
-variable "github_repo_backend" {
-  type        = string
-  description = "URL repo backend, ej: https://github.com/JesusJC15/salud-de-una-backend"
-}
-variable "github_repo_web" {
-  type        = string
-  description = "URL repo web, ej: https://github.com/JesusJC15/salud-de-una-web"
-}
-variable "github_branch" {
-  type    = string
-  default = "main"
-}
 
 variable "auth0_domain" { type = string }
 variable "auth0_audience" { type = string }

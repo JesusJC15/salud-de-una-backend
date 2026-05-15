@@ -3,6 +3,16 @@ output "alb_dns_name" {
   value       = aws_lb.main.dns_name
 }
 
+output "vpc_id" {
+  description = "ID de la VPC"
+  value       = aws_vpc.main.id
+}
+
+output "subnet_public_a_id" {
+  description = "ID de la subnet pública A"
+  value       = aws_subnet.public_a.id
+}
+
 output "backend_ecr_url" {
   description = "URL del repositorio ECR del backend"
   value       = aws_ecr_repository.backend.repository_url

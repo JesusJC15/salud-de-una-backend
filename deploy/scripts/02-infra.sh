@@ -63,3 +63,6 @@ terraform output -json > "$HOME/.salud-de-una-tf-outputs.json"
 
 echo "PRÓXIMO PASO:"
 echo "   bash scripts/03-secrets.sh"
+echo ""
+echo "   (si los secrets ya están configurados, ve directo a:)"
+echo "   bash scripts/04-build-ec2.sh"
