@@ -731,6 +731,7 @@ export class TriageService {
       gender?: string;
       heightCm?: number;
       weightKg?: number;
+      bmi?: number;
     },
   ): Promise<{
     basePriority: TriagePriority;
@@ -900,6 +901,7 @@ export class TriageService {
     gender?: string;
     heightCm?: number;
     weightKg?: number;
+    bmi?: number;
   }> {
     const patient = await this.patientModel
       .findById(patientId)
@@ -921,6 +923,7 @@ export class TriageService {
       gender: patient.gender,
       heightCm: patient.heightCm,
       weightKg: patient.weightKg,
+      bmi: this.calculateBmi(patient.heightCm, patient.weightKg),
     };
   }
 
@@ -945,6 +948,23 @@ export class TriageService {
     }
 
     return age >= 0 ? age : undefined;
+  }
+
+  private calculateBmi(
+    heightCm?: number,
+    weightKg?: number,
+  ): number | undefined {
+    if (
+      typeof heightCm !== 'number' ||
+      typeof weightKg !== 'number' ||
+      heightCm <= 0 ||
+      weightKg <= 0
+    ) {
+      return undefined;
+    }
+
+    const heightMeters = heightCm / 100;
+    return Math.round((weightKg / (heightMeters * heightMeters)) * 10) / 10;
   }
 
   private async getOwnedSession(

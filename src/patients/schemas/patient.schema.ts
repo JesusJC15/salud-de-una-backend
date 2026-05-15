@@ -37,6 +37,8 @@ export class Patient {
   @Prop({ type: Number, min: 1, max: 400 })
   weightKg?: number;
 
+  bmi?: number | null;
+
   @Prop({ default: true })
   isActive!: boolean;
 

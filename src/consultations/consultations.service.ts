@@ -957,6 +957,7 @@ export class ConsultationsService {
       typeof patient.weightKg === 'number'
         ? `Peso: ${patient.weightKg} kg`
         : null,
+      this.formatBmi(patient.heightCm, patient.weightKg),
     ].filter(Boolean);
 
     return lines.length > 0
@@ -985,6 +986,25 @@ export class ConsultationsService {
     }
 
     return age >= 0 ? `Edad: ${age} años` : null;
+  }
+
+  private formatBmi(heightCm?: number, weightKg?: number): string | null {
+    const bmi = this.calculateBmi(heightCm, weightKg);
+    return bmi === null ? null : `IMC: ${bmi} kg/m2`;
+  }
+
+  private calculateBmi(heightCm?: number, weightKg?: number): number | null {
+    if (
+      typeof heightCm !== 'number' ||
+      typeof weightKg !== 'number' ||
+      heightCm <= 0 ||
+      weightKg <= 0
+    ) {
+      return null;
+    }
+
+    const heightMeters = heightCm / 100;
+    return Math.round((weightKg / (heightMeters * heightMeters)) * 10) / 10;
   }
 
   private sanitizeClinicalSummary(value?: string): string {

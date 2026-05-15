@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsEmail,
+  IsEmpty,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -43,6 +44,12 @@ export class UpdatePatientProfileDto {
   @Min(1)
   @Max(400)
   weightKg?: number;
+
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsEmpty({
+    message: 'El IMC se calcula automáticamente desde altura y peso.',
+  })
+  bmi?: never;
 
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsEmail()

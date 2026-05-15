@@ -40,6 +40,8 @@ function createPatientDocument(
     role: UserRole.PATIENT,
     birthDate: null,
     gender: 'FEMALE',
+    heightCm: undefined as number | undefined,
+    weightKg: undefined as number | undefined,
     createdAt: new Date('2026-03-01T00:00:00.000Z'),
     updatedAt: new Date('2026-03-02T00:00:00.000Z'),
     passwordHash,
@@ -135,6 +137,8 @@ describe('PatientsService', () => {
         role: UserRole.PATIENT,
         birthDate: null,
         gender: 'FEMALE',
+        heightCm: 165,
+        weightKg: 62,
         createdAt: new Date('2026-03-01T00:00:00.000Z'),
         updatedAt: new Date('2026-03-02T00:00:00.000Z'),
       }),
@@ -152,6 +156,7 @@ describe('PatientsService', () => {
       lastName: 'Lopez',
       email: 'ana@example.com',
       role: UserRole.PATIENT,
+      bmi: 22.8,
     });
   });
 
@@ -166,6 +171,31 @@ describe('PatientsService', () => {
         isActive: true,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('getMe should return null BMI when anthropometric data is incomplete', async () => {
+    patientModel.findById.mockReturnValue(
+      createSelectLeanQuery({
+        _id: '507f1f77bcf86cd799439011',
+        firstName: 'Ana',
+        lastName: 'Lopez',
+        email: 'ana@example.com',
+        role: UserRole.PATIENT,
+        birthDate: null,
+        gender: 'FEMALE',
+        heightCm: 165,
+        weightKg: undefined,
+      }),
+    );
+
+    const result = await service.getMe({
+      userId: '507f1f77bcf86cd799439011',
+      email: 'ana@example.com',
+      role: UserRole.PATIENT,
+      isActive: true,
+    });
+
+    expect(result.bmi).toBeNull();
   });
 
   it('updateMe should update profile fields and return patient', async () => {
@@ -183,6 +213,8 @@ describe('PatientsService', () => {
       {
         firstName: 'Laura',
         birthDate: '1998-03-10',
+        heightCm: 170,
+        weightKg: 70,
       },
     );
 
@@ -193,6 +225,9 @@ describe('PatientsService', () => {
       email: 'ana@example.com',
     });
     expect(patient.birthDate).toEqual(new Date('1998-03-10'));
+    expect(patient.heightCm).toBe(170);
+    expect(patient.weightKg).toBe(70);
+    expect(result.bmi).toBe(24.2);
     expect(authService.revokeAllRefreshSessionsForUser).not.toHaveBeenCalled();
   });
 

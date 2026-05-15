@@ -641,6 +641,7 @@ describe('ConsultationsService', () => {
     expect(generateTextRequest.inputText).toContain('Género: FEMALE');
     expect(generateTextRequest.inputText).toContain('Altura: 165 cm');
     expect(generateTextRequest.inputText).toContain('Peso: 62 kg');
+    expect(generateTextRequest.inputText).toContain('IMC: 22.8 kg/m2');
     expect(result.summary).toBe('Resumen clínico final');
   });
 
@@ -677,6 +678,16 @@ describe('ConsultationsService', () => {
         },
       }),
     });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        birthDate: null,
+        gender: undefined,
+        heightCm: 165,
+        weightKg: undefined,
+      }),
+    });
     aiService.generateText.mockRejectedValue(new Error('gemini down'));
 
     const result = await service.generateSummary(
@@ -690,6 +701,8 @@ describe('ConsultationsService', () => {
 
     expect(result.summary).toContain('Especialidad: ODONTOLOGY');
     expect(result.summary).toContain('Resumen IA: Paciente estable');
+    expect(result.summary).toContain('Altura: 165 cm');
+    expect(result.summary).not.toContain('IMC:');
   });
 
   it('delegates chat retrieval to chat service', async () => {

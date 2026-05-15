@@ -639,6 +639,16 @@ describe('TriageService', () => {
     triageSessionModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(triageSession),
     });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        birthDate: null,
+        gender: undefined,
+        heightCm: 170,
+        weightKg: undefined,
+      }),
+    });
     triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
     geminiTriageService.analyzeTriage.mockResolvedValue({
@@ -816,6 +826,7 @@ describe('TriageService', () => {
         gender: 'OTHER',
         heightCm: 170,
         weightKg: 70,
+        bmi: 24.2,
       }),
     );
   });
@@ -836,6 +847,16 @@ describe('TriageService', () => {
 
     triageSessionModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(triageSession),
+    });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        birthDate: null,
+        gender: undefined,
+        heightCm: 170,
+        weightKg: undefined,
+      }),
     });
     triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
@@ -883,6 +904,16 @@ describe('TriageService', () => {
     triageSessionModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(triageSession),
     });
+    patientModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue({
+        birthDate: null,
+        gender: undefined,
+        heightCm: 170,
+        weightKg: undefined,
+      }),
+    });
     triageQuestionsRepository.getRequiredQuestionIds.mockReturnValue(['MG-Q1']);
     jest.spyOn(RedFlagsEngine, 'evaluate').mockReturnValue([]);
     geminiTriageService.analyzeTriage.mockRejectedValue(
@@ -903,6 +934,17 @@ describe('TriageService', () => {
     );
 
     expect(geminiTriageService.analyzeTriage).toHaveBeenCalledTimes(3);
+    expect(geminiTriageService.analyzeTriage).toHaveBeenCalledWith(
+      triageSession.answers,
+      expect.any(Array),
+      expect.objectContaining({ userId: patientId.toString() }),
+      'corr-ai-fallback',
+      Specialty.GENERAL_MEDICINE,
+      expect.objectContaining({
+        heightCm: 170,
+        bmi: undefined,
+      }),
+    );
     expect(triageSession.status).toBe('COMPLETED');
     expect(result.priority).toBe('LOW');
     expect(result.highPriorityAlert).toBe(false);

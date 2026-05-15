@@ -24,6 +24,7 @@ type PatientClinicalContext = {
   gender?: string;
   heightCm?: number;
   weightKg?: number;
+  bmi?: number;
 };
 
 const FALLBACK_SYSTEM_INSTRUCTION =

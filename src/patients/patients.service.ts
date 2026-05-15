@@ -403,9 +403,24 @@ export class PatientsService {
       gender: patient.gender,
       heightCm: patient.heightCm,
       weightKg: patient.weightKg,
+      bmi: this.calculateBmi(patient.heightCm, patient.weightKg),
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
     };
+  }
+
+  private calculateBmi(heightCm?: number, weightKg?: number): number | null {
+    if (
+      typeof heightCm !== 'number' ||
+      typeof weightKg !== 'number' ||
+      heightCm <= 0 ||
+      weightKg <= 0
+    ) {
+      return null;
+    }
+
+    const heightMeters = heightCm / 100;
+    return Math.round((weightKg / (heightMeters * heightMeters)) * 10) / 10;
   }
 
   private normalizeEmail(email: string): string {
