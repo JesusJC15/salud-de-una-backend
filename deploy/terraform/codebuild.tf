@@ -85,12 +85,23 @@ resource "aws_codebuild_project" "backend" {
     type            = "LINUX_CONTAINER"
     privileged_mode = true
 
-    environment_variable { name = "AWS_REGION";   value = var.aws_region }
-    environment_variable { name = "ECR_REGISTRY"; value = local.ecr_base }
-    environment_variable { name = "BACKEND_REPO"; value = aws_ecr_repository.backend.name }
+    environment_variable {
+      name  = "AWS_REGION"
+      value = var.aws_region
+    }
+    environment_variable {
+      name  = "ECR_REGISTRY"
+      value = local.ecr_base
+    }
+    environment_variable {
+      name  = "BACKEND_REPO"
+      value = aws_ecr_repository.backend.name
+    }
   }
 
-  artifacts { type = "NO_ARTIFACTS" }
+  artifacts {
+    type = "NO_ARTIFACTS"
+  }
 
   logs_config {
     cloudwatch_logs {
@@ -122,21 +133,44 @@ resource "aws_codebuild_project" "web" {
     type            = "LINUX_CONTAINER"
     privileged_mode = true
 
-    environment_variable { name = "AWS_REGION";   value = var.aws_region }
-    environment_variable { name = "ECR_REGISTRY"; value = local.ecr_base }
-    environment_variable { name = "WEB_REPO";     value = aws_ecr_repository.web.name }
-
-    # Auth0 vars bakeadas en el bundle de Next.js durante build
-    environment_variable { name = "NEXT_PUBLIC_AUTH0_DOMAIN";    value = var.auth0_domain }
-    environment_variable { name = "NEXT_PUBLIC_AUTH0_CLIENT_ID"; value = var.web_auth0_client_id }
-    environment_variable { name = "NEXT_PUBLIC_AUTH0_AUDIENCE";  value = var.auth0_audience }
-
-    # Estas dos se sobreescriben en 04-build.sh con el DNS real del ALB
-    environment_variable { name = "NEXT_PUBLIC_API_BASE_URL";       value = "http://${aws_lb.main.dns_name}/v1" }
-    environment_variable { name = "NEXT_PUBLIC_AUTH0_REDIRECT_URI"; value = "http://${aws_lb.main.dns_name}/callback" }
+    environment_variable {
+      name  = "AWS_REGION"
+      value = var.aws_region
+    }
+    environment_variable {
+      name  = "ECR_REGISTRY"
+      value = local.ecr_base
+    }
+    environment_variable {
+      name  = "WEB_REPO"
+      value = aws_ecr_repository.web.name
+    }
+    environment_variable {
+      name  = "NEXT_PUBLIC_AUTH0_DOMAIN"
+      value = var.auth0_domain
+    }
+    environment_variable {
+      name  = "NEXT_PUBLIC_AUTH0_CLIENT_ID"
+      value = var.web_auth0_client_id
+    }
+    environment_variable {
+      name  = "NEXT_PUBLIC_AUTH0_AUDIENCE"
+      value = var.auth0_audience
+    }
+    # Estas dos las sobreescribe 04-build.sh con el DNS real del ALB
+    environment_variable {
+      name  = "NEXT_PUBLIC_API_BASE_URL"
+      value = "http://${aws_lb.main.dns_name}/v1"
+    }
+    environment_variable {
+      name  = "NEXT_PUBLIC_AUTH0_REDIRECT_URI"
+      value = "http://${aws_lb.main.dns_name}/callback"
+    }
   }
 
-  artifacts { type = "NO_ARTIFACTS" }
+  artifacts {
+    type = "NO_ARTIFACTS"
+  }
 
   logs_config {
     cloudwatch_logs {

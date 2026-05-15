@@ -45,9 +45,27 @@ variable "gemini_model" {
 }
 
 # Tamaños de tasks — mínimos para cuenta estudiante con Fargate Spot
-variable "backend_api_cpu"    { type = number; default = 256 }
-variable "backend_api_memory" { type = number; default = 512 }
-variable "backend_worker_cpu"    { type = number; default = 256 }
-variable "backend_worker_memory" { type = number; default = 512 }
-variable "web_cpu"    { type = number; default = 256 }
-variable "web_memory" { type = number; default = 512 }
+variable "backend_api_cpu" {
+  type    = number
+  default = 256
+}
+variable "backend_api_memory" {
+  type    = number
+  default = 512
+}
+variable "backend_worker_cpu" {
+  type    = number
+  default = 256
+}
+variable "backend_worker_memory" {
+  type    = number
+  default = 512
+}
+variable "web_cpu" {
+  type    = number
+  default = 256
+}
+variable "web_memory" {
+  type    = number
+  default = 512
+}
