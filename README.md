@@ -6,18 +6,24 @@ Backend del MVP de SaludDeUna construido con NestJS + MongoDB. Este documento re
 
 ## Alcance Implementado
 
-- Registro de pacientes.
-- Registro de medicos.
-- Login separado para frontend de pacientes y frontend staff (`DOCTOR`/`ADMIN`).
-- Verificacion REThUS de medicos por administradores.
+- Registro de pacientes y medicos; login separado para pacientes y staff (`DOCTOR`/`ADMIN`).
+- Verificacion REThUS de medicos por administradores; bandeja admin con estados y filtros.
 - Restriccion de acceso a cola medica para doctores no verificados.
-- Bandeja admin para revisar doctores y su ultimo estado REThUS.
 - Notificaciones internas consumibles por frontend autenticado.
-- Metricas tecnicas en memoria para dashboard.
-- KPIs de negocio calculados desde MongoDB para staff.
-- Endpoints de salud y readiness.
-- Seguridad base con JWT, RBAC, throttling y trazabilidad por `x-correlation-id`.
-- Sesiones basadas en access token y refresh token JWT.
+- Triage guiado por IA con cuestionarios por especialidad (Medicina General, Odontologia, Urgencias) y deteccion de red flags.
+- Cola de consultas medicas con estados (PENDING, IN_PROGRESS, COMPLETED, CANCELLED).
+- Chat clinico en tiempo real via WebSocket (Socket.IO) entre paciente y doctor.
+- Resumen clinico y analisis IA con Google Gemini 2.5-flash; guardrail de contenido medico.
+- Seguimiento post-consulta (followups) con timeline evolutivo del paciente.
+- Monetizacion simulada: precios por especialidad (BillingPrice), ciclo de vida de transacciones (PENDING → COMPLETED → REFUNDED), metricas de revenue para admin.
+- Knowledge base con documentos clinicos, chunking y embeddings vectoriales (MongoDB Atlas Vector Search).
+- RAG (Retrieval-Augmented Generation) para contexto clinico en triage y resumen.
+- Metricas tecnicas (p95 latencia, error rate) y KPIs de negocio calculados desde MongoDB.
+- Observabilidad: OpenTelemetry (trazas OTLP), logs estructurados, auditoria de operaciones IA.
+- Endpoints de salud (`/v1/health`) y readiness (`/v1/ready`).
+- Seguridad: JWT + RBAC, throttling distribuido (Redis), trazabilidad por `x-correlation-id`, Helmet, CORS por frontend.
+- Sesiones con access token y refresh token JWT; limite de sesiones activas por usuario.
+- Outbox transaccional para eventos de dominio criticos.
 
 ## Stack Tecnico
 
@@ -34,18 +40,23 @@ Backend del MVP de SaludDeUna construido con NestJS + MongoDB. Este documento re
 
 Modulos cargados en `src/app.module.ts`:
 
-- `AuthModule`
-- `AiModule`
-- `PatientsModule`
-- `DoctorsModule`
-- `AdminModule`
-- `AdminsModule`
-- `NotificationsModule`
-- `DashboardModule`
-- `ConsultationsModule`
-- `TriageModule`
-- `OutboxModule`
-- `RedisModule`
+- `AuthModule` — registro, login, refresh, logout, sesiones JWT
+- `AiModule` — integración Gemini, health-check administrativo, auditoria IA
+- `PatientsModule` — perfil y datos clínicos del paciente
+- `DoctorsModule` — perfil, especialidades, resubmision REThUS
+- `AdminModule` — bandeja de doctores, verificacion REThUS, CRUD de usuarios
+- `AdminsModule` — esquema y gestión de usuarios administradores
+- `NotificationsModule` — notificaciones internas por rol
+- `DashboardModule` — KPIs de negocio y métricas técnicas
+- `ConsultationsModule` — cola de consultas medicas, estados, asignacion
+- `TriageModule` — cuestionarios por especialidad, red flags, analisis IA
+- `ChatModule` — mensajería en tiempo real (Socket.IO WebSocket)
+- `FollowupsModule` — seguimiento post-consulta, timeline evolutivo
+- `BillingModule` — precios por especialidad, checkout simulado, transacciones, revenue
+- `KnowledgeModule` — documentos clínicos, chunking, versionado, embeddings
+- `RagModule` — Retrieval-Augmented Generation, trazas, feedback
+- `OutboxModule` — patrón transaccional para eventos de dominio críticos
+- `RedisModule` — cliente Redis, throttling distribuido, adapter Socket.IO
 
 Configuracion global:
 
@@ -217,47 +228,109 @@ Notas operativas:
 
 ## Variables de Entorno
 
-Variables requeridas por validacion Joi (`src/config/validation.schema.ts`):
+Variables validadas por Joi en `src/config/validation.schema.ts`. Plantilla completa en `.env.development.example`.
+
+### Core
 
 | Variable                      | Requerida | Default            | Descripcion                                                                          |
 | ----------------------------- | --------- | ------------------ | ------------------------------------------------------------------------------------ |
 | `NODE_ENV`                    | No        | `development`      | Entorno: `development`, `production`, `test`.                                        |
+| `APP_RUNTIME_ROLE`            | No        | `all`              | Rol del proceso: `all`, `api`, `worker`. Usado en CI y produccion.                   |
 | `PORT`                        | No        | `3000`             | Puerto HTTP.                                                                         |
 | `MONGODB_URI`                 | Si        | -                  | Cadena de conexion MongoDB.                                                          |
-| `JWT_SECRET`                  | Si        | -                  | Secreto JWT (minimo 32 chars recomendado).                                           |
-| `JWT_REFRESH_SECRET`          | No        | `JWT_SECRET`       | Secreto del refresh token.                                                           |
-| `JWT_ACCESS_EXPIRES_IN`       | No        | `1h`               | Duracion access token.                                                               |
-| `JWT_REFRESH_EXPIRES_IN`      | No        | `7d`               | Duracion refresh token.                                                              |
-| `REFRESH_MAX_ACTIVE_SESSIONS` | No        | `3`                | Maximo de sesiones refresh activas por usuario.                                      |
-| `CORS_ORIGINS_PATIENT`        | No        | -                  | Origenes permitidos del frontend paciente (CSV).                                     |
-| `CORS_ORIGINS_STAFF`          | No        | -                  | Origenes permitidos del frontend staff (CSV).                                        |
-| `ENABLE_BOOTSTRAP_ADMIN`      | No        | `false`            | Habilita creacion automatica de admin.                                               |
-| `BOOTSTRAP_ADMIN_EMAIL`       | No        | -                  | Email del admin inicial.                                                             |
-| `BOOTSTRAP_ADMIN_PASSWORD`    | No        | -                  | Password del admin inicial.                                                          |
-| `BOOTSTRAP_ADMIN_FIRST_NAME`  | No        | `Admin`            | Nombre del admin inicial.                                                            |
-| `BOOTSTRAP_ADMIN_LAST_NAME`   | No        | `System`           | Apellido del admin inicial.                                                          |
-| `REDIS_URL`                   | No        | -                  | Conexion Redis Cloud para throttling distribuido, metricas tecnicas y outbox/BullMQ. |
-| `REDIS_KEY_PREFIX`            | No        | `salud-de-una`     | Prefijo de llaves Redis/BullMQ.                                                      |
-| `OUTBOX_DISPATCH_INTERVAL_MS` | No        | `1000`             | Intervalo de polling del despachador outbox cuando no hay worker Redis disponible.   |
-| `AI_ENABLED`                  | No        | `false`            | Activa la integracion AI administrativa.                                             |
-| `AI_PROVIDER`                 | No        | `gemini`           | Proveedor AI activo.                                                                 |
-| `GEMINI_API_KEY`              | No        | -                  | API key de Google AI Studio para Gemini.                                             |
-| `GEMINI_MODEL`                | No        | `gemini-2.5-flash` | Modelo Gemini por defecto para health-check y prompts versionados.                   |
+
+### Autenticacion JWT
+
+| Variable                      | Requerida | Default       | Descripcion                                                     |
+| ----------------------------- | --------- | ------------- | --------------------------------------------------------------- |
+| `JWT_SECRET`                  | Si        | -             | Secreto JWT para access tokens (minimo 32 chars recomendado).   |
+| `JWT_REFRESH_SECRET`          | No        | `JWT_SECRET`  | Secreto del refresh token.                                      |
+| `JWT_ACCESS_EXPIRES_IN`       | No        | `1h`          | Duracion del access token.                                      |
+| `JWT_REFRESH_EXPIRES_IN`      | No        | `7d`          | Duracion del refresh token.                                     |
+| `REFRESH_MAX_ACTIVE_SESSIONS` | No        | `3`           | Maximo de sesiones refresh activas por usuario.                 |
+| `AUTH_LEGACY_ENABLED`         | No        | `true`        | Habilita autenticacion JWT legacy (complementaria a Auth0).     |
+
+### CORS
+
+| Variable               | Requerida | Default | Descripcion                                       |
+| ---------------------- | --------- | ------- | ------------------------------------------------- |
+| `CORS_ORIGINS_PATIENT` | No        | -       | Origenes permitidos del frontend paciente (CSV).  |
+| `CORS_ORIGINS_STAFF`   | No        | -       | Origenes permitidos del frontend staff (CSV).     |
+
+### Bootstrap de admin inicial
+
+| Variable                     | Requerida | Default  | Descripcion                                    |
+| ---------------------------- | --------- | -------- | ---------------------------------------------- |
+| `ENABLE_BOOTSTRAP_ADMIN`     | No        | `false`  | Habilita creacion automatica de admin inicial. |
+| `BOOTSTRAP_ADMIN_EMAIL`      | No        | -        | Email del admin inicial.                       |
+| `BOOTSTRAP_ADMIN_PASSWORD`   | No        | -        | Password del admin inicial.                    |
+| `BOOTSTRAP_ADMIN_FIRST_NAME` | No        | `Admin`  | Nombre del admin inicial.                      |
+| `BOOTSTRAP_ADMIN_LAST_NAME`  | No        | `System` | Apellido del admin inicial.                    |
+
+### Redis
+
+| Variable                      | Requerida | Default        | Descripcion                                                                        |
+| ----------------------------- | --------- | -------------- | ---------------------------------------------------------------------------------- |
+| `REDIS_URL`                   | No        | -              | Conexion Redis para throttling distribuido, metricas tecnicas, outbox y BullMQ.    |
+| `REDIS_KEY_PREFIX`            | No        | `salud-de-una` | Prefijo de llaves Redis/BullMQ.                                                    |
+| `OUTBOX_DISPATCH_INTERVAL_MS` | No        | `1000`         | Intervalo de polling del despachador outbox cuando no hay worker Redis disponible. |
+
+### IA — Google Gemini
+
+| Variable                 | Requerida | Default                  | Descripcion                                               |
+| ------------------------ | --------- | ------------------------ | --------------------------------------------------------- |
+| `AI_ENABLED`             | No        | `false`                  | Activa la integracion IA (triage, resumen, health-check). |
+| `AI_PROVIDER`            | No        | `gemini`                 | Proveedor IA activo.                                      |
+| `GEMINI_API_KEY`         | No        | -                        | API key de Google AI Studio.                              |
+| `GEMINI_MODEL`           | No        | `gemini-2.5-flash`       | Modelo Gemini para generacion de texto y triage.          |
+| `GEMINI_EMBEDDING_MODEL` | No        | `gemini-embedding-001`   | Modelo para generacion de embeddings vectoriales.         |
+
+### RAG (Retrieval-Augmented Generation)
+
+| Variable                    | Requerida | Default                                    | Descripcion                                      |
+| --------------------------- | --------- | ------------------------------------------ | ------------------------------------------------ |
+| `RAG_SUMMARY_ENABLED`       | No        | `false`                                    | Activa RAG para resumen clinico.                 |
+| `RAG_TRIAGE_ENABLED`        | No        | `false`                                    | Activa RAG durante analisis de triage.           |
+| `RAG_PATIENT_EVIDENCE_ENABLED` | No     | `false`                                    | Activa RAG para evidencia de paciente.           |
+| `RAG_TOP_K`                 | No        | `8`                                        | Chunks a recuperar por consulta.                 |
+| `RAG_MAX_CONTEXT_CHUNKS`    | No        | `10`                                       | Maximo de chunks a incluir en el prompt.         |
+| `RAG_EMBEDDING_DIMENSIONS`  | No        | `768`                                      | Dimensiones del vector de embedding.             |
+| `RAG_VECTOR_INDEX_NAME`     | No        | `salud_de_una_knowledge_chunks_vector_v1`  | Nombre del indice vectorial en MongoDB Atlas.    |
+
+### Observabilidad — OpenTelemetry
+
+| Variable                             | Requerida | Default                   | Descripcion                                        |
+| ------------------------------------ | --------- | ------------------------- | -------------------------------------------------- |
+| `OTEL_ENABLED`                       | No        | `false`                   | Activa la instrumentacion OpenTelemetry.           |
+| `OTEL_SERVICE_NAME`                  | No        | `salud-de-una-backend`    | Nombre del servicio en las trazas OTLP.            |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`        | No        | -                         | URL base del colector OTLP.                        |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | No        | -                         | URL especifica para trazas OTLP (override).        |
 
 ## Scripts Disponibles
 
-| Script        | Comando               | Uso                           |
-| ------------- | --------------------- | ----------------------------- |
-| `build`       | `npm run build`       | Compila a `dist/`.            |
-| `start`       | `npm run start`       | Inicia app Nest.              |
-| `start:dev`   | `npm run start:dev`   | Desarrollo con watch.         |
-| `start:debug` | `npm run start:debug` | Desarrollo con debug + watch. |
-| `start:prod`  | `npm run start:prod`  | Ejecuta `dist/main`.          |
-| `lint`        | `npm run lint`        | Ejecuta ESLint con autofix.   |
-| `test`        | `npm run test`        | Pruebas unitarias.            |
-| `test:watch`  | `npm run test:watch`  | Pruebas unitarias en watch.   |
-| `test:cov`    | `npm run test:cov`    | Cobertura.                    |
-| `test:e2e`    | `npm run test:e2e`    | Pruebas end-to-end.           |
+| Script               | Comando                      | Uso                                                       |
+| -------------------- | ---------------------------- | --------------------------------------------------------- |
+| `build`              | `npm run build`              | Compila a `dist/`.                                        |
+| `start`              | `npm run start`              | Inicia app Nest.                                          |
+| `start:dev`          | `npm run start:dev`          | Desarrollo con watch.                                     |
+| `start:debug`        | `npm run start:debug`        | Desarrollo con debug + watch.                             |
+| `start:prod`         | `npm run start:prod`         | Ejecuta `dist/main`.                                      |
+| `typecheck`          | `npm run typecheck`          | Verificacion de tipos TypeScript sin emitir archivos.     |
+| `lint`               | `npm run lint`               | Ejecuta ESLint (sin autofix).                             |
+| `lint:fix`           | `npm run lint:fix`           | Ejecuta ESLint con autofix.                               |
+| `validate:env`       | `npm run validate:env`       | Valida variables de entorno en modo produccion.           |
+| `smoke:startup`      | `npm run smoke:startup`      | Arranque de humo: inicia la app y verifica `/v1/ready`.   |
+| `verify:production`  | `npm run verify:production`  | Smoke-check completo contra instancia de produccion.      |
+| `test`               | `npm run test`               | Pruebas unitarias.                                        |
+| `test:watch`         | `npm run test:watch`         | Pruebas unitarias en watch.                               |
+| `test:cov`           | `npm run test:cov`           | Cobertura (umbral 80% en statements/branches/functions).  |
+| `test:e2e`           | `npm run test:e2e`           | Todas las pruebas end-to-end (requiere MongoDB y Redis).  |
+| `test:e2e:auth`      | `npm run test:e2e:auth`      | E2E solo del modulo auth.                                 |
+| `test:e2e:admin`     | `npm run test:e2e:admin`     | E2E solo del modulo admin.                                |
+| `test:e2e:triage`    | `npm run test:e2e:triage`    | E2E solo del modulo triage.                               |
+| `test:e2e:chat`      | `npm run test:e2e:chat`      | E2E solo del modulo chat.                                 |
+| `test:e2e:billing`   | `npm run test:e2e:billing`   | E2E solo del modulo billing.                              |
+| `test:e2e:followups` | `npm run test:e2e:followups` | E2E solo del modulo followups.                            |
 
 ## Endpoints de Salud
 
@@ -346,6 +419,15 @@ Sesiones autenticadas:
 | `POST /v1/triage/sessions`                       | No      | Si           | `PATIENT`                                                                                  |
 | `POST /v1/triage/sessions/:sessionId/answers`    | No      | Si           | `PATIENT`                                                                                  |
 | `POST /v1/triage/sessions/:sessionId/analyze`    | No      | Si           | `PATIENT`                                                                                  |
+| `GET /v1/billing/prices`                         | No      | Si           | `PATIENT`                                                                                  |
+| `POST /v1/billing/checkout`                      | No      | Si           | `PATIENT`                                                                                  |
+| `POST /v1/billing/checkout/:id/confirm`          | No      | Si           | `PATIENT`                                                                                  |
+| `GET /v1/billing/transactions/me`                | No      | Si           | `PATIENT`                                                                                  |
+| `GET /v1/billing/transactions/me/:id`            | No      | Si           | `PATIENT`                                                                                  |
+| `GET /v1/billing/admin/transactions`             | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/billing/admin/revenue`                  | No      | Si           | `ADMIN`                                                                                    |
+| `GET /v1/billing/admin/prices`                   | No      | Si           | `ADMIN`                                                                                    |
+| `PATCH /v1/billing/admin/prices/:specialty`      | No      | Si           | `ADMIN`                                                                                    |
 | `POST /v1/admin/ai/health-check`                 | No      | Si           | `ADMIN`                                                                                    |
 | `GET /v1/health`                                 | Si      | No           | -                                                                                          |
 | `GET /v1/ready`                                  | Si      | No           | -                                                                                          |
@@ -879,7 +961,7 @@ Response (200):
 }
 ```
 
-### 6) Cola de consultas
+### 11) Cola de consultas
 
 `GET /v1/consultations/queue`
 
@@ -896,7 +978,7 @@ Response (200):
 }
 ```
 
-### 7) Dashboard tecnico
+### 12) Dashboard tecnico
 
 `GET /v1/dashboard/technical`
 
@@ -915,7 +997,7 @@ Response (200):
 }
 ```
 
-### 8) Health-check administrativo de Gemini
+### 13) Health-check administrativo de Gemini
 
 `POST /v1/admin/ai/health-check`
 
@@ -941,6 +1023,7 @@ Response (201):
 
 - `GENERAL_MEDICINE`
 - `ODONTOLOGY`
+- `URGENT_CARE`
 
 `DoctorStatus`:
 
@@ -978,27 +1061,78 @@ Response (201):
 
 ## Modelo de Datos (Colecciones)
 
-Colecciones principales en MongoDB:
+Colecciones principales en MongoDB (una por schema en `src/*/schemas/*.schema.ts`):
+
+### Identidad y sesiones
 
 - `patients`: datos base del paciente (`firstName`, `lastName`, `email`, `passwordHash`, `role`, `birthDate`, `gender`, `isActive`).
-- `doctors`: datos del medico (`firstName`, `lastName`, `email`, `passwordHash`, `role`, `specialty`, `personalId`, `phoneNumber`, `professionalLicense`, `doctorStatus`, `rethusVerification`, `isActive`).
+- `doctors`: datos del medico (`firstName`, `lastName`, `email`, `passwordHash`, `role`, `specialty`, `personalId`, `phoneNumber`, `professionalLicense`, `doctorStatus`, `isActive`).
 - `admins`: usuarios administradores (`firstName`, `lastName`, `email`, `passwordHash`, `role`, `isActive`).
-- `rethusverifications`: trazabilidad de verificacion REThUS por medico (incluye `checkedBy` y `checkedAt`).
-- `notifications`: notificaciones internas de cambios de estado.
+- `refreshsessions`: sesiones JWT activas por usuario (`userId`, `userRole`, `tokenHash`, `expiresAt`, `createdAt`).
+- `rethusverifications`: historial de verificaciones REThUS (`doctorId`, `checkedBy`, `rethusState`, `checkedAt`, evidencia).
+
+### Flujo clinico
+
+- `consultations`: consultas medicas con estado PENDING/IN_PROGRESS/COMPLETED/CANCELLED.
+- `consultationmessages`: mensajes de chat clinico por consulta (`senderId`, `role`, `content`, `sentAt`).
+- `triagesessions`: sesiones de triage por paciente y especialidad, respuestas, analisis IA y red flags.
+- `followups`: seguimientos post-consulta con timeline evolutivo y notas medicas.
+
+### Operaciones
+
+- `notifications`: notificaciones internas por destinatario y evento.
+- `billingprices`: precios activos por especialidad (seeded al arrancar).
+- `transactions`: ciclo de vida de pagos PENDING → COMPLETED → REFUNDED.
+
+### IA y conocimiento
+
+- `aiauditlogs`: trazabilidad de cada llamada IA (modelo, tokens, latencia, resultado).
+- `aipromptdefinitions`: prompts versionados por especialidad y funcion.
+- `knowledgedocuments`: documentos clinicos con estado de procesamiento.
+- `knowledgedocumentversions`: historial de versiones de documentos.
+- `knowledgechunks`: fragmentos vectorizados con embedding para RAG.
+- `knowledgesources`: fuentes de documentos clinicos.
+- `knowledgejobs`: trabajos de ingestion y chunking asincronos.
+- `knowledgereviews`: revisiones humanas de documentos.
+- `ragtraces`: trazas de consultas RAG (query, chunks recuperados, score).
+- `ragfeedbacks`: retroalimentacion por consulta RAG.
+
+### Infraestructura
+
+- `outboxevents`: eventos de dominio pendientes de despacho (patron outbox transaccional).
 
 ## Pruebas
 
-Cobertura de pruebas actual:
+### Estrategia
 
-- Unit tests de salud/controladores/servicios clave.
-- E2E de flujos HU-001/HU-002 con `mongodb-memory-server`.
+- **Unit tests** (`src/**/*.spec.ts`): prueban servicios y controladores de forma aislada usando mocks a nivel de modulo NestJS. La IA (`AiService`) se mockea siempre en unit tests.
+- **E2E tests** (`test/e2e/**`): cubren flujos completos HTTP con `mongodb-memory-server` (base de datos real en memoria) y Redis (si esta disponible). No se mockea la capa de base de datos.
+- **Umbral de cobertura**: 80% en statements, branches, functions y lines (configurado en `jest.coverageThreshold`).
 
-Comandos:
+### Suites E2E disponibles
+
+| Suite                    | Comando                            | Flujos cubiertos                            |
+| ------------------------ | ---------------------------------- | ------------------------------------------- |
+| `test:e2e:auth`          | `npm run test:e2e:auth`            | Registro, login, refresh, logout, sesiones  |
+| `test:e2e:admin`         | `npm run test:e2e:admin`           | Bandeja doctores, verificacion REThUS, CRUD |
+| `test:e2e:doctors`       | `npm run test:e2e:doctors`         | Perfil medico, resubmision                  |
+| `test:e2e:patients`      | `npm run test:e2e:patients`        | Perfil paciente, actualizacion              |
+| `test:e2e:triage`        | `npm run test:e2e:triage`          | Sesiones triage, respuestas, analisis IA    |
+| `test:e2e:consultations` | `npm run test:e2e:consultations`   | Cola consultas, estados                     |
+| `test:e2e:notifications` | `npm run test:e2e:notifications`   | Notificaciones, lectura                     |
+| `test:e2e:dashboard`     | `npm run test:e2e:dashboard`       | KPIs negocio, metricas tecnicas             |
+| `test:e2e:clinical-ai`   | `npm run test:e2e:clinical-ai`     | Resumen clinico IA, guardrail               |
+| `test:e2e:chat`          | `npm run test:e2e:chat`            | Chat WebSocket, mensajes                    |
+| `test:e2e:followups`     | `npm run test:e2e:followups`       | Seguimiento post-consulta                   |
+| `test:e2e:system`        | `npm run test:e2e:system`          | Health, ready, smoke                        |
+
+### Comandos rapidos
 
 ```bash
-npm run test
-npm run test:e2e
-npm run test:cov
+npm run test                    # Unit tests
+npm run test:cov                # Unit tests con reporte de cobertura
+npm run test:e2e                # Todos los E2E (requiere MongoDB y Redis locales o en CI)
+npm run test:e2e:auth           # Solo E2E de autenticacion
 ```
 
 ## Quality Gate
@@ -1035,20 +1169,41 @@ Revisar primero:
 
 ```text
 src/
-  admin/
-  admins/
-  auth/
-  common/
-  config/
-  consultations/
-  dashboard/
-  doctors/
-  notifications/
-  patients/
+  admin/          # Bandeja admin: doctores, REThUS, CRUD usuarios
+  admins/         # Schema y gestion de usuarios administradores
+  ai/             # Integracion Gemini, health-check, audit logs, prompts versionados
+  auth/           # Registro, login, refresh, logout, estrategias JWT, sesiones
+  billing/        # Precios por especialidad, checkout simulado, transacciones, revenue
+  chat/           # Gateway WebSocket (Socket.IO), mensajes de consulta clinica
+  common/         # Decoradores, enums, filtros, guards, interceptores, interfaces, utils
+  config/         # Factories de configuracion tipada + schema de validacion Joi
+  consultations/  # Cola de consultas medicas, estados, asignacion de doctor
+  dashboard/      # KPIs de negocio + metricas tecnicas (p95, error rate)
+  doctors/        # Perfil medico, especialidades, resubmision REThUS
+  followups/      # Seguimiento post-consulta, timeline evolutivo, notas medicas
+  knowledge/      # Documentos clinicos, chunking, versionado, embeddings, ingestion
+  notifications/  # Notificaciones internas por rol y evento
+  observability/  # Logs estructurados, metricas, alertas operativas
+  outbox/         # Patron transaccional: despacho confiable de eventos de dominio
+  patients/       # Perfil del paciente, datos clinicos, actualizacion
+  rag/            # RAG: retrieval, trazas, scoring, feedback
+  redis/          # Cliente Redis, throttling distribuido, adapter Socket.IO
+  tools/          # Herramientas auxiliares (scripts, utilidades de arranque)
+  triage/         # Cuestionarios por especialidad, red flags, analisis IA, guardrail
   app.module.ts
   main.ts
 test/
-  app.e2e-spec.ts
+  e2e/            # Pruebas end-to-end por dominio (auth, admin, triage, chat, etc.)
+  mocks/          # Mocks compartidos entre suites (ej: jwks-rsa)
+  jest-e2e.json   # Configuracion Jest para E2E
+  jest.env.ts     # Variables de entorno para pruebas
+  jest.setup.ts   # Setup global (conexion MongoDB en memoria)
+docker/
+  verify-production.js  # Smoke-check post-deploy contra instancia de produccion
+scripts/
+  run-jest.js           # Wrapper Jest con soporte de paths personalizados
+  smoke-startup.js      # Arranque de humo: inicia app y verifica /v1/ready
+  validate-env.js       # Validacion de variables de entorno en modo produccion
 ```
 
 ## Trazabilidad y Documentacion del Producto
