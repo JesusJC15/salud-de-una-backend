@@ -17,7 +17,6 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import {
   getRuntimeRole,
   runtimeRoleIncludesApi,
-  runtimeRoleIncludesWorker,
 } from './common/utils/runtime-role.util';
 import { describeReadyState } from './common/utils/mongo-ready-state.util';
 
@@ -95,15 +94,10 @@ export async function bootstrap() {
   const runtimeRole = getRuntimeRole();
   const redisUrl = configService.get<string>('redis.url');
   const redisClient = app.get<Redis | null>(REDIS_CLIENT);
-  if (redisClient && runtimeRoleIncludesWorker(runtimeRole)) {
+  if (redisClient) {
     app.useWebSocketAdapter(new RedisIoAdapter(app, redisClient));
   } else {
     app.useWebSocketAdapter(new IoAdapter(app));
-    if (redisClient) {
-      logger.warn(
-        'Socket.IO Redis adapter disabled because APP_RUNTIME_ROLE excludes worker responsibilities',
-      );
-    }
   }
   const dbConnection = app.get<Connection>(getConnectionToken());
   const globalPrefix = 'v1';

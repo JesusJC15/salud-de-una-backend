@@ -1,14 +1,9 @@
 import type { ConnectionOptions } from 'bullmq';
-import type { RedisOptions } from 'ioredis';
 
 type ParsedRedisOptions = {
-  clientOptions: RedisOptions;
+  clientOptions: Record<string, unknown>;
   connectionOptions: ConnectionOptions;
 };
-
-function shouldStopRetrying(error: Error): boolean {
-  return error.message.includes('ERR max number of clients reached');
-}
 
 export function parseRedisUrl(
   redisUrl: string,
@@ -35,17 +30,8 @@ export function parseRedisUrl(
       keyPrefix: `${keyPrefix}:`,
       maxRetriesPerRequest: 1,
       enableReadyCheck: true,
-      enableOfflineQueue: false,
-      retryStrategy: (times: number) => Math.min(times * 250, 2_000),
-      reconnectOnError: (error: Error) => !shouldStopRetrying(error),
       ...baseConnection,
     },
-    connectionOptions: {
-      ...baseConnection,
-      maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
-      retryStrategy: (times: number) => Math.min(times * 250, 2_000),
-      reconnectOnError: (error: Error) => !shouldStopRetrying(error),
-    },
+    connectionOptions: baseConnection,
   };
 }
