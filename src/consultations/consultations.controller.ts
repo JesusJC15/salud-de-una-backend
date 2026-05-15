@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -36,7 +37,11 @@ export class ConsultationsController {
   @Roles(UserRole.DOCTOR)
   @UseGuards(DoctorVerifiedGuard)
   getQueue(@Req() req: RequestContext) {
-    return this.consultationsService.getQueue(req.user!);
+    if (!req.user) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
+
+    return this.consultationsService.getQueue(req.user);
   }
 
   @Get('doctor/my-history')

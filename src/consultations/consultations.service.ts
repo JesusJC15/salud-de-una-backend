@@ -144,9 +144,9 @@ export class ConsultationsService {
     userOrOptions: RequestUser | QueueOptions = {},
     maybeOptions: QueueOptions = {},
   ) {
-    const user =
-      'userId' in userOrOptions ? (userOrOptions as RequestUser) : undefined;
-    const options = user ? maybeOptions : (userOrOptions as QueueOptions);
+    const isUserRequest = 'userId' in userOrOptions;
+    const user = isUserRequest ? userOrOptions : undefined;
+    const options: QueueOptions = isUserRequest ? maybeOptions : userOrOptions;
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 100);
     const page = Math.max(options.page ?? 1, 1);
     const skip = (page - 1) * limit;
@@ -158,9 +158,7 @@ export class ConsultationsService {
       specialty?: { $in: Specialty[] };
     } = {
       status: CONSULTATION_PENDING,
-      ...(allowedSpecialties
-        ? { specialty: { $in: allowedSpecialties } }
-        : {}),
+      ...(allowedSpecialties ? { specialty: { $in: allowedSpecialties } } : {}),
     };
 
     if (typeof this.consultationModel.aggregate !== 'function') {
