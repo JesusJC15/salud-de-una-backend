@@ -37,16 +37,6 @@ output "ecs_service_names" {
   ]
 }
 
-output "codebuild_backend_project" {
-  description = "Nombre del proyecto CodeBuild del backend"
-  value       = aws_codebuild_project.backend.name
-}
-
-output "codebuild_web_project" {
-  description = "Nombre del proyecto CodeBuild del web"
-  value       = aws_codebuild_project.web.name
-}
-
 output "app_url" {
   description = "URL de acceso a la aplicación web"
   value       = "http://${aws_lb.main.dns_name}"
